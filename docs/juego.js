@@ -57,10 +57,9 @@ document.addEventListener('keyup', e => {
 
 // Click derecho del mouse
 canvas.addEventListener('contextmenu', e => {
-  e.preventDefault();
-  if (estado === 'jugando' && cooldownAlterno <= 0) {
-    dispararDiferente();
-    cooldownAlterno = 60; // espera 60 frames (~1 segundo)
+  e.preventDefault(); // Evita el menú del navegador
+  if (estado === 'jugando') {
+    dispararDiferente(); // Función que vas a definir
   }
 });
 
@@ -114,7 +113,7 @@ function dispararDiferente() {
       velocidad: 6,
       dx: Math.cos(angle) * 6,
       dy: Math.sin(angle) * 6,
-      especial: true // puedes usar esto para dar efectos especiales
+      especial: false // puedes usar esto para dar efectos especiales
     });
   });
 }
