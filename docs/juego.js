@@ -28,6 +28,7 @@ let tiempoDisparo = 0;
 let powerUps = [];
 let disparoTriple = false;
 let tiempoPowerUp = 0;
+let cooldownAlterno = 0;
 
 let mouseX = canvas.width / 2;
 let mouseY = canvas.height / 2;
@@ -52,6 +53,14 @@ canvas.addEventListener('mouseup', () => {
 });
 document.addEventListener('keyup', e => {
   teclas[e.code] = false;
+});
+
+// Click derecho del mouse
+canvas.addEventListener('contextmenu', e => {
+  e.preventDefault(); // Evita que se abra el menú contextual
+  if (estado === 'jugando') {
+    dispararDiferente(); // Aquí va tu nueva función personalizada
+  }
 });
 
 // NUEVAS VARIABLES PARA MULTIPLES JEFES Y SUS DISPAROS
@@ -109,6 +118,27 @@ function disparar() {
   });
 }
 
+function dispararDiferente() {
+  const centerX = nave.x;
+  const centerY = nave.y;
+  const baseAngle = Math.atan2(mouseY - centerY, mouseX - centerX);
+
+  const offsets = [-0.4, -0.2, 0, 0.2, 0.4]; // 5 ángulos
+  offsets.forEach(offset => {
+    const angle = baseAngle + offset;
+    disparos.push({
+      x: centerX,
+      y: centerY,
+      width: 10,
+      height: 10,
+      velocidad: 6,
+      dx: Math.cos(angle) * 6,
+      dy: Math.sin(angle) * 6,
+      especial: true // puedes usar esto para dar efectos especiales
+    });
+  });
+}
+
 function crearPowerUp() {
   powerUps.push({
     x: Math.random() * canvas.width,
@@ -154,8 +184,8 @@ function dibujarMeteoritos() {
 }
 
 function dibujarDisparos() {
-  ctx.fillStyle = 'red';
   disparos.forEach(d => {
+    ctx.fillStyle = d.especial ? 'cyan' : 'red'; // color diferente
     ctx.fillRect(d.x - d.width / 2, d.y - d.height / 2, d.width, d.height);
   });
 }
