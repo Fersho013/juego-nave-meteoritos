@@ -57,9 +57,10 @@ document.addEventListener('keyup', e => {
 
 // Click derecho del mouse
 canvas.addEventListener('contextmenu', e => {
-  e.preventDefault(); // Evita que se abra el menú contextual
-  if (estado === 'jugando') {
-    dispararDiferente(); // Aquí va tu nueva función personalizada
+  e.preventDefault();
+  if (estado === 'jugando' && cooldownAlterno <= 0) {
+    dispararDiferente();
+    cooldownAlterno = 60; // espera 60 frames (~1 segundo)
   }
 });
 
@@ -358,6 +359,8 @@ function actualizar() {
       nave.parpadeoTiempo = 0;
     }
   }
+
+  if (cooldownAlterno > 0) cooldownAlterno--;
 
   // Movimiento nave
   if ((teclas['ArrowLeft'] || teclas['KeyA']) && nave.x - nave.width / 2 > 0) nave.x -= nave.velocidad;
