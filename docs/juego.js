@@ -98,27 +98,6 @@ function reiniciarJuego() {
   estado = 'inicio';
 }
 
-function disparar() {
-  const centerX = nave.x;
-  const centerY = nave.y;
-  const baseAngle = Math.atan2(mouseY - centerY, mouseX - centerX);
-
-  const angulos = disparoTriple ? [-0.2, 0, 0.2] : [0];
-
-  angulos.forEach(offset => {
-    const angle = baseAngle + offset;
-    disparos.push({
-      x: centerX,
-      y: centerY,
-      width: 6,
-      height: 6,
-      velocidad: 10,
-      dx: Math.cos(angle) * 10,
-      dy: Math.sin(angle) * 10
-    });
-  });
-}
-
 function dispararDiferente() {
   const centerX = nave.x;
   const centerY = nave.y;
@@ -136,6 +115,27 @@ function dispararDiferente() {
       dx: Math.cos(angle) * 6,
       dy: Math.sin(angle) * 6,
       especial: true // puedes usar esto para dar efectos especiales
+    });
+  });
+}
+
+function disparar() {
+  const centerX = nave.x;
+  const centerY = nave.y;
+  const baseAngle = Math.atan2(mouseY - centerY, mouseX - centerX);
+
+  const angulos = disparoTriple ? [-0.2, 0, 0.2] : [0];
+
+  angulos.forEach(offset => {
+    const angle = baseAngle + offset;
+    disparos.push({
+      x: centerX,
+      y: centerY,
+      width: 6,
+      height: 6,
+      velocidad: 10,
+      dx: Math.cos(angle) * 10,
+      dy: Math.sin(angle) * 10
     });
   });
 }
