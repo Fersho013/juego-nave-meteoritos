@@ -13,17 +13,72 @@
       align-items: center;
       height: 100vh;
     }
+
     canvas {
       background: #111;
       display: block;
       border: 2px solid white;
     }
+
+    /* Menú de inicio visual */
+    #menuInicio {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle, #0a0a0a, #000000);
+      color: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Arial', sans-serif;
+      text-align: center;
+      z-index: 10;
+    }
+
+    #menuInicio h1 {
+      font-size: 48px;
+      margin-bottom: 20px;
+    }
+
+    #menuInicio p {
+      font-size: 18px;
+      margin: 5px 0;
+    }
+
+    #menuInicio button {
+      padding: 12px 24px;
+      font-size: 20px;
+      background-color: #1e90ff;
+      border: none;
+      color: white;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 20px;
+    }
+
+    #menuInicio button:hover {
+      background-color: #63b3ed;
+    }
   </style>
 </head>
 <body>
+
+  <!-- Menú de inicio -->
+  <div id="menuInicio">
+    <h1>🚀 Nave vs Meteoritos</h1>
+    <p>Usa las flechas o WASD para moverte</p>
+    <p>Click izquierdo para disparar</p>
+    <p>Click derecho para disparo especial</p>
+    <button onclick="iniciarJuego()">Iniciar Juego</button>
+  </div>
+
+  <!-- Lienzo del juego -->
   <canvas id="gameCanvas" width="900" height="600"></canvas>
 
-  <!-- Asegúrate que el archivo JS se llama igual -->
+  <!-- Juego JS -->
   <script src="juego.js"></script>
 </body>
 </html>
