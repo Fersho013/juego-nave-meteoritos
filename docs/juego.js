@@ -73,6 +73,9 @@ let jefeFinal = null; // jefe grande y fuerte a puntaje 250
 let meteoritosFrecuenciaExtra = 0; // controla más meteoritos después de jefes iniciales
 
 function iniciarJuego() {
+
+  document.getElementById('menuInicio').style.display = 'none';
+  
   estado = 'jugando';
   puntaje = 0;
   vidas = 5;
