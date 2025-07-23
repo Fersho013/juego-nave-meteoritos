@@ -99,6 +99,16 @@ function iniciarJuego() {
 
 function reiniciarJuego() {
   estado = 'inicio';
+
+  const menu = document.getElementById('menuInicio');
+  const titulo = menu.querySelector('h1');
+  const btnIniciar = menu.querySelector('button');
+  const btnReiniciar = document.getElementById('btnReiniciar');
+
+  titulo.textContent = '🚀 Nave vs Meteoritos';
+  menu.style.display = 'flex';
+  btnIniciar.style.display = 'inline';
+  btnReiniciar.style.display = 'none';
 }
 
 function dispararDiferente() {
@@ -247,8 +257,18 @@ function perderVida() {
   nave.parpadeoTiempo = 1000;
 
   if (vidas <= 0) {
-    estado = 'final';
-  }
+  estado = 'final';
+
+  const menu = document.getElementById('menuInicio');
+  const titulo = menu.querySelector('h1');
+  const btnIniciar = menu.querySelector('button');
+  const btnReiniciar = document.getElementById('btnReiniciar');
+
+  titulo.textContent = '💀 Juego Terminado';
+  menu.style.display = 'flex';
+  btnIniciar.style.display = 'none';
+  btnReiniciar.style.display = 'inline';
+}
 }
 
 function crearExplosión(x, y) {
