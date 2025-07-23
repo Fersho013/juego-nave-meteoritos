@@ -109,6 +109,19 @@ function iniciarJuego() {
   meteoritosFrecuenciaExtra = 0;
 }
 
+function mostrarMenuFinal() {
+  const menu = document.getElementById('menuInicio');
+  const controles = document.getElementById('controles');
+  const btnIniciar = document.querySelector('#menuInicio button[onclick="iniciarJuego()"]');
+  const btnReiniciar = document.getElementById('btnReiniciar');
+
+  estado = 'inicio';
+  menu.style.display = 'flex';
+  controles.style.display = 'none';     // Ocultar controles al perder
+  btnIniciar.style.display = 'none';    // No botón "Iniciar" al perder
+  btnReiniciar.style.display = 'block'; // Mostrar solo "Reiniciar"
+}
+
 
 function reiniciarJuego() {
   estado = 'inicio';
@@ -271,7 +284,7 @@ function perderVida() {
 
 if (vidas <= 0) {
   estado = 'final';
-  reiniciarJuego(); 
+  mostrarMenuFinal();
 
   const menu = document.getElementById('menuInicio');
   const titulo = menu.querySelector('h1');
