@@ -73,10 +73,22 @@ let jefeFinal = null; // jefe grande y fuerte a puntaje 250
 let meteoritosFrecuenciaExtra = 0; // controla más meteoritos después de jefes iniciales
 
 function iniciarJuego() {
-
-  document.getElementById('menuInicio').style.display = 'none';
-  
   estado = 'jugando';
+
+    document.getElementById('menuInicio').style.display = 'none';
+
+  // Ocultar menú
+  const menu = document.getElementById('menuInicio');
+  const controles = document.getElementById('controles');
+  const btnIniciar = document.querySelector('#menuInicio button[onclick="iniciarJuego()"]');
+  const btnReiniciar = document.getElementById('btnReiniciar');
+
+  menu.style.display = 'none';
+  controles.style.display = 'none';
+  btnIniciar.style.display = 'none';
+  btnReiniciar.style.display = 'none';
+
+  // Reiniciar variables
   puntaje = 0;
   vidas = 5;
   meteoritos = [];
@@ -97,20 +109,19 @@ function iniciarJuego() {
   meteoritosFrecuenciaExtra = 0;
 }
 
+
 function reiniciarJuego() {
   estado = 'inicio';
 
   const menu = document.getElementById('menuInicio');
-  const titulo = menu.querySelector('h1');
-  const btnIniciar = menu.querySelector('button');
-  const btnReiniciar = document.getElementById('btnReiniciar');
   const controles = document.getElementById('controles');
+  const btnIniciar = document.querySelector('#menuInicio button[onclick="iniciarJuego()"]');
+  const btnReiniciar = document.getElementById('btnReiniciar');
 
-  titulo.textContent = '🚀 Nave vs Meteoritos';
   menu.style.display = 'flex';
-  btnIniciar.style.display = 'inline';
-  btnReiniciar.style.display = 'none';
-  controles.style.display = 'block'; // Mostrar controles nuevamente
+  controles.style.display = 'none';         // Ocultar controles
+  btnIniciar.style.display = 'none';        // Ocultar botón iniciar
+  btnReiniciar.style.display = 'block';     // Mostrar botón reiniciar
 }
 
 function dispararDiferente() {
@@ -260,6 +271,7 @@ function perderVida() {
 
 if (vidas <= 0) {
   estado = 'final';
+  reiniciarJuego(); 
 
   const menu = document.getElementById('menuInicio');
   const titulo = menu.querySelector('h1');
