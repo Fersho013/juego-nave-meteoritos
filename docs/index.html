@@ -66,14 +66,15 @@
 </head>
 <body>
 
-  <!-- Menú de inicio -->
-  <div id="menuInicio">
-    <h1>🚀 Nave vs Meteoritos</h1>
-    <p>Usa las flechas o WASD para moverte</p>
-    <p>Click izquierdo para disparar</p>
-    <p>Click derecho para disparo especial</p>
-    <button onclick="iniciarJuego()">Iniciar Juego</button>
-  </div>
+<!-- Menú de inicio -->
+<div id="menuInicio">
+  <h1>🚀 Nave vs Meteoritos</h1>
+  <p>Usa las flechas o WASD para moverte</p>
+  <p>Click izquierdo para disparar</p>
+  <p>Click derecho para disparo especial</p>
+  <button onclick="iniciarJuego()">Iniciar Juego</button>
+  <button id="btnReiniciar" onclick="reiniciarJuego()" style="display: none;">Reiniciar Juego</button>
+</div>
 
   <!-- Lienzo del juego -->
   <canvas id="gameCanvas" width="900" height="600"></canvas>
