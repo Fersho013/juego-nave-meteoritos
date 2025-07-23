@@ -706,5 +706,16 @@ function loop() {
 
   requestAnimationFrame(loop);
 }
+// Mostrar el menú al cargar la página
+window.onload = () => {
+  const menu = document.getElementById('menuInicio');
+  const controles = document.getElementById('controles');
+  const btnIniciar = document.querySelector('#menuInicio button[onclick="iniciarJuego()"]');
+  const btnReiniciar = document.getElementById('btnReiniciar');
 
+  menu.style.display = 'flex';
+  controles.style.display = 'block';
+  btnIniciar.style.display = 'block';
+  btnReiniciar.style.display = 'none';
+};
 loop();
