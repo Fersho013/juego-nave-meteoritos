@@ -104,11 +104,13 @@ function reiniciarJuego() {
   const titulo = menu.querySelector('h1');
   const btnIniciar = menu.querySelector('button');
   const btnReiniciar = document.getElementById('btnReiniciar');
+  const controles = document.getElementById('controles');
 
   titulo.textContent = '🚀 Nave vs Meteoritos';
   menu.style.display = 'flex';
   btnIniciar.style.display = 'inline';
   btnReiniciar.style.display = 'none';
+  controles.style.display = 'block'; // Mostrar controles nuevamente
 }
 
 function dispararDiferente() {
@@ -256,18 +258,20 @@ function perderVida() {
   nave.inmune = true;
   nave.parpadeoTiempo = 1000;
 
-  if (vidas <= 0) {
+if (vidas <= 0) {
   estado = 'final';
 
   const menu = document.getElementById('menuInicio');
   const titulo = menu.querySelector('h1');
   const btnIniciar = menu.querySelector('button');
   const btnReiniciar = document.getElementById('btnReiniciar');
+  const controles = document.getElementById('controles');
 
-  titulo.textContent = '💀 Juego Terminado';
+  titulo.textContent = '💥 Juego Terminado';
   menu.style.display = 'flex';
   btnIniciar.style.display = 'none';
   btnReiniciar.style.display = 'inline';
+  controles.style.display = 'none'; // Ocultar controles
 }
 }
 
