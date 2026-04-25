@@ -1,21 +1,27 @@
+// ==========================================
+// CONFIGURACIÓN Y REFERENCIAS UI
+// ==========================================
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
+
+const menuInicio = document.getElementById('menuInicio');
+const btnReiniciar = document.getElementById('btnReiniciar');
+const controlesTexto = document.getElementById('controles');
+const tituloMenu = document.querySelector('#menuInicio h1');
 
 canvas.width = 900;
 canvas.height = 600;
 
 // ==========================================
-// NUEVO SISTEMA DE INERCIA Y FRICCIÓN
+// VARIABLES DE ESTADO Y OBJETOS
 // ==========================================
-// Ahora la nave no cambia de posición directamente.
-// WASD cambia vx/vy (aceleración), y luego la fricción la detiene suavemente.
 const nave = {
   x: canvas.width / 2,
   y: canvas.height / 2,
-  vx: 0, // velocidad en X
-  vy: 0, // velocidad en Y
-  aceleracion: 0.8, // Qué tan rápido gana velocidad
-  friccion: 0.94, // Qué tan rápido se detiene (0.9 a 0.99)
+  vx: 0,
+  vy: 0,
+  aceleracion: 0.8,
+  friccion: 0.94,
   width: 40,
   height: 40,
   color: 'white',
@@ -27,22 +33,24 @@ let teclas = {};
 let meteoritos = [];
 let disparos = [];
 let particulas = [];
-let contadorMeteoritos = 0;
+let estrellas = [];
+let jefes = [];
+let disparosJefe = [];
+
 let puntaje = 0;
 let vidas = 3;
-let estado = 'inicio'; // 'inicio', 'jugando', 'final'
+let estado = 'inicio'; 
 let mousePresionado = false;
 let tiempoDisparo = 0;
+let vibracion = 0;
+let contadorMeteoritos = 0;
 
 let mouseX = canvas.width / 2;
 let mouseY = canvas.height / 2;
 
 // ==========================================
-// NUEVAS VARIABLES: FONDO PARALLAX Y SHAKE
+// EVENT LISTENERS (CONTROLES)
 // ==========================================
-let vibracion = 0; // Intensidad del screen shake
-let estrellas = []; // Fondo estelar
-
 canvas.addEventListener('mousemove', e => {
   const rect = canvas.getBoundingClientRect();
   mouseX = e.clientX - rect.left;
@@ -52,35 +60,42 @@ canvas.addEventListener('mousemove', e => {
 document.addEventListener('keydown', e => {
   teclas[e.code] = true;
   if (estado === 'inicio' && e.code === 'Enter') iniciarJuego();
-  if (estado === 'final' && e.code === 'KeyR') reiniciarJuego();
+  if (estado === 'final' && e.code === 'KeyR') iniciarJuego();
 });
 
-canvas.addEventListener('mousedown', () => {
-  if (estado === 'jugando') mousePresionado = true;
-});
-canvas.addEventListener('mouseup', () => {
-  mousePresionado = false;
-});
 document.addEventListener('keyup', e => {
   teclas[e.code] = false;
 });
 
-let jefes = [];
-let disparosJefe = [];
+canvas.addEventListener('mousedown', (e) => {
+  if (estado === 'jugando') {
+    if (e.button === 0) mousePresionado = true; // Clic izquierdo
+  }
+});
+
+canvas.addEventListener('mouseup', () => {
+  mousePresionado = false;
+});
+
+// DISPARO ESPECIAL (Clic Derecho)
+canvas.addEventListener('contextmenu', (e) => {
+  e.preventDefault(); 
+  if (estado === 'jugando') {
+    dispararEspecial();
+  }
+});
 
 // ==========================================
-// NUEVAS FUNCIONES: CREAR ESTRELLAS
+// LÓGICA DEL SISTEMA
 // ==========================================
 function crearEstrellas() {
   estrellas = [];
-  const numEstrellas = 150;
-  for (let i = 0; i < numEstrellas; i++) {
+  for (let i = 0; i < 150; i++) {
     estrellas.push({
       x: Math.random() * canvas.width,
       y: Math.random() * canvas.height,
       size: Math.random() * 2,
-      // Capas de profundidad (parallax)
-      z: Math.random() // 0 = fondo lento, 1 = frente rápido
+      z: Math.random() 
     });
   }
 }
@@ -92,57 +107,80 @@ function iniciarJuego() {
   meteoritos = [];
   disparos = [];
   particulas = [];
-  // Reset de inercia
+  jefes = [];
+  disparosJefe = [];
+  contadorMeteoritos = 0;
+  
+  // Reset Nave
   nave.x = canvas.width / 2;
   nave.y = canvas.height / 2;
   nave.vx = 0;
   nave.vy = 0;
   nave.inmune = false;
-  nave.parpadeoTiempo = 0;
-  jefes = [];
-  disparosJefe = [];
-  contadorMeteoritos = 0;
-  tiempoDisparo = 0;
-  crearEstrellas(); // Generar el fondo
+
+  // Sincronización con HTML
+  menuInicio.style.display = 'none';
+  crearEstrellas();
 }
 
-function reiniciarJuego() {
-  estado = 'inicio';
+function perderVida() {
+  vidas--;
+  nave.inmune = true;
+  nave.parpadeoTiempo = 1000;
+  vibracion = 15; 
+
+  if (vidas <= 0) {
+    estado = 'final';
+    // Mostrar Menú HTML de nuevo
+    menuInicio.style.display = 'flex';
+    tituloMenu.innerText = '¡JUEGO TERMINADO!';
+    controlesTexto.style.display = 'none';
+    btnReiniciar.style.display = 'block';
+    // Ocultar el botón original de "Iniciar"
+    document.querySelector('button[onclick="iniciarJuego()"]').style.display = 'none';
+  }
 }
 
+// ==========================================
+// MECÁNICAS DE DISPARO
+// ==========================================
 function disparar() {
-  const centerX = nave.x;
-  const centerY = nave.y;
-  const angle = Math.atan2(mouseY - centerY, mouseX - centerX);
+  const angle = Math.atan2(mouseY - nave.y, mouseX - nave.x);
   disparos.push({
-    x: centerX,
-    y: centerY,
-    width: 6,
-    height: 6,
-    velocidad: 10,
+    x: nave.x, y: nave.y,
     dx: Math.cos(angle) * 10,
-    dy: Math.sin(angle) * 10
+    dy: Math.sin(angle) * 10,
+    width: 6, height: 6
   });
 }
 
+function dispararEspecial() {
+  // Disparo Triple en abanico
+  const baseAngle = Math.atan2(mouseY - nave.y, mouseX - nave.x);
+  const offsets = [-0.2, 0, 0.2]; // Tres direcciones
+  
+  offsets.forEach(offset => {
+    const angle = baseAngle + offset;
+    disparos.push({
+      x: nave.x, y: nave.y,
+      dx: Math.cos(angle) * 12, // Un poco más rápido
+      dy: Math.sin(angle) * 12,
+      width: 8, height: 8,
+      especial: true
+    });
+  });
+  vibracion = 5; // Pequeño retroceso visual
+}
+
 // ==========================================
-// DIBUJADO DE ESTRELLAS CON PARALLAX
+// FUNCIONES DE DIBUJO
 // ==========================================
 function dibujarEstrellas() {
   estrellas.forEach(e => {
-    // La velocidad de movimiento depende de la profundidad 'z'
-    const velocidadParallax = 1 + e.z * 3;
-    e.y += velocidadParallax;
-    
-    // Wrapping: si sale por abajo, reaparece arriba
-    if (e.y > canvas.height) {
-      e.y = 0;
-      e.x = Math.random() * canvas.width;
-    }
-    
-    // Dibujar estrellas (más brillantes/grandes si están más cerca)
-    const alfa = 0.5 + e.z * 0.5;
-    ctx.fillStyle = `rgba(255, 255, 255, ${alfa})`;
+    const vel = 1 + e.z * 3;
+    e.y += vel;
+    if (e.y > canvas.height) e.y = 0;
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.3 + e.z * 0.7})`;
     ctx.beginPath();
     ctx.arc(e.x, e.y, e.size, 0, Math.PI * 2);
     ctx.fill();
@@ -150,25 +188,17 @@ function dibujarEstrellas() {
 }
 
 function dibujarNave() {
-  if (nave.inmune) {
-    const now = Date.now();
-    if (Math.floor(now / 100) % 2 === 0) return;
-  }
+  if (nave.inmune && Math.floor(Date.now() / 100) % 2 === 0) return;
 
-  const centerX = nave.x;
-  const centerY = nave.y;
-  const angle = Math.atan2(mouseY - centerY, mouseX - centerX);
-
+  const angle = Math.atan2(mouseY - nave.y, mouseX - nave.x);
   ctx.save();
-  ctx.translate(centerX, centerY);
+  ctx.translate(nave.x, nave.y);
   ctx.rotate(angle);
+  
+  // Efecto Glow
+  ctx.shadowColor = 'white';
+  ctx.shadowBlur = 15;
   ctx.fillStyle = nave.color;
-
-  // Efecto neón en la nave al jugar
-  if (estado === 'jugando') {
-    ctx.shadowColor = 'white';
-    ctx.shadowBlur = 10;
-  }
 
   ctx.beginPath();
   ctx.moveTo(20, 0);
@@ -176,402 +206,238 @@ function dibujarNave() {
   ctx.lineTo(-20, 15);
   ctx.closePath();
   ctx.fill();
-
   ctx.restore();
 }
 
-function dibujarMeteoritos() {
-  ctx.fillStyle = '#AAAAAA'; // Un gris un poco más claro
-  meteoritos.forEach(m => {
+function dibujarJefes() {
+  jefes.forEach(jefe => {
+    ctx.save();
+    ctx.translate(jefe.x, jefe.y);
+    const angle = Math.atan2(nave.y - jefe.y, nave.x - jefe.x);
+    ctx.rotate(angle);
+    
+    ctx.shadowColor = jefe.color;
+    ctx.shadowBlur = 20;
+    ctx.fillStyle = jefe.color;
+
     ctx.beginPath();
-    ctx.arc(m.x, m.y, m.radio, 0, Math.PI * 2);
+    ctx.moveTo(25, 0);
+    ctx.lineTo(-20, -18);
+    ctx.lineTo(-20, 18);
+    ctx.closePath();
     ctx.fill();
+    ctx.restore();
+
+    // Barra de vida
+    ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+    ctx.fillRect(jefe.x - 20, jefe.y - 35, 40, 6);
+    ctx.fillStyle = '#00ff88';
+    ctx.fillRect(jefe.x - 20, jefe.y - 35, 40 * (jefe.vidas / 20), 6);
   });
 }
 
-function dibujarDisparos() {
-  ctx.fillStyle = '#FF3333'; // Rojo neón
-  disparos.forEach(d => {
-    ctx.fillRect(d.x - d.width / 2, d.y - d.height / 2, d.width, d.height);
-  });
-}
-
-function dibujarParticulas() {
-  particulas.forEach((p, i) => {
-    ctx.fillStyle = `rgba(255, ${p.g}, 50, ${p.alpha})`; // Un tono más fuego
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-    ctx.fill();
-
-    p.x += p.vx;
-    p.y += p.vy;
-    p.alpha -= 0.02;
-    p.size *= 0.96;
-
-    if (p.alpha <= 0) {
-      particulas.splice(i, 1);
-    }
-  });
-}
-
-// ==========================================
-// MEJORA VISUAL DEL HUD
-// ==========================================
 function dibujarHUD() {
   ctx.fillStyle = 'white';
-  ctx.font = 'bold 22px Courier New'; // Fuente más retro/arcade
+  ctx.font = 'bold 20px Courier New';
   ctx.textAlign = 'left';
-  ctx.fillText(`SCORE: ${puntaje.toString().padStart(6, '0')}`, 20, 35);
+  ctx.fillText(`PUNTOS: ${puntaje}`, 20, 40);
   
-  // Dibujar corazones en lugar de texto para las vidas
   ctx.textAlign = 'right';
-  let livesStr = '';
-  for(let i=0; i<vidas; i++) livesStr += '❤️ ';
-  ctx.fillText(`LIVES: ${livesStr}`, canvas.width - 20, 35);
+  let corazones = '';
+  for(let i=0; i<vidas; i++) corazones += '❤️';
+  ctx.fillText(corazones, canvas.width - 20, 40);
 }
 
-function dibujarTextoCentral(texto, subtitulo = '') {
-  ctx.fillStyle = 'white';
-  ctx.font = 'bold 42px Courier New'; // Fuente arcade
-  ctx.textAlign = 'center';
-  ctx.fillText(texto, canvas.width / 2, canvas.height / 2 - 40);
-
-  if (subtitulo) {
-    ctx.font = '22px Courier New';
-    ctx.fillText(subtitulo, canvas.width / 2, canvas.height / 2);
-  }
-
-  if (estado === 'inicio') {
-    ctx.font = '18px Courier New';
-    ctx.fillText('Controles:', canvas.width / 2, canvas.height / 2 + 60);
-    ctx.fillText('WASD / Flechas: Mover', canvas.width / 2, canvas.height / 2 + 85);
-    ctx.fillText('Mouse: Apuntar', canvas.width / 2, canvas.height / 2 + 110);
-    ctx.fillText('Clic: Disparar', canvas.width / 2, canvas.height / 2 + 135);
-    ctx.fillText('[ ENTER ]: Empezar', canvas.width / 2, canvas.height / 2 + 170);
-  }
-}
-
-function perderVida() {
-  vidas--;
-  nave.inmune = true;
-  nave.parpadeoTiempo = 1000;
-  // SCREEN SHAKE: Sacudida fuerte al recibir daño
-  vibracion = 15; 
-
-  if (vidas <= 0) {
-    estado = 'final';
-  }
-}
-
-function crearExplosión(x, y) {
-  const numParticulas = 20; // Más partículas para que se vea mejor
-  for (let i = 0; i < numParticulas; i++) {
-    const angle = Math.random() * 2 * Math.PI;
-    const speed = Math.random() * 4 + 1.5;
+function crearExplosión(x, y, color = '255, 100, 0') {
+  for (let i = 0; i < 15; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = Math.random() * 4 + 1;
     particulas.push({
-      x,
-      y,
+      x, y,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
-      size: Math.random() * 5 + 2,
-      g: Math.floor(Math.random() * 200 + 55), // Tonos amarillos/naranjas
+      size: Math.random() * 4 + 1,
+      color: color,
       alpha: 1
     });
   }
 }
 
 // ==========================================
-// MEJORA VISUAL JEFES (COLOR Y GLOW)
+// ACTUALIZACIÓN DE LÓGICA (CORE)
 // ==========================================
-function dibujarJefes() {
-  jefes.forEach(jefe => {
-    ctx.save();
-    // Cambiado color de 'black' a magenta neón brillante
-    ctx.fillStyle = jefe.color; 
-    ctx.translate(jefe.x, jefe.y);
-    const angle = Math.atan2(nave.y - jefe.y, nave.x - jefe.x);
-    ctx.rotate(angle);
-
-    // Efecto GLOW imponente para los jefes
-    ctx.shadowColor = jefe.color;
-    ctx.shadowBlur = 20;
-
-    ctx.beginPath();
-    ctx.moveTo(25, 0); // Un poco más grandes
-    ctx.lineTo(-20, -18);
-    ctx.lineTo(-20, 18);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.restore();
-
-    // Barra de vida estilizada
-    ctx.fillStyle = 'rgba(255, 0, 0, 0.5)'; // Fondo translúcido
-    ctx.fillRect(jefe.x - jefe.width / 2, jefe.y - jefe.height / 2 - 15, jefe.width, 8);
-    ctx.fillStyle = '#00FF88'; // Barra neón
-    ctx.fillRect(jefe.x - jefe.width / 2, jefe.y - jefe.height / 2 - 15, jefe.width * (jefe.vidas / 20), 8);
-  });
-}
-
-function dibujarDisparosJefe() {
-  disparosJefe.forEach(d => {
-    ctx.fillStyle = d.color;
-    // Efecto de rastro/glow en disparos jefe
-    ctx.shadowColor = d.color;
-    ctx.shadowBlur = 8;
-    ctx.beginPath();
-    ctx.arc(d.x, d.y, d.width / 2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0; // Reset rápido
-  });
-}
-
 function actualizar() {
   if (estado !== 'jugando') return;
 
-  if (mousePresionado) {
-    tiempoDisparo++;
-    if (tiempoDisparo >= 10) {
-      disparar();
-      tiempoDisparo = 0;
-    }
-  } else {
-    tiempoDisparo = 10;
-  }
-
-  if (nave.inmune) {
-    nave.parpadeoTiempo -= 16;
-    if (nave.parpadeoTiempo <= 0) {
-      nave.inmune = false;
-      nave.parpadeoTiempo = 0;
-    }
-  }
-
-  // ==========================================
-=  // APLICAR INERCIA Y FRICCIÓN A LA NAVE
-  // ==========================================
+  // Inercia y Movimiento
   if (teclas['ArrowLeft'] || teclas['KeyA']) nave.vx -= nave.aceleracion;
   if (teclas['ArrowRight'] || teclas['KeyD']) nave.vx += nave.aceleracion;
   if (teclas['ArrowUp'] || teclas['KeyW']) nave.vy -= nave.aceleracion;
   if (teclas['ArrowDown'] || teclas['KeyS']) nave.vy += nave.aceleracion;
 
-  // Aplicar fricción (desaceleración suave)
   nave.vx *= nave.friccion;
   nave.vy *= nave.friccion;
-
-  // Actualizar posición con la velocidad resultante
   nave.x += nave.vx;
   nave.y += nave.vy;
 
-  // Colisión con bordes (ajustada para inercia)
-  if (nave.x - nave.width / 2 < 0) { nave.x = nave.width / 2; nave.vx *= -0.5; } // Rebote suave
-  if (nave.x + nave.width / 2 > canvas.width) { nave.x = canvas.width - nave.width / 2; nave.vx *= -0.5; }
-  if (nave.y - nave.height / 2 < 0) { nave.y = nave.height / 2; nave.vy *= -0.5; }
-  if (nave.y + nave.height / 2 > canvas.height) { nave.y = canvas.height - nave.height / 2; nave.vy *= -0.5; }
+  // Límites pantalla con rebote
+  if (nave.x < 20) { nave.x = 20; nave.vx *= -0.5; }
+  if (nave.x > canvas.width - 20) { nave.x = canvas.width - 20; nave.vx *= -0.5; }
+  if (nave.y < 20) { nave.y = 20; nave.vy *= -0.5; }
+  if (nave.y > canvas.height - 20) { nave.y = canvas.height - 20; nave.vy *= -0.5; }
 
-  const frecuenciaMeteoritos = Math.max(10, 40 - Math.floor(puntaje / 10));
-  const velocidadMeteoritos = 2 + Math.min(puntaje * 0.1, 5);
+  // Auto-disparo
+  if (mousePresionado) {
+    tiempoDisparo++;
+    if (tiempoDisparo >= 10) { disparar(); tiempoDisparo = 0; }
+  }
 
+  // Inmunidad
+  if (nave.inmune) {
+    nave.parpadeoTiempo -= 16;
+    if (nave.parpadeoTiempo <= 0) nave.inmune = false;
+  }
+
+  // Generar Meteoritos
   contadorMeteoritos++;
-  if (contadorMeteoritos % frecuenciaMeteoritos === 0 && jefes.length === 0) {
-    const borde = Math.floor(Math.random() * 4);
+  if (contadorMeteoritos % 30 === 0 && jefes.length === 0) {
+    const side = Math.floor(Math.random() * 4);
     let x, y;
-
-    switch (borde) {
-      case 0: x = Math.random() * canvas.width; y = -20; break;
-      case 1: x = canvas.width + 20; y = Math.random() * canvas.height; break;
-      case 2: x = Math.random() * canvas.width; y = canvas.height + 20; break;
-      case 3: x = -20; y = Math.random() * canvas.height; break;
-    }
-
-    const dx = nave.x - x;
-    const dy = nave.y - y;
-    const distancia = Math.sqrt(dx * dx + dy * dy);
-    const vx = (dx / distancia) * velocidadMeteoritos;
-    const vy = (dy / distancia) * velocidadMeteoritos;
-
-    meteoritos.push({ x, y, radio: 15, vx, vy });
+    if(side === 0) { x = Math.random()*canvas.width; y = -20; }
+    else if(side === 1) { x = canvas.width+20; y = Math.random()*canvas.height; }
+    else if(side === 2) { x = Math.random()*canvas.width; y = canvas.height+20; }
+    else { x = -20; y = Math.random()*canvas.height; }
+    
+    const angle = Math.atan2(nave.y - y, nave.x - x);
+    meteoritos.push({ x, y, radio: 15, vx: Math.cos(angle)*3, vy: Math.sin(angle)*3 });
   }
 
-  if (puntaje >= 50 && jefes.length === 0) {
-    // JEFES AHORA SON DE COLOR NEÓN
-    jefes.push({
-      x: canvas.width / 3,
-      y: 80,
-      width: nave.width,
-      height: nave.height,
-      color: '#FF00FF', // Magenta brillante
-      velocidadX: 3,
-      velocidadY: 3,
-      vidas: 20,
-      dirX: 1,
-      dirY: 1,
-      disparoCooldown: 50,
-      disparoTimer: 0
-    });
-    jefes.push({
-      x: (canvas.width * 2) / 3,
-      y: 80,
-      width: nave.width,
-      height: nave.height,
-      color: '#00FFFF', // Cyan brillante
-      velocidadX: 3,
-      velocidadY: 3,
-      vidas: 20,
-      dirX: -1,
-      dirY: 1,
-      disparoCooldown: 50,
-      disparoTimer: 0
-    });
+  // Aparecer Jefes
+  if (puntaje >= 100 && jefes.length === 0) {
+    jefes.push({ x: 200, y: 100, color: '#00ffff', vidas: 20, dirX: 1, dirY: 1, disparoTimer: 0, width: 40, height: 40 });
+    jefes.push({ x: 700, y: 100, color: '#ff00ff', vidas: 20, dirX: -1, dirY: 1, disparoTimer: 0, width: 40, height: 40 });
   }
 
-  meteoritos.forEach((m, i) => {
-    m.x += m.vx;
-    m.y += m.vy;
-
-    if (!nave.inmune) {
-      // COLISIÓN NAVE (CIRCULAR): Más justa para el jugador
-      const dx = m.x - nave.x;
-      const dy = m.y - nave.y;
-      const distancia = Math.sqrt(dx * dx + dy * dy);
-      // Usamos nave.width/2 como radio aproximado de la nave triangular
-      if (distancia < m.radio + (nave.width / 2.5)) {
-        meteoritos.splice(i, 1);
-        perderVida();
-      }
-    }
-
-    // ELIMINADO: Ya no damos puntos por meteoritos fallidos (puntaje++)
-    if (m.x < -30 || m.x > canvas.width + 30 || m.y < -30 || m.y > canvas.height + 30) {
-      meteoritos.splice(i, 1);
-    }
-  });
-
-  disparos = disparos.filter(d => d.x > 0 && d.x < canvas.width && d.y > 0 && d.y < canvas.height);
+  // Actualizar Proyectiles
   disparos.forEach((d, i) => {
-    d.x += d.dx;
-    d.y += d.dy;
-
+    d.x += d.dx; d.y += d.dy;
+    if(d.x < 0 || d.x > canvas.width || d.y < 0 || d.y > canvas.height) disparos.splice(i, 1);
+    
     meteoritos.forEach((m, mi) => {
-      const dx = m.x - d.x;
-      const dy = m.y - d.y;
-      const distancia = Math.sqrt(dx * dx + dy * dy);
-      if (distancia < m.radio) {
+      const dist = Math.hypot(m.x - d.x, m.y - d.y);
+      if (dist < m.radio) {
         crearExplosión(m.x, m.y);
         meteoritos.splice(mi, 1);
         disparos.splice(i, 1);
-        puntaje += 10; // Subimos la recompensa por meteorito destruido
-        // Pequeño shake al destruir meteorito
-        vibracion = Math.max(vibracion, 2); 
+        puntaje += 10;
+        vibracion = 2;
       }
     });
 
-    jefes.forEach((jefe, ji) => {
-      // Detección rectangular para jefe (está bien, son grandes)
-      if (
-        d.x > jefe.x - jefe.width / 2 &&
-        d.x < jefe.x + jefe.width / 2 &&
-        d.y > jefe.y - jefe.height / 2 &&
-        d.y < jefe.y + jefe.height / 2
-      ) {
-        jefe.vidas--;
-        crearExplosión(d.x, d.y);
+    jefes.forEach((j, ji) => {
+      if (Math.hypot(j.x - d.x, j.y - d.y) < 25) {
+        j.vidas--;
         disparos.splice(i, 1);
-        vibracion = Math.max(vibracion, 3); // Shake al impactar jefe
-        
-        if (jefe.vidas <= 0) {
-          crearExplosión(jefe.x, jefe.y);
+        crearExplosión(d.x, d.y, '0, 255, 255');
+        if (j.vidas <= 0) {
+          crearExplosión(j.x, j.y, '255, 255, 255');
           jefes.splice(ji, 1);
-          puntaje += 500; // Gran recompensa por jefe
-          // SCREEN SHAKE FUERTE al destruir jefe
-          vibracion = 25; 
+          puntaje += 500;
+          vibracion = 20;
         }
       }
     });
   });
 
-  jefes.forEach((jefe) => {
-    jefe.x += jefe.velocidadX * jefe.dirX;
-    jefe.y += jefe.velocidadY * jefe.dirY;
+  // Actualizar Meteoritos (Colisión nave)
+  meteoritos.forEach((m, i) => {
+    m.x += m.vx; m.y += m.vy;
+    if (!nave.inmune && Math.hypot(m.x - nave.x, m.y - nave.y) < m.radio + 15) {
+      meteoritos.splice(i, 1);
+      perderVida();
+    }
+    if (m.x < -50 || m.x > canvas.width + 50 || m.y < -50 || m.y > canvas.height + 50) meteoritos.splice(i, 1);
+  });
 
-    if (jefe.x - jefe.width / 2 < 0 || jefe.x + jefe.width / 2 > canvas.width) jefe.dirX *= -1;
-    if (jefe.y - jefe.height / 2 < 0 || jefe.y + jefe.height / 2 > canvas.height) jefe.dirY *= -1;
+  // Actualizar Jefes
+  jefes.forEach(j => {
+    j.x += 2 * j.dirX; j.y += 1 * j.dirY;
+    if (j.x < 50 || j.x > canvas.width - 50) j.dirX *= -1;
+    if (j.y < 50 || j.y > 300) j.dirY *= -1;
 
-    jefe.disparoTimer++;
-    if (jefe.disparoTimer >= jefe.disparoCooldown) {
-      jefe.disparoTimer = 0;
-      const angle = Math.atan2(nave.y - jefe.y, nave.x - jefe.x);
-      disparosJefe.push({
-        x: jefe.x,
-        y: jefe.y,
-        width: 10, // Un poco más grandes
-        height: 10,
-        velocidad: 7,
-        dx: Math.cos(angle) * 7,
-        dy: Math.sin(angle) * 7,
-        color: jefe.color // Disparo del mismo color que el jefe
-      });
+    j.disparoTimer++;
+    if (j.disparoTimer > 60) {
+      const angle = Math.atan2(nave.y - j.y, nave.x - j.x);
+      disparosJefe.push({ x: j.y, x: j.x, y: j.y, dx: Math.cos(angle)*5, dy: Math.sin(angle)*5, color: j.color });
+      j.disparoTimer = 0;
     }
   });
 
-  disparosJefe = disparosJefe.filter(d => d.x > 0 && d.x < canvas.width && d.y > 0 && d.y < canvas.height);
   disparosJefe.forEach((d, i) => {
-    d.x += d.dx;
-    d.y += d.dy;
-
-    if (!nave.inmune) {
-      // COLISIÓN DISPARO JEFE (CIRCULAR): Más justa para el jugador
-      const dx = d.x - nave.x;
-      const dy = d.y - nave.y;
-      const distancia = Math.sqrt(dx * dx + dy * dy);
-      if (distancia < (nave.width / 2.5) + (d.width / 2)) {
-        disparosJefe.splice(i, 1);
-        perderVida();
-      }
+    d.x += d.dx; d.y += d.dy;
+    if (!nave.inmune && Math.hypot(d.x - nave.x, d.y - nave.y) < 20) {
+      disparosJefe.splice(i, 1);
+      perderVida();
     }
+  });
+
+  // Partículas
+  particulas.forEach((p, i) => {
+    p.x += p.vx; p.y += p.vy; p.alpha -= 0.02;
+    if (p.alpha <= 0) particulas.splice(i, 1);
   });
 }
 
 // ==========================================
-// LOOP PRINCIPAL CON SCREEN SHAKE Y FONDO
+// LOOP PRINCIPAL
 // ==========================================
 function loopJuego() {
-  ctx.save(); // GUARDAR ESTADO LIMPIO
-
-  // APLICAR SCREEN SHAKE ANTES DE DIBUJAR NADA
+  ctx.save();
   if (vibracion > 0) {
-    const shakeX = (Math.random() - 0.5) * vibracion;
-    const shakeY = (Math.random() - 0.5) * vibracion;
-    ctx.translate(shakeX, shakeY);
-    vibracion *= 0.9; // Se detiene gradualmente
-    if (vibracion < 0.1) vibracion = 0;
+    ctx.translate((Math.random()-0.5)*vibracion, (Math.random()-0.5)*vibracion);
+    vibracion *= 0.9;
   }
 
-  // Fondo negro espacial limpio
-  ctx.fillStyle = '#050505'; 
+  ctx.fillStyle = '#050505';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  if (estado === 'inicio') {
-    dibujarEstrellas(); // Estrellas también en inicio
-    dibujarTextoCentral('STARSHIP DEFENDER', 'Presiona ENTER para empezar');
-  } else if (estado === 'jugando') {
+  dibujarEstrellas();
+  
+  if (estado === 'jugando') {
     actualizar();
-    dibujarEstrellas(); // DIBUJAR FONDO PRIMERO
     dibujarMeteoritos();
-    dibujarParticulas();
+    particulas.forEach(p => {
+      ctx.fillStyle = `rgba(${p.color}, ${p.alpha})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
+    });
     dibujarDisparos();
-    dibujarNave();
+    disparosJefe.forEach(d => {
+      ctx.fillStyle = d.color;
+      ctx.beginPath(); ctx.arc(d.x, d.y, 5, 0, Math.PI*2); ctx.fill();
+    });
     dibujarJefes();
-    dibujarDisparosJefe();
-    dibujarHUD(); // HUD SIEMPRE AL FRENTE
-  } else if (estado === 'final') {
-    dibujarTextoCentral('¡GAME OVER!', 'Presiona R para reiniciar');
+    dibujarNave();
+    dibujarHUD();
   }
 
-  ctx.restore(); // RESTAURAR ESTADO (limpiar shake para siguiente frame)
+  ctx.restore();
   requestAnimationFrame(loopJuego);
 }
 
-// Empezar a crear estrellas para el fondo de inicio
+// Inicialización de fondo para el menú
 crearEstrellas();
 loopJuego();
+
+function dibujarMeteoritos() {
+  ctx.fillStyle = '#888';
+  meteoritos.forEach(m => {
+    ctx.beginPath(); ctx.arc(m.x, m.y, m.radio, 0, Math.PI*2); ctx.fill();
+  });
+}
+
+function dibujarDisparos() {
+  disparos.forEach(d => {
+    ctx.fillStyle = d.especial ? '#ffff00' : '#ff3333';
+    ctx.fillRect(d.x - d.width/2, d.y - d.height/2, d.width, d.height);
+  });
+}
