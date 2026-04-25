@@ -1,90 +1,406 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <title>Juego Nave vs Meteoritos</title>
-  <style>
-    body {
-      margin: 0;
-      background: black;
-      overflow: hidden;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-    }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Starship Defender Pro</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
 
-    canvas {
-      background: #111;
-      display: block;
-      border: 2px solid white;
-    }
+        body {
+            margin: 0;
+            background: #050505;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Orbitron', sans-serif;
+        }
 
-    /* Menú de inicio visual */
-    #menuInicio {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: radial-gradient(circle, #0a0a0a, #000000);
-      color: white;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      font-family: 'Arial', sans-serif;
-      text-align: center;
-      z-index: 10;
-    }
+        #game-container {
+            position: relative;
+            box-shadow: 0 0 50px rgba(30, 144, 255, 0.2);
+            border: 2px solid #333;
+        }
 
-    #menuInicio h1 {
-      font-size: 48px;
-      margin-bottom: 20px;
-    }
+        canvas {
+            display: block;
+            background: #000;
+        }
 
-    #menuInicio p {
-      font-size: 18px;
-      margin: 5px 0;
-    }
+        /* --- MENÚ DE INTERFAZ --- */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            z-index: 100;
+            transition: opacity 0.5s;
+        }
 
-    #menuInicio button {
-      padding: 12px 24px;
-      font-size: 20px;
-      background-color: #1e90ff;
-      border: none;
-      color: white;
-      border-radius: 8px;
-      cursor: pointer;
-      margin-top: 20px;
-    }
+        .menu-content {
+            text-align: center;
+            padding: 40px;
+            border-radius: 20px;
+            border: 1px solid #1e90ff;
+            background: rgba(10, 10, 10, 0.9);
+        }
 
-    #menuInicio button:hover {
-      background-color: #63b3ed;
-    }
-  </style>
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            color: #1e90ff;
+            text-shadow: 0 0 20px rgba(30, 144, 255, 0.6);
+        }
+
+        .controls-hint {
+            margin: 20px 0;
+            color: #aaa;
+            line-height: 1.6;
+        }
+
+        button {
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            font-family: 'Orbitron', sans-serif;
+            background: transparent;
+            color: #1e90ff;
+            border: 2px solid #1e90ff;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        button:hover {
+            background: #1e90ff;
+            color: white;
+            box-shadow: 0 0 20px #1e90ff;
+        }
+
+        #hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            justify-content: space-between;
+            color: white;
+            pointer-events: none;
+            font-size: 1.2rem;
+            display: none; /* Se activa al jugar */
+        }
+    </style>
 </head>
 <body>
 
-<!-- Menú de inicio -->
-<div id="menuInicio">
-  <h1>🚀 Nave vs Meteoritos</h1>
+    <div id="game-container">
+        <div id="hud">
+            <div id="score">SCORE: 000000</div>
+            <div id="lives">❤️❤️❤️</div>
+        </div>
 
-  <!-- Controles solo para el menú de inicio -->
-  <div id="controles">
-    <p>Usa las flechas o WASD para moverte</p>
-    <p>Click izquierdo para disparar</p>
-    <p>Click derecho para disparo especial</p>
-  </div>
+        <div id="ui-layer">
+            <div class="menu-content">
+                <h1 id="menu-title">STARSHIP DEFENDER</h1>
+                <div class="controls-hint" id="menu-info">
+                    <p>WASD / FLECHAS - Mover Nave</p>
+                    <p>CLIC IZQUIERDO - Disparo Continuo</p>
+                    <p>CLIC DERECHO - Disparo Triple Especial</p>
+                </div>
+                <button id="btn-start">INICIAR MISIÓN</button>
+            </div>
+        </div>
 
-  <button onclick="iniciarJuego()">Iniciar Juego</button>
-  <button id="btnReiniciar" onclick="iniciarJuego()" style="display: none;">Reiniciar Juego</button>
-</div>
+        <canvas id="gameCanvas"></canvas>
+    </div>
 
-  <!-- Lienzo del juego -->
-  <canvas id="gameCanvas" width="900" height="600"></canvas>
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const uiLayer = document.getElementById('ui-layer');
+    const hud = document.getElementById('hud');
+    const btnStart = document.getElementById('btn-start');
+    const scoreElement = document.getElementById('score');
+    const livesElement = document.getElementById('lives');
+    const menuTitle = document.getElementById('menu-title');
 
-  <!-- Juego JS -->
-  <script src="juego.js"></script>
+    canvas.width = 900;
+    canvas.height = 600;
+
+    // --- ESTADO DEL JUEGO ---
+    let gameActive = false;
+    let score = 0;
+    let lives = 3;
+    let screenShake = 0;
+
+    // --- OBJETOS ---
+    const nave = {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        vx: 0,
+        vy: 0,
+        angle: 0,
+        size: 20,
+        accel: 0.7,
+        fric: 0.93,
+        inmune: false,
+        blink: 0
+    };
+
+    let particles = [];
+    let bullets = [];
+    let enemies = [];
+    let enemyBullets = [];
+    let stars = [];
+    let keys = {};
+    let mouse = { x: 0, y: 0, down: false };
+
+    // --- INICIALIZACIÓN ---
+    function initStars() {
+        stars = [];
+        for(let i=0; i<150; i++) {
+            stars.push({ x: Math.random()*canvas.width, y: Math.random()*canvas.height, z: Math.random(), size: Math.random()*2 });
+        }
+    }
+
+    // --- INPUTS ---
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+    canvas.addEventListener('mousemove', e => {
+        const rect = canvas.getBoundingClientRect();
+        mouse.x = e.clientX - rect.left;
+        mouse.y = e.clientY - rect.top;
+    });
+    canvas.addEventListener('mousedown', e => {
+        if(e.button === 0) mouse.down = true;
+        if(e.button === 2) spawnSpecialBullet();
+    });
+    canvas.addEventListener('mouseup', () => mouse.down = false);
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+    btnStart.addEventListener('click', startGame);
+
+    function startGame() {
+        gameActive = true;
+        score = 0;
+        lives = 3;
+        bullets = [];
+        enemies = [];
+        enemyBullets = [];
+        particles = [];
+        nave.x = canvas.width/2;
+        nave.y = canvas.height/2;
+        nave.vx = 0;
+        nave.vy = 0;
+        
+        uiLayer.style.display = 'none';
+        hud.style.display = 'flex';
+        updateHUD();
+    }
+
+    function gameOver() {
+        gameActive = false;
+        uiLayer.style.display = 'flex';
+        hud.style.display = 'none';
+        menuTitle.innerText = "MISIÓN FALLIDA";
+        btnStart.innerText = "REINTENTAR";
+    }
+
+    // --- MECÁNICAS ---
+    function spawnBullet() {
+        const angle = Math.atan2(mouse.y - nave.y, mouse.x - nave.x);
+        bullets.push({ x: nave.x, y: nave.y, vx: Math.cos(angle)*12, vy: Math.sin(angle)*12, color: '#00d4ff' });
+    }
+
+    function spawnSpecialBullet() {
+        if(!gameActive) return;
+        const baseAngle = Math.atan2(mouse.y - nave.y, mouse.x - nave.x);
+        for(let i=-1; i<=1; i++) {
+            const a = baseAngle + (i * 0.2);
+            bullets.push({ x: nave.x, y: nave.y, vx: Math.cos(a)*10, vy: Math.sin(a)*10, color: '#ffcc00', special: true });
+        }
+        screenShake = 5;
+    }
+
+    function createExplosion(x, y, color) {
+        for(let i=0; i<15; i++) {
+            particles.push({
+                x, y, 
+                vx: (Math.random()-0.5)*8, 
+                vy: (Math.random()-0.5)*8, 
+                life: 1.0, 
+                color: color || '#ff5500'
+            });
+        }
+    }
+
+    function updateHUD() {
+        scoreElement.innerText = `SCORE: ${score.toString().padStart(6, '0')}`;
+        livesElement.innerText = "❤️".repeat(lives);
+    }
+
+    // --- LOOP PRINCIPAL ---
+    function update() {
+        if(!gameActive) return;
+
+        // Movimiento Nave
+        if(keys['KeyW'] || keys['ArrowUp']) nave.vy -= nave.accel;
+        if(keys['KeyS'] || keys['ArrowDown']) nave.vy += nave.accel;
+        if(keys['KeyA'] || keys['ArrowLeft']) nave.vx -= nave.accel;
+        if(keys['KeyD'] || keys['ArrowRight']) nave.vx += nave.accel;
+
+        nave.vx *= nave.fric;
+        nave.vy *= nave.fric;
+        nave.x += nave.vx;
+        nave.y += nave.vy;
+
+        // Limites
+        if(nave.x < 0) nave.x = canvas.width; else if(nave.x > canvas.width) nave.x = 0;
+        if(nave.y < 0) nave.y = canvas.height; else if(nave.y > canvas.height) nave.y = 0;
+
+        // Disparo continuo
+        if(mouse.down && Date.now() % 150 < 20) spawnBullet();
+
+        // Estrellas
+        stars.forEach(s => {
+            s.y += (1 + s.z * 3);
+            if(s.y > canvas.height) s.y = 0;
+        });
+
+        // Enemigos (Lógica simple de spawn)
+        if(Math.random() < 0.02 + (score/100000)) {
+            const side = Math.floor(Math.random()*4);
+            let ex, ey;
+            if(side==0){ex=Math.random()*canvas.width; ey=-30;}
+            else if(side==1){ex=canvas.width+30; ey=Math.random()*canvas.height;}
+            else if(side==2){ex=Math.random()*canvas.width; ey=canvas.height+30;}
+            else {ex=-30; ey=Math.random()*canvas.height;}
+            
+            const angle = Math.atan2(nave.y - ey, nave.x - ex);
+            enemies.push({x: ex, y: ey, vx: Math.cos(angle)*3, vy: Math.sin(angle)*3, hp: 1});
+        }
+
+        // Balas
+        bullets.forEach((b, i) => {
+            b.x += b.vx; b.y += b.vy;
+            if(b.x<0 || b.x>canvas.width || b.y<0 || b.y>canvas.height) bullets.splice(i, 1);
+            
+            enemies.forEach((e, ei) => {
+                if(Math.hypot(e.x - b.x, e.y - b.y) < 20) {
+                    createExplosion(e.x, e.y, '#fff');
+                    enemies.splice(ei, 1);
+                    bullets.splice(i, 1);
+                    score += 100;
+                    updateHUD();
+                }
+            });
+        });
+
+        // Colisión Nave con Enemigos
+        enemies.forEach((e, i) => {
+            e.x += e.vx; e.y += e.vy;
+            if(Math.hypot(e.x - nave.x, e.y - nave.y) < 30 && !nave.inmune) {
+                lives--;
+                createExplosion(nave.x, nave.y, '#ff0000');
+                screenShake = 20;
+                nave.inmune = true;
+                setTimeout(() => nave.inmune = false, 2000);
+                enemies.splice(i, 1);
+                updateHUD();
+                if(lives <= 0) gameOver();
+            }
+        });
+
+        // Partículas
+        particles.forEach((p, i) => {
+            p.x += p.vx; p.y += p.vy;
+            p.life -= 0.02;
+            if(p.life <= 0) particles.splice(i, 1);
+        });
+    }
+
+    function draw() {
+        ctx.save();
+        if(screenShake > 0) {
+            ctx.translate((Math.random()-0.5)*screenShake, (Math.random()-0.5)*screenShake);
+            screenShake *= 0.9;
+        }
+
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Estrellas
+        stars.forEach(s => {
+            ctx.fillStyle = `rgba(255, 255, 255, ${0.2 + s.z})`;
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, s.size, 0, Math.PI*2);
+            ctx.fill();
+        });
+
+        // Partículas
+        particles.forEach(p => {
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = p.life;
+            ctx.fillRect(p.x, p.y, 3, 3);
+        });
+        ctx.globalAlpha = 1;
+
+        // Enemigos
+        enemies.forEach(e => {
+            ctx.fillStyle = '#ff3366';
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#ff3366';
+            ctx.beginPath();
+            ctx.arc(e.x, e.y, 12, 0, Math.PI*2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        });
+
+        // Balas
+        bullets.forEach(b => {
+            ctx.fillStyle = b.color;
+            ctx.fillRect(b.x-2, b.y-2, 4, 4);
+        });
+
+        // Nave
+        if(!nave.inmune || Math.floor(Date.now()/100)%2==0) {
+            const angle = Math.atan2(mouse.y - nave.y, mouse.x - nave.x);
+            ctx.save();
+            ctx.translate(nave.x, nave.y);
+            ctx.rotate(angle);
+            ctx.fillStyle = '#fff';
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = '#1e90ff';
+            ctx.beginPath();
+            ctx.moveTo(15, 0);
+            ctx.lineTo(-15, -10);
+            ctx.lineTo(-15, 10);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+
+        ctx.restore();
+        requestAnimationFrame(() => {
+            update();
+            draw();
+        });
+    }
+
+    initStars();
+    draw();
+</script>
 </body>
 </html>
