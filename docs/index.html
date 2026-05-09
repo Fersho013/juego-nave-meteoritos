@@ -3,156 +3,79 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SPACE MISSION: ULTRA</title>
+    <title>SPACE MISSION: ECHELON</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=JetBrains+Mono:wght@300;500&display=swap');
 
         :root {
-            --primary: #1e90ff;
-            --danger: #ff3366;
-            --warning: #ffcc00;
-            --bg: #050505;
+            --primary: #1e90ff; --danger: #ff3366; --warning: #ffcc00; --success: #00ffcc; --bg: #050505;
         }
 
         body {
-            margin: 0;
-            background: var(--bg);
-            overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            font-family: 'Orbitron', sans-serif;
-            color: white;
+            margin: 0; background: var(--bg); overflow: hidden;
+            display: flex; justify-content: center; align-items: center; height: 100vh;
+            font-family: 'Orbitron', sans-serif; color: white;
         }
 
-        #game-container {
-            position: relative;
-            box-shadow: 0 0 50px rgba(30, 144, 255, 0.1);
-            border: 2px solid #222;
-            background: #000;
-        }
-
+        #game-container { position: relative; border: 2px solid #222; background: #000; overflow: hidden; }
         canvas { display: block; }
 
-        /* --- SISTEMA DE MENÚS --- */
+        /* --- UI SCREENS --- */
         .ui-screen {
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            background: rgba(0, 0, 0, 0.9);
-            z-index: 100;
-            text-align: center;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            background: rgba(0, 0, 0, 0.9); z-index: 100; text-align: center;
         }
-
         .ui-screen.active { display: flex; }
+        .menu-card { padding: 30px; border: 1px solid var(--primary); background: rgba(10, 10, 10, 0.95); border-radius: 10px; min-width: 450px; }
 
-        .menu-card {
-            padding: 30px;
-            border: 1px solid var(--primary);
-            background: rgba(10, 10, 10, 0.95);
-            border-radius: 10px;
-            min-width: 400px;
-        }
-
-        h1 {
-            font-size: 2.5rem;
-            color: var(--primary);
-            text-shadow: 0 0 15px rgba(30, 144, 255, 0.5);
-            margin-bottom: 30px;
-        }
-
-        .btn-group { display: flex; flex-direction: column; gap: 15px; }
-
+        h1 { font-size: 2.2rem; color: var(--primary); text-shadow: 0 0 15px rgba(30, 144, 255, 0.5); margin-bottom: 20px; }
+        .btn-group { display: flex; flex-direction: column; gap: 12px; }
         button {
-            padding: 12px 30px;
-            font-family: 'Orbitron', sans-serif;
-            background: transparent;
-            color: var(--primary);
-            border: 1px solid var(--primary);
-            cursor: pointer;
-            transition: 0.3s;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            padding: 12px; font-family: 'Orbitron', sans-serif; background: transparent;
+            color: var(--primary); border: 1px solid var(--primary); cursor: pointer;
+            transition: 0.3s; text-transform: uppercase; letter-spacing: 1px;
         }
+        button:hover { background: var(--primary); color: white; box-shadow: 0 0 15px var(--primary); }
 
-        button:hover {
-            background: var(--primary);
-            color: white;
-            box-shadow: 0 0 15px var(--primary);
-        }
-
-        /* --- FORMULARIOS DE OPCIONES --- */
-        .options-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            text-align: left;
-            margin-bottom: 20px;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.9rem;
-        }
-
-        .option-item label { display: block; margin-bottom: 5px; color: #aaa; }
-        select, input {
-            width: 100%;
-            background: #111;
-            border: 1px solid #444;
-            color: white;
-            padding: 5px;
-            font-family: inherit;
-        }
+        .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: left; margin-bottom: 20px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; }
+        .option-item label { display: block; margin-bottom: 4px; color: #aaa; }
+        select, input { width: 100%; background: #111; border: 1px solid #444; color: white; padding: 6px; font-family: inherit; }
 
         /* --- HUD --- */
         #hud {
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%;
-            padding: 15px 25px;
-            display: none;
-            justify-content: space-between;
-            pointer-events: none;
-            font-size: 1rem;
+            position: absolute; top: 0; left: 0; width: 100%; padding: 15px 25px;
+            display: none; justify-content: space-between; pointer-events: none; z-index: 50;
         }
-
-        #boss-ui {
-            position: absolute;
-            top: 60px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 60%;
-            display: none;
+        .stat-box { font-size: 0.9rem; background: rgba(0,0,0,0.5); padding: 5px 10px; border-left: 3px solid var(--primary); }
+        
+        #boss-container {
+            position: absolute; top: 60px; left: 50%; transform: translateX(-50%);
+            width: 70%; display: none; z-index: 50;
         }
-
-        .hp-bar-bg { width: 100%; height: 10px; background: #333; border: 1px solid #555; }
-        #boss-hp-fill { width: 100%; height: 100%; background: var(--danger); transition: width 0.2s; }
+        .boss-hp-row { margin-bottom: 8px; }
+        .hp-bar-bg { width: 100%; height: 8px; background: #222; border: 1px solid #444; margin-top: 4px; }
+        .hp-fill { width: 100%; height: 100%; background: var(--danger); transition: width 0.1s; }
     </style>
 </head>
 <body>
 
     <div id="game-container">
         <div id="hud">
-            <div id="score">SCORE: 000000</div>
-            <div id="level-tag">MODO: --</div>
-            <div id="lives">❤️❤️❤️</div>
+            <div class="stat-box">SCORE: <span id="val-score">0</span><br>BOMBS: <span id="val-bombs">3</span> [SPACE]</div>
+            <div id="level-tag" style="color: var(--warning);">READY</div>
+            <div class="stat-box">LIVES: <span id="val-lives">❤️❤️❤️</span><br>PARRY [E]: <span id="val-parry">READY</span></div>
         </div>
 
-        <div id="boss-ui">
-            <div style="font-size: 0.7rem; color: var(--danger); margin-bottom: 5px;">ADVERTENCIA: ENTIDAD HOSTIL</div>
-            <div class="hp-bar-bg"><div id="boss-hp-fill"></div></div>
-        </div>
+        <div id="boss-container"></div>
 
         <div id="menu-main" class="ui-screen active">
             <div class="menu-card">
                 <h1 id="main-title">SPACE MISSION</h1>
                 <div class="btn-group">
-                    <button onclick="showScreen('menu-play')">Jugar</button>
-                    <button onclick="showScreen('menu-controls')">Controles</button>
-                    <button onclick="showScreen('menu-options')">Opciones</button>
+                    <button onclick="showScreen('menu-play')">Iniciar Misión</button>
+                    <button onclick="showScreen('menu-controls')">Sistemas de Control</button>
+                    <button onclick="showScreen('menu-options')">Configuración</button>
                 </div>
             </div>
         </div>
@@ -161,56 +84,55 @@
             <div class="menu-card">
                 <h1>SELECCIONAR MODO</h1>
                 <div class="btn-group">
-                    <button onclick="startMission('progressive')">Juego Progressive</button>
-                    <button onclick="startMission('custom')">Juego Personalizado</button>
-                    <button onclick="showScreen('menu-main')" style="border-color: #666; color: #666;">Volver</button>
+                    <button onclick="startMission('progressive')">Juego Progresivo</button>
+                    <button onclick="startMission('solo_boss')">Solo Boss (Rush)</button>
+                    <button onclick="startMission('custom')">Personalizado</button>
+                    <button onclick="showScreen('menu-main')" style="border-color:#666; color:#666;">Volver</button>
                 </div>
             </div>
         </div>
 
         <div id="menu-controls" class="ui-screen">
             <div class="menu-card">
-                <h1>SISTEMA DE CONTROL</h1>
-                <div style="text-align: left; color: #ccc; line-height: 2; margin-bottom: 20px;">
-                    <p>• <b>WASD / FLECHAS:</b> Motores de posicionamiento</p>
-                    <p>• <b>CLIC IZQ:</b> Cañón de ráfaga continua</p>
-                    <p>• <b>CLIC DER:</b> Disparo triple de plasma</p>
+                <h1>MANUAL DE VUELO</h1>
+                <div style="text-align: left; color: #ccc; font-size:0.9rem; line-height: 1.8; margin-bottom: 20px;">
+                    <p>• <b>WASD:</b> Movimiento orbital</p>
+                    <p>• <b>CLIC IZQ:</b> Cañón Principal</p>
+                    <p>• <b>CLIC DER:</b> Disparo Especial</p>
+                    <p>• <b>ESPACIO:</b> BOMBA (Limpia pantalla / 10% daño jefe)</p>
+                    <p>• <b>TECLA E:</b> PARRY (Inmune 0.2s - Precisión crítica)</p>
                 </div>
-                <button onclick="showScreen('menu-main')">Entendido</button>
+                <button onclick="showScreen('menu-main')">Cerrar Manual</button>
             </div>
         </div>
 
         <div id="menu-options" class="ui-screen">
             <div class="menu-card">
-                <h1>CONFIGURACIÓN</h1>
+                <h1>AJUSTES TÉCNICOS</h1>
                 <div class="options-grid">
                     <div class="option-item">
-                        <label>Dificultad Base</label>
+                        <label>Resolución Área</label>
+                        <select id="opt-size">
+                            <option value="800x600">800 x 600 (Estandard)</option>
+                            <option value="1000x700">1000 x 700 (Ampliada)</option>
+                            <option value="1200x800">1200 x 800 (Máxima)</option>
+                        </select>
+                    </div>
+                    <div class="option-item">
+                        <label>Dificultad</label>
                         <select id="opt-difficulty">
                             <option value="1">Fácil</option>
                             <option value="2" selected>Normal</option>
                             <option value="3">Difícil</option>
-                            <option value="5">Muy Difícil</option>
+                            <option value="5">Pesadilla</option>
                         </select>
                     </div>
                     <div class="option-item">
-                        <label>Vidas Iniciales</label>
+                        <label>Blindaje (Vidas)</label>
                         <input type="number" id="opt-lives" value="3" min="1" max="10">
                     </div>
-                    <div class="option-item">
-                        <label>Ayudas (Power-ups)</label>
-                        <select id="opt-helpers">
-                            <option value="0">Desactivadas</option>
-                            <option value="1" selected>Estándar</option>
-                            <option value="2">Máximas</option>
-                        </select>
-                    </div>
-                    <div class="option-item">
-                        <label>Densidad Enemigos</label>
-                        <input type="range" id="opt-density" min="1" max="10" value="5">
-                    </div>
                 </div>
-                <button onclick="saveOptions()">Guardar Cambios</button>
+                <button onclick="applyOptions()">Aplicar y Guardar</button>
             </div>
         </div>
 
@@ -220,320 +142,468 @@
 <script>
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
-    canvas.width = 900;
-    canvas.height = 600;
+    
+    // --- VARIABLES DE ESTADO ---
+    let gameState = 'MENU';
+    let gameMode = 'progressive';
+    let score = 0, lives = 3, bombs = 3, frameCount = 0;
+    let parryActive = false, parryCooldown = false;
+    let currentWave = 1;
+    let config = { diff: 2, w: 800, h: 600 };
 
-    // --- CONFIGURACIÓN Y ESTADO ---
-    let gameState = 'MENU'; 
-    let gameMode = 'progressive'; // progressive o custom
-    let customSettings = { difficulty: 2, lives: 3, helpers: 1, density: 5 };
-    let progressiveLevel = 1;
+    // Listas de objetos
+    const nave = { x: 400, y: 500, vx: 0, vy: 0, accel: 0.8, fric: 0.92, inmune: false, radius: 5 };
+    let bullets = [], enemyBullets = [], enemies = [], particles = [], stars = [], bosses = [], pickUps = [];
+    let keys = {}; let mouse = { x: 0, y: 0, down: false };
 
-    let score = 0;
-    let lives = 3;
-    let screenShake = 0;
-    let frameCount = 0;
-
-    // Objetos
-    const nave = { x: 450, y: 300, vx: 0, vy: 0, accel: 0.7, fric: 0.93, inmune: false };
-    let bullets = [], enemies = [], enemyBullets = [], particles = [], stars = [], boss = null;
-    let keys = {};
-    let mouse = { x: 0, y: 0, down: false };
-
-    // --- MANEJO DE PANTALLAS ---
-    function showScreen(screenId) {
-        document.querySelectorAll('.ui-screen').forEach(s => s.classList.remove('active'));
-        document.getElementById(screenId).classList.add('active');
-    }
-
-    function saveOptions() {
-        customSettings.difficulty = parseInt(document.getElementById('opt-difficulty').value);
-        customSettings.lives = parseInt(document.getElementById('opt-lives').value);
-        customSettings.helpers = parseInt(document.getElementById('opt-helpers').value);
-        customSettings.density = parseInt(document.getElementById('opt-density').value);
+    // --- SETUP INICIAL ---
+    function applyOptions() {
+        const size = document.getElementById('opt-size').value.split('x');
+        config.w = parseInt(size[0]);
+        config.h = parseInt(size[1]);
+        config.diff = parseInt(document.getElementById('opt-difficulty').value);
+        
+        canvas.width = config.w;
+        canvas.height = config.h;
+        document.getElementById('game-container').style.width = config.w + 'px';
+        document.getElementById('game-container').style.height = config.h + 'px';
+        
         showScreen('menu-main');
     }
+    applyOptions();
 
-    // --- LÓGICA DE INICIO ---
+    function showScreen(id) {
+        document.querySelectorAll('.ui-screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+    }
+
+    // --- LÓGICA DE JUEGO ---
     function startMission(mode) {
         gameMode = mode;
         gameState = 'PLAYING';
-        score = 0;
-        progressiveLevel = 1;
-        lives = (mode === 'custom') ? customSettings.lives : 3;
+        score = 0; bombs = 3; currentWave = 1;
+        lives = (mode === 'custom') ? parseInt(document.getElementById('opt-lives').value) : 3;
         
-        // Reset objetos
-        bullets = []; enemies = []; enemyBullets = []; particles = []; boss = null;
-        nave.x = canvas.width/2; nave.y = canvas.height/2;
-
-        document.querySelectorAll('.ui-screen').forEach(s => s.classList.remove('active'));
+        bullets = []; enemyBullets = []; enemies = []; bosses = []; pickUps = [];
+        nave.x = canvas.width/2; nave.y = canvas.height - 100;
+        
         document.getElementById('hud').style.display = 'flex';
-        document.getElementById('boss-ui').style.display = 'none';
-        document.getElementById('level-tag').innerText = `MODO: ${mode.toUpperCase()}`;
+        document.getElementById('boss-container').style.display = 'none';
         updateHUD();
     }
 
-    // --- SISTEMA DE JEFES ---
-    function spawnBoss() {
-        boss = {
-            x: canvas.width / 2,
-            y: -100,
-            targetY: 120,
-            hp: 5000 * (gameMode === 'progressive' ? progressiveLevel : customSettings.difficulty),
-            maxHp: 5000 * (gameMode === 'progressive' ? progressiveLevel : customSettings.difficulty),
-            phase: 1,
+    // --- SISTEMA DE ENEMIGOS ---
+    function spawnEnemy() {
+        if(bosses.length > 0) return; // No spawnear comunes si hay jefe (opcional)
+
+        let type = 'common';
+        // Lógica de progresión de tipos según Wave
+        if(gameMode === 'progressive') {
+            if(currentWave === 2) type = Math.random() > 0.7 ? 'special' : 'common';
+            if(currentWave >= 3) {
+                const rand = Math.random();
+                if(rand > 0.8) type = 'elite';
+                else if(rand > 0.5) type = 'special';
+            }
+        } else if (gameMode === 'custom') {
+            type = ['common', 'special', 'elite'][Math.floor(Math.random()*3)];
+        }
+
+        const e = {
+            x: Math.random() * canvas.width,
+            y: -30,
+            type: type,
+            hp: type === 'elite' ? 150 : (type === 'special' ? 80 : 30),
+            vx: (Math.random() - 0.5) * 2,
+            vy: type === 'special' ? 4 : 2,
+            shield: type === 'special',
             lastShot: 0
         };
-        document.getElementById('boss-ui').style.display = 'block';
+        enemies.push(e);
     }
 
-    function updateBoss() {
-        if(!boss) return;
+    // --- SISTEMA DE JEFES ---
+    function createBoss(type, id) {
+        const b = {
+            id: id,
+            type: type, // 'static', 'moving'
+            x: id === 'B1' ? canvas.width * 0.3 : canvas.width * 0.7,
+            y: -100,
+            targetY: 150,
+            hp: 3000 * config.diff,
+            maxHp: 3000 * config.diff,
+            dir: 1,
+            lastShot: 0
+        };
+        if(type === 'static') b.x = canvas.width / 2;
+        bosses.push(b);
+        renderBossUI();
+    }
 
-        // Movimiento inicial
-        if(boss.y < boss.targetY) boss.y += 2;
-
-        // Patrón Touhou (Circular)
-        if(Date.now() - boss.lastShot > (500 / (gameMode === 'progressive' ? progressiveLevel : customSettings.difficulty))) {
-            const total = 12 + progressiveLevel * 2;
-            for(let i=0; i<total; i++) {
-                const angle = (frameCount / 20) + (i * (Math.PI * 2 / total));
-                enemyBullets.push({
-                    x: boss.x, y: boss.y,
-                    vx: Math.cos(angle) * 4, vy: Math.sin(angle) * 4,
-                    color: '#ff3366'
-                });
-            }
-            boss.lastShot = Date.now();
-        }
-
-        // Colisión con balas jugador
-        bullets.forEach((b, i) => {
-            if(Math.hypot(b.x - boss.x, b.y - boss.y) < 50) {
-                boss.hp -= (b.special ? 50 : 20);
-                bullets.splice(i, 1);
-                score += 10;
-                document.getElementById('boss-hp-fill').style.width = `${(boss.hp/boss.maxHp)*100}%`;
-            }
+    function renderBossUI() {
+        const container = document.getElementById('boss-container');
+        container.innerHTML = '';
+        bosses.forEach(b => {
+            container.innerHTML += `
+                <div class="boss-hp-row">
+                    <div style="font-size:0.6rem; color:var(--danger)">DETECCIÓN: BOSS ${b.id} [${b.type.toUpperCase()}]</div>
+                    <div class="hp-bar-bg"><div id="hp-${b.id}" class="hp-fill"></div></div>
+                </div>`;
         });
+        container.style.display = 'block';
+    }
 
-        if(boss.hp <= 0) {
-            createExplosion(boss.x, boss.y, '#fff', 50);
-            boss = null;
-            document.getElementById('boss-ui').style.display = 'none';
-            score += 5000;
-            if(gameMode === 'progressive') {
-                progressiveLevel++;
-                document.getElementById('level-tag').innerText = `MODO: PROG LVL ${progressiveLevel}`;
+    function checkWaveProgression() {
+        if(gameMode === 'solo_boss') {
+            if(bosses.length === 0) {
+                if(currentWave === 1) { createBoss('static', 'B1'); currentWave = 2; }
+                else if(currentWave === 2) { createBoss('moving', 'B2'); currentWave = 3; }
+                else if(currentWave === 3) { createBoss('static', 'B1'); createBoss('moving', 'B2'); currentWave = 4; }
+                else if(currentWave === 4) winGame();
             }
+            return;
+        }
+
+        // Modo Progresivo
+        if(score >= 5000 && currentWave === 1 && bosses.length === 0) {
+            createBoss('static', 'B1');
+            currentWave = 2;
+        } else if(score >= 15000 && currentWave === 2 && bosses.length === 0) {
+            createBoss('moving', 'B2');
+            currentWave = 3;
+        } else if(score >= 30000 && currentWave === 3 && bosses.length === 0) {
+            createBoss('static', 'B1'); createBoss('moving', 'B2');
+            currentWave = 4;
+        } else if(currentWave === 4 && bosses.length === 0 && score > 35000) {
+            winGame();
         }
     }
 
-    // --- INPUTS ---
-    window.addEventListener('keydown', e => keys[e.code] = true);
-    window.addEventListener('keyup', e => keys[e.code] = false);
-    canvas.addEventListener('mousemove', e => {
-        const rect = canvas.getBoundingClientRect();
-        mouse.x = e.clientX - rect.left;
-        mouse.y = e.clientY - rect.top;
-    });
-    canvas.addEventListener('mousedown', e => {
-        if(gameState !== 'PLAYING') return;
-        if(e.button === 0) mouse.down = true;
-        if(e.button === 2) spawnSpecialBullet();
-    });
-    canvas.addEventListener('mouseup', () => mouse.down = false);
-    canvas.addEventListener('contextmenu', e => e.preventDefault());
-
-    function spawnBullet() {
-        const angle = Math.atan2(mouse.y - nave.y, mouse.x - nave.x);
-        bullets.push({ x: nave.x, y: nave.y, vx: Math.cos(angle)*12, vy: Math.sin(angle)*12, color: '#00d4ff' });
+    // --- ACCIONES ESPECIALES ---
+    function useBomb() {
+        if(bombs <= 0 || gameState !== 'PLAYING') return;
+        bombs--;
+        screenShake = 30;
+        
+        // Limpiar balas y enemigos comunes
+        enemyBullets = [];
+        enemies.forEach(e => createExplosion(e.x, e.y, '#fff', 10));
+        enemies = [];
+        
+        // Daño a Jefes
+        bosses.forEach(b => {
+            b.hp -= b.maxHp * 0.1;
+            document.getElementById(`hp-${b.id}`).style.width = (b.hp/b.maxHp)*100 + '%';
+        });
+        
+        // Efecto visual expansivo
+        particles.push({x: nave.x, y: nave.y, vx:0, vy:0, life:1, type:'bomb_ring'});
+        updateHUD();
     }
 
-    function spawnSpecialBullet() {
-        const baseAngle = Math.atan2(mouse.y - nave.y, mouse.x - nave.x);
-        for(let i=-1; i<=1; i++) {
-            const a = baseAngle + (i * 0.2);
-            bullets.push({ x: nave.x, y: nave.y, vx: Math.cos(a)*10, vy: Math.sin(a)*10, color: '#ffcc00', special: true });
-        }
-        screenShake = 5;
+    function doParry() {
+        if(parryCooldown || gameState !== 'PLAYING') return;
+        parryActive = true;
+        parryCooldown = true;
+        document.getElementById('val-parry').innerText = "ACTIVE";
+        document.getElementById('val-parry').style.color = "var(--success)";
+        
+        setTimeout(() => { 
+            parryActive = false; 
+            document.getElementById('val-parry').innerText = "RECHARGING";
+            document.getElementById('val-parry').style.color = "var(--danger)";
+        }, 200); // Ventana de 200ms
+
+        setTimeout(() => { 
+            parryCooldown = false; 
+            document.getElementById('val-parry').innerText = "READY";
+            document.getElementById('val-parry').style.color = "var(--success)";
+        }, 2000); // Cooldown de 2 segundos
     }
 
-    function createExplosion(x, y, color, count = 15) {
-        for(let i=0; i<count; i++) {
-            particles.push({
-                x, y, vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10, 
-                life: 1.0, color: color || '#ff5500'
-            });
-        }
-    }
-
-    function updateHUD() {
-        document.getElementById('score').innerText = `SCORE: ${score.toString().padStart(6, '0')}`;
-        document.getElementById('lives').innerText = "❤️".repeat(lives);
-    }
-
-    // --- LOOP PRINCIPAL ---
+    // --- LOOP DE ACTUALIZACIÓN ---
     function update() {
         if(gameState !== 'PLAYING') return;
         frameCount++;
 
-        // Movimiento Nave
-        if(keys['KeyW'] || keys['ArrowUp']) nave.vy -= nave.accel;
-        if(keys['KeyS'] || keys['ArrowDown']) nave.vy += nave.accel;
-        if(keys['KeyA'] || keys['ArrowLeft']) nave.vx -= nave.accel;
-        if(keys['KeyD'] || keys['ArrowRight']) nave.vx += nave.accel;
+        checkWaveProgression();
 
+        // Movimiento Nave
+        if(keys['KeyW']) nave.vy -= nave.accel;
+        if(keys['KeyS']) nave.vy += nave.accel;
+        if(keys['KeyA']) nave.vx -= nave.accel;
+        if(keys['KeyD']) nave.vx += nave.accel;
+        
         nave.vx *= nave.fric; nave.vy *= nave.fric;
         nave.x += nave.vx; nave.y += nave.vy;
+        
+        // Límites
+        nave.x = Math.max(0, Math.min(canvas.width, nave.x));
+        nave.y = Math.max(0, Math.min(canvas.height, nave.y));
 
-        if(nave.x < 0) nave.x = canvas.width; else if(nave.x > canvas.width) nave.x = 0;
-        if(nave.y < 0) nave.y = canvas.height; else if(nave.y > canvas.height) nave.y = 0;
+        if(mouse.down && frameCount % 6 === 0) spawnBullet();
 
-        if(mouse.down && frameCount % 8 === 0) spawnBullet();
+        // Spawn Enemigos Dinámico
+        let spawnChance = 0.02 + (currentWave * 0.01);
+        if(Math.random() < spawnChance && bosses.length === 0) spawnEnemy();
 
-        // Spawn Enemigos
-        let spawnChance = (gameMode === 'progressive') ? (0.01 + progressiveLevel * 0.005) : (customSettings.density * 0.005);
-        if(Math.random() < spawnChance && !boss) {
-            enemies.push({ x: Math.random()*canvas.width, y: -20, vx: (Math.random()-0.5)*2, vy: 2 + Math.random()*2 });
-        }
-
-        // Jefe cada 10,000 puntos
-        if(score > 0 && score % 10000 < 50 && !boss) {
-            spawnBoss();
-        }
-
-        updateBoss();
-
-        // Balas Enemigas (Colisión con Jugador)
-        enemyBullets.forEach((eb, i) => {
-            eb.x += eb.vx; eb.y += eb.vy;
-            if(Math.hypot(eb.x - nave.x, eb.y - nave.y) < 10 && !nave.inmune) {
-                playerHit();
-                enemyBullets.splice(i, 1);
-            }
-            if(eb.y > canvas.height || eb.y < -100 || eb.x < -100 || eb.x > canvas.width+100) enemyBullets.splice(i, 1);
-        });
-
-        // Enemigos Normales
+        // Procesar Enemigos
         enemies.forEach((e, i) => {
             e.x += e.vx; e.y += e.vy;
-            if(Math.hypot(e.x - nave.x, e.y - nave.y) < 25 && !nave.inmune) {
+            
+            // Inteligencia Elite (Dispara al jugador)
+            if(e.type === 'elite' && frameCount % 60 === 0) {
+                const angle = Math.atan2(nave.y - e.y, nave.x - e.x);
+                enemyBullets.push({x: e.x, y: e.y, vx: Math.cos(angle)*5, vy: Math.sin(angle)*5, color: '#00ffcc'});
+            }
+
+            if(Math.hypot(e.x - nave.x, e.y - nave.y) < 20) {
                 playerHit();
                 enemies.splice(i, 1);
             }
-            bullets.forEach((b, bi) => {
-                if(Math.hypot(e.x - b.x, e.y - b.y) < 20) {
-                    createExplosion(e.x, e.y);
-                    enemies.splice(i, 1);
-                    bullets.splice(bi, 1);
-                    score += 100;
-                    updateHUD();
-                }
-            });
             if(e.y > canvas.height) enemies.splice(i, 1);
         });
 
-        // Limpiar Balas
-        bullets.forEach((b, i) => {
-            b.x += b.vx; b.y += b.vy;
-            if(b.y < 0) bullets.splice(i, 1);
+        // Procesar Jefes
+        bosses.forEach((b, i) => {
+            if(b.y < b.targetY) b.y += 2;
+            if(b.type === 'moving') {
+                b.x += b.dir * 3;
+                if(b.x > canvas.width - 50 || b.x < 50) b.dir *= -1;
+            }
+
+            // Patrón Disparo (Basado en dificultad)
+            if(Date.now() - b.lastShot > (600 / config.diff)) {
+                const total = 10 + (config.diff * 2);
+                for(let j=0; j<total; j++) {
+                    const a = (frameCount/15) + (j * (Math.PI*2/total));
+                    enemyBullets.push({x: b.x, y: b.y, vx: Math.cos(a)*4, vy: Math.sin(a)*4, color: '#ff3366'});
+                }
+                b.lastShot = Date.now();
+            }
+
+            if(b.hp <= 0) {
+                createExplosion(b.x, b.y, '#fff', 40);
+                if(Math.random() > 0.5) spawnPickUp(b.x, b.y, 'bomb');
+                bosses.splice(i, 1);
+                score += 5000;
+                renderBossUI();
+                if(bosses.length === 0) document.getElementById('boss-container').style.display = 'none';
+            }
         });
 
-        particles.forEach((p, i) => {
-            p.x += p.vx; p.y += p.vy; p.life -= 0.02;
-            if(p.life <= 0) particles.splice(i, 1);
+        // Colisiones de Balas Jugador -> Enemigos/Bosses
+        bullets.forEach((bul, bi) => {
+            bul.x += bul.vx; bul.y += bul.vy;
+            
+            enemies.forEach((e, ei) => {
+                if(Math.hypot(bul.x - e.x, bul.y - e.y) < 20) {
+                    if(e.shield) {
+                        e.shield = false; e.vy *= 1.5; // Pierde escudo y se acelera
+                    } else {
+                        e.hp -= (bul.special ? 40 : 20);
+                        if(e.hp <= 0) {
+                            createExplosion(e.x, e.y);
+                            if(Math.random() > 0.95) spawnPickUp(e.x, e.y, 'bomb');
+                            enemies.splice(ei, 1);
+                            score += 150;
+                        }
+                    }
+                    bullets.splice(bi, 1);
+                }
+            });
+
+            bosses.forEach(b => {
+                if(Math.hypot(bul.x - b.x, bul.y - b.y) < 45) {
+                    b.hp -= (bul.special ? 60 : 25);
+                    bullets.splice(bi, 1);
+                    document.getElementById(`hp-${b.id}`).style.width = (b.hp/b.maxHp)*100 + '%';
+                }
+            });
+
+            if(bul.y < 0 || bul.x < 0 || bul.x > canvas.width) bullets.splice(bi, 1);
         });
+
+        // Balas Enemigas -> Jugador
+        enemyBullets.forEach((eb, ei) => {
+            eb.x += eb.vx; eb.y += eb.vy;
+            if(Math.hypot(eb.x - nave.x, eb.y - nave.y) < 10) {
+                if(parryActive) {
+                    createExplosion(eb.x, eb.y, '#00ffcc', 5);
+                    score += 50;
+                } else {
+                    playerHit();
+                }
+                enemyBullets.splice(ei, 1);
+            }
+            if(eb.y > canvas.height) enemyBullets.splice(ei, 1);
+        });
+
+        // Pickups
+        pickUps.forEach((p, i) => {
+            p.y += 2;
+            if(Math.hypot(p.x - nave.x, p.y - nave.y) < 25) {
+                if(p.type === 'bomb') bombs++;
+                updateHUD();
+                pickUps.splice(i, 1);
+            }
+        });
+
+        updateHUD();
+    }
+
+    // --- FUNCIONES AUXILIARES ---
+    function spawnBullet() {
+        const angle = Math.atan2(mouse.y - nave.y, mouse.x - nave.x);
+        bullets.push({ x: nave.x, y: nave.y, vx: Math.cos(angle)*14, vy: Math.sin(angle)*14, color: '#1e90ff' });
+    }
+
+    function spawnPickUp(x, y, type) {
+        pickUps.push({x, y, type});
     }
 
     function playerHit() {
+        if(nave.inmune) return;
         lives--;
-        screenShake = 15;
+        screenShake = 20;
         nave.inmune = true;
-        createExplosion(nave.x, nave.y, '#ff0000', 30);
+        createExplosion(nave.x, nave.y, '#ff0000', 25);
         setTimeout(() => nave.inmune = false, 2000);
-        updateHUD();
-        if(lives <= 0) {
-            gameState = 'MENU';
-            document.getElementById('hud').style.display = 'none';
-            document.getElementById('boss-ui').style.display = 'none';
-            document.getElementById('main-title').innerText = "MISIÓN FALLIDA";
-            showScreen('menu-main');
+        if(lives <= 0) gameOver();
+    }
+
+    function updateHUD() {
+        document.getElementById('val-score').innerText = score;
+        document.getElementById('val-bombs').innerText = bombs;
+        document.getElementById('val-lives').innerText = "❤️".repeat(lives);
+        document.getElementById('level-tag').innerText = `WAVE: ${currentWave > 3 ? 'FINAL' : currentWave}`;
+    }
+
+    function gameOver() {
+        gameState = 'MENU';
+        document.getElementById('main-title').innerText = "MISIÓN FALLIDA";
+        showScreen('menu-main');
+    }
+
+    function winGame() {
+        gameState = 'MENU';
+        document.getElementById('main-title').innerText = "¡SISTEMA LIMPIO! VICTORIA";
+        showScreen('menu-main');
+    }
+
+    function createExplosion(x, y, color, count = 12) {
+        for(let i=0; i<count; i++) {
+            particles.push({
+                x, y, vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8, 
+                life: 1.0, color: color || '#ff5500', type: 'spark'
+            });
         }
     }
 
+    // --- RENDERIZADO ---
     function draw() {
         ctx.save();
-        if(screenShake > 0) {
-            ctx.translate((Math.random()-0.5)*screenShake, (Math.random()-0.5)*screenShake);
-            screenShake *= 0.9;
-        }
+        if(screenShake > 0) { ctx.translate((Math.random()-0.5)*screenShake, (Math.random()-0.5)*screenShake); screenShake *= 0.9; }
+        
+        ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        ctx.fillStyle = '#000';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        // Estrellas
+        // Stars Parallax
         stars.forEach(s => {
             ctx.fillStyle = `rgba(255, 255, 255, ${s.z})`;
             ctx.fillRect(s.x, s.y, s.size, s.size);
-            s.y += s.z * 2;
-            if(s.y > canvas.height) s.y = 0;
+            s.y += s.z * 3; if(s.y > canvas.height) s.y = 0;
         });
 
-        // Boss
-        if(boss) {
-            ctx.fillStyle = '#ff3366';
-            ctx.shadowBlur = 30; ctx.shadowColor = '#ff3366';
-            ctx.beginPath();
-            ctx.arc(boss.x, boss.y, 40, 0, Math.PI*2);
-            ctx.fill();
+        // Pickups
+        pickUps.forEach(p => {
+            ctx.fillStyle = varColor('--warning');
+            ctx.beginPath(); ctx.arc(p.x, p.y, 8, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#000'; ctx.fillText('B', p.x-4, p.y+4);
+        });
+
+        // Bosses
+        bosses.forEach(b => {
+            ctx.shadowBlur = 25; ctx.shadowColor = varColor('--danger');
+            ctx.fillStyle = varColor('--danger');
+            ctx.beginPath(); ctx.arc(b.x, b.y, 45, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
             ctx.shadowBlur = 0;
-        }
+        });
 
-        // Enemigos y Balas
+        // Enemigos
         enemies.forEach(e => {
-            ctx.fillStyle = '#ff3366';
-            ctx.fillRect(e.x-10, e.y-10, 20, 20);
+            ctx.fillStyle = e.type === 'elite' ? varColor('--success') : (e.shield ? varColor('--warning') : varColor('--danger'));
+            if(e.type === 'elite') {
+                ctx.beginPath(); ctx.moveTo(e.x, e.y+15); ctx.lineTo(e.x-12, e.y-10); ctx.lineTo(e.x+12, e.y-10); ctx.closePath(); ctx.fill();
+            } else {
+                ctx.fillRect(e.x-10, e.y-10, 20, 20);
+                if(e.shield) { ctx.strokeStyle = '#fff'; ctx.strokeRect(e.x-12, e.y-12, 24, 24); }
+            }
         });
 
+        // Balas
         enemyBullets.forEach(eb => {
-            ctx.fillStyle = eb.color;
-            ctx.beginPath(); ctx.arc(eb.x, eb.y, 4, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = eb.color; ctx.beginPath(); ctx.arc(eb.x, eb.y, 4, 0, Math.PI*2); ctx.fill();
         });
-
         bullets.forEach(b => {
-            ctx.fillStyle = b.color;
-            ctx.fillRect(b.x-2, b.y-2, 4, 10);
+            ctx.fillStyle = b.color; ctx.fillRect(b.x-2, b.y-8, 4, 16);
         });
 
-        particles.forEach(p => {
-            ctx.globalAlpha = p.life;
-            ctx.fillStyle = p.color;
-            ctx.fillRect(p.x, p.y, 3, 3);
+        // Partículas y Efecto Bomba
+        particles.forEach((p, i) => {
+            if(p.type === 'bomb_ring') {
+                ctx.strokeStyle = `rgba(255, 255, 255, ${p.life})`;
+                ctx.lineWidth = 5;
+                ctx.beginPath(); ctx.arc(p.x, p.y, (1 - p.life) * 1000, 0, Math.PI*2); ctx.stroke();
+                p.life -= 0.02;
+            } else {
+                ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 2, 2);
+                p.life -= 0.02;
+            }
+            if(p.life <= 0) particles.splice(i, 1);
         });
         ctx.globalAlpha = 1;
 
-        // Nave
-        if(gameState === 'PLAYING' && (!nave.inmune || Math.floor(Date.now()/100)%2==0)) {
+        // Nave y Efecto Parry
+        if(gameState === 'PLAYING' && (!nave.inmune || frameCount % 10 < 5)) {
+            if(parryActive) {
+                ctx.shadowBlur = 20; ctx.shadowColor = '#00ffcc';
+                ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 3;
+                ctx.beginPath(); ctx.arc(nave.x, nave.y, 30, 0, Math.PI*2); ctx.stroke();
+            }
             const angle = Math.atan2(mouse.y - nave.y, mouse.x - nave.x);
             ctx.save();
-            ctx.translate(nave.x, nave.y);
-            ctx.rotate(angle);
-            ctx.fillStyle = '#fff';
-            ctx.shadowBlur = 15; ctx.shadowColor = '#1e90ff';
-            ctx.beginPath();
-            ctx.moveTo(15, 0); ctx.lineTo(-15, -10); ctx.lineTo(-15, 10);
-            ctx.closePath(); ctx.fill();
+            ctx.translate(nave.x, nave.y); ctx.rotate(angle);
+            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(15,0); ctx.lineTo(-10, -10); ctx.lineTo(-10, 10); ctx.closePath(); ctx.fill();
             ctx.restore();
+            ctx.shadowBlur = 0;
         }
 
         ctx.restore();
-        requestAnimationFrame(() => { update(); draw(); });
+        requestAnimationFrame(draw);
+        update();
     }
 
-    // Inicializar estrellas
-    for(let i=0; i<100; i++) stars.push({x: Math.random()*canvas.width, y: Math.random()*canvas.height, z: Math.random(), size: Math.random()*2});
-    
+    function varColor(name) { return getComputedStyle(document.documentElement).getPropertyValue(name); }
+
+    // Inicialización Estrellas
+    for(let i=0; i<100; i++) stars.push({x: Math.random()*1200, y: Math.random()*800, z: Math.random(), size: Math.random()*2});
+
+    // Inputs
+    window.addEventListener('keydown', e => { 
+        keys[e.code] = true; 
+        if(e.code === 'Space') useBomb();
+        if(e.code === 'KeyE') doParry();
+    });
+    window.addEventListener('keyup', e => keys[e.code] = false);
+    canvas.addEventListener('mousemove', e => {
+        const rect = canvas.getBoundingClientRect();
+        mouse.x = e.clientX - rect.left; mouse.y = e.clientY - rect.top;
+    });
+    canvas.addEventListener('mousedown', e => { if(e.button === 0) mouse.down = true; });
+    canvas.addEventListener('mouseup', () => mouse.down = false);
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+
     draw();
 </script>
 </body>
