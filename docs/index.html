@@ -19,15 +19,23 @@
         /* --- UI SCREENS --- */
         .ui-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; flex-direction: column; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.9); z-index: 100; text-align: center; }
         .ui-screen.active { display: flex; }
-        .menu-card { padding: 30px; border: 1px solid var(--primary); background: rgba(10, 10, 10, 0.95); border-radius: 10px; min-width: 400px; max-height: 90vh; overflow-y: auto; }
+        .menu-card { padding: 30px; border: 1px solid var(--primary); background: rgba(10, 10, 10, 0.95); border-radius: 10px; min-width: 400px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
         .menu-card::-webkit-scrollbar { width: 5px; } .menu-card::-webkit-scrollbar-thumb { background: var(--primary); }
 
         h1 { font-size: 2rem; color: var(--primary); text-shadow: 0 0 15px rgba(30, 144, 255, 0.5); margin-bottom: 20px; text-transform: uppercase; }
+        .title-danger { color: var(--danger); text-shadow: 0 0 15px rgba(255, 51, 102, 0.5); border-color: var(--danger); }
+        .title-success { color: var(--success); text-shadow: 0 0 15px rgba(0, 255, 204, 0.5); border-color: var(--success); }
+
         .btn-group { display: flex; flex-direction: column; gap: 10px; }
         button { padding: 12px; font-family: 'Orbitron', sans-serif; background: rgba(0,0,0,0.5); color: var(--primary); border: 1px solid var(--primary); cursor: pointer; transition: 0.2s; text-transform: uppercase; font-weight: bold; }
         button:hover { background: var(--primary); color: white; box-shadow: 0 0 15px var(--primary); }
+        .btn-danger { color: var(--danger); border-color: var(--danger); }
+        .btn-danger:hover { background: var(--danger); box-shadow: 0 0 15px var(--danger); }
+        .btn-success { color: var(--success); border-color: var(--success); }
+        .btn-success:hover { background: var(--success); box-shadow: 0 0 15px var(--success); }
 
         .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: left; margin-bottom: 20px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; }
+        @media (max-width: 600px) { .options-grid { grid-template-columns: 1fr; } }
         .option-item label { display: block; margin-bottom: 4px; color: #aaa; }
         select, input { width: 100%; background: #111; border: 1px solid #444; color: white; padding: 6px; font-family: inherit; }
 
@@ -151,9 +159,10 @@
                     <div class="option-item">
                         <label>Resolución Área</label>
                         <select id="opt-size">
-                            <option value="800x600">800 x 600 (Estandard)</option>
-                            <option value="1000x700">1000 x 700 (Ampliada)</option>
-                            <option value="1200x800">1200 x 800 (Máxima)</option>
+                            <option value="auto">Auto / Pantalla Completa (Móvil)</option>
+                            <option value="800x600">800 x 600 (PC Estandard)</option>
+                            <option value="1000x700">1000 x 700 (PC Ampliada)</option>
+                            <option value="1200x800">1200 x 800 (PC Máxima)</option>
                         </select>
                     </div>
                     <div class="option-item">
@@ -179,7 +188,29 @@
                 <div class="btn-group">
                     <button onclick="togglePause()">Reanudar</button>
                     <button onclick="startMission(gameMode)" style="border-color:var(--warning); color:var(--warning);">Reiniciar Misión</button>
-                    <button onclick="exitToMenu()" style="border-color:var(--danger); color:var(--danger);">Abortar y Salir</button>
+                    <button onclick="exitToMenu()" class="btn-danger">Abortar y Salir</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="menu-continue" class="ui-screen">
+            <div class="menu-card">
+                <h1 class="title-danger">MISIÓN FALLIDA</h1>
+                <p style="margin-bottom: 20px;">Señal vital perdida. ¿Deseas usar un intento de recuperación?</p>
+                <div class="btn-group">
+                    <button onclick="acceptContinue()" class="btn-success">SÍ, CONTINUAR (RESTABLECER VIDAS)</button>
+                    <button onclick="exitToMenu()" class="btn-danger">NO, REGRESAR AL MENÚ</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="menu-win" class="ui-screen">
+            <div class="menu-card">
+                <h1 class="title-success">¡ENHORABUENA!</h1>
+                <p style="margin-bottom: 20px;">Has purgado el sistema y destruido a tu copia. Misión Cumplida.</p>
+                <div class="btn-group">
+                    <button onclick="exitToMenu()">Volver al Menú Principal</button>
+                    <button onclick="showScreen('menu-play')" style="border-color:var(--success); color:var(--success);">Jugar Otra Vez</button>
                 </div>
             </div>
         </div>
@@ -192,13 +223,13 @@
     const ctx = canvas.getContext('2d');
     
     // --- ESTADO DEL JUEGO ---
-    let gameState = 'MENU'; // MENU, PLAYING, PAUSED
+    let gameState = 'MENU'; // MENU, PLAYING, PAUSED, CONTINUE, WIN
     let gameMode = 'progressive';
     let score = 0, lives = 3, bombs = 3, frameCount = 0;
     let parryActive = false, parryCooldown = false;
     let currentWave = 1, wavePhase = 1; 
     let screenShake = 0; 
-    let config = { w: 800, h: 600 };
+    let config = { w: 800, h: 600, diff: 2 };
     let customSelection = [];
 
     // --- OBJETOS ---
@@ -212,9 +243,18 @@
     
     // UI y Config inicial
     function applyOptions() {
-        const size = document.getElementById('opt-size').value.split('x');
-        config.w = parseInt(size[0]); config.h = parseInt(size[1]);
-        canvas.width = config.w; canvas.height = config.h;
+        const sizeVal = document.getElementById('opt-size').value;
+        if (sizeVal === 'auto') {
+            config.w = window.innerWidth;
+            config.h = window.innerHeight;
+        } else {
+            const size = sizeVal.split('x');
+            config.w = parseInt(size[0]); 
+            config.h = parseInt(size[1]);
+        }
+        
+        canvas.width = config.w; 
+        canvas.height = config.h;
         document.getElementById('game-container').style.width = config.w + 'px';
         document.getElementById('game-container').style.height = config.h + 'px';
         
@@ -222,8 +262,22 @@
         if(touchOpt === 'force') isMobile = true;
         else if (touchOpt === 'hide') isMobile = false;
 
+        // Reubicar nave al cambiar pantalla
+        nave.x = canvas.width / 2;
+        nave.y = canvas.height - 100;
+
         showScreen('menu-main');
     }
+
+    // Auto-resize para la opción 'auto'
+    window.addEventListener('resize', () => {
+        if(document.getElementById('opt-size').value === 'auto') {
+            config.w = window.innerWidth; config.h = window.innerHeight;
+            canvas.width = config.w; canvas.height = config.h;
+            document.getElementById('game-container').style.width = config.w + 'px';
+            document.getElementById('game-container').style.height = config.h + 'px';
+        }
+    });
 
     function showScreen(id) {
         document.querySelectorAll('.ui-screen').forEach(s => s.classList.remove('active'));
@@ -297,7 +351,7 @@
     // --- PROCESAMIENTO DE INPUT ---
     let startBtnPressed = false;
     function pollInput() {
-        if(gameState === 'MENU') return;
+        if(gameState === 'MENU' || gameState === 'CONTINUE' || gameState === 'WIN') return;
 
         // Reset teclado
         input.moveX = 0; input.moveY = 0;
@@ -404,10 +458,10 @@
         let b = {
             id: id, type: type, x: id === 'B1' ? canvas.width*0.3 : canvas.width*0.7, y: -100, targetY: 150,
             hp: 4000, maxHp: 4000, dir: 1, lastShot: 0,
-            parryCooldown: false, parryActive: false // Para Doppel
+            parryCooldown: false, parryActive: false, bombs: 2 // Para Doppel
         };
         if(type === 'static') b.x = canvas.width / 2;
-        if(type === 'doppel') { b.x = canvas.width / 2; b.targetY = 100; b.bombs = 1; }
+        if(type === 'doppel') { b.x = canvas.width / 2; b.targetY = 100; b.maxHp = 6000; b.hp = 6000; }
         bosses.push(b);
         renderBossUI();
     }
@@ -421,9 +475,14 @@
         container.style.display = bosses.length ? 'block' : 'none';
     }
 
-    // --- LÓGICA DE PROGRESIÓN ---
+    // --- LÓGICA DE PROGRESIÓN Y CONTINUAR ---
     function checkProgression() {
-        if(gameMode === 'custom') return;
+        if(gameMode === 'custom') {
+            // Si en custom mataste al Doppel, ganas.
+            if(bosses.length === 0 && customSelection.includes('b4') && currentWave > 1) { winGame(); }
+            if(bosses.length === 0 && currentWave === 1) currentWave++; // Flag para saber que ya salieron
+            return;
+        }
 
         if(gameMode === 'solo_boss' && bosses.length === 0) {
             if(currentWave === 1) { createBoss('static', 'B1'); currentWave++; }
@@ -441,6 +500,35 @@
             if(score > 45000 && wavePhase === 4 && bosses.length === 0) { currentWave = 4; createBoss('doppel', 'DOPPEL'); wavePhase++; }
             if(wavePhase === 5 && bosses.length === 0) winGame();
         }
+    }
+
+    function promptContinue() {
+        gameState = 'CONTINUE';
+        document.getElementById('hud').style.display = 'none';
+        document.getElementById('mobile-ui').style.display = 'none';
+        showScreen('menu-continue');
+    }
+
+    function acceptContinue() {
+        lives = 3; // Restaurar vidas
+        gameState = 'PLAYING';
+        showScreen('none');
+        document.getElementById('hud').style.display = 'flex';
+        if(isMobile) document.getElementById('mobile-ui').style.display = 'block';
+        
+        // Limpiar pantalla de daño residual
+        enemyBullets = [];
+        nave.inmune = true;
+        setTimeout(() => nave.inmune = false, 3000); // 3 segundos de inmunidad al revivir
+        
+        updateHUD();
+    }
+
+    function winGame() {
+        gameState = 'WIN';
+        document.getElementById('hud').style.display = 'none';
+        document.getElementById('mobile-ui').style.display = 'none';
+        showScreen('menu-win');
     }
 
     // --- ACCIONES JUGADOR ---
@@ -463,7 +551,7 @@
             bombs--; input.bomb = false;
         }
         screenShake = 40;
-        particles.push({x: origin.x, y: origin.y, vx:0, vy:0, life:1, type:'bomb_ring', color: isPlayer ? '#fff' : '#ff3366'});
+        particles.push({x: origin.x, y: origin.y, vx:0, vy:0, life:1, type:'bomb_ring', color: isPlayer ? '#fff' : '#ff0044'});
         
         if(isPlayer) {
             enemyBullets = [];
@@ -484,20 +572,13 @@
         createExplosion(nave.x, nave.y, '#ff0000', heavy ? 40 : 25);
         updateHUD();
         setTimeout(() => nave.inmune = false, 2000);
-        if(lives <= 0) exitToMenu(); // Usamos exit para reutilizar lógica de fin
+        
+        if(lives <= 0) promptContinue();
     }
 
     function updateBossHP(b) {
         const hpBar = document.getElementById(`hp-${b.id}`);
         if(hpBar) hpBar.style.width = Math.max(0, (b.hp/b.maxHp)*100) + '%';
-    }
-
-    function winGame() {
-        gameState = 'MENU';
-        document.getElementById('hud').style.display = 'none';
-        document.getElementById('mobile-ui').style.display = 'none';
-        document.getElementById('main-title').innerText = "¡SISTEMA LIMPIO! VICTORIA";
-        showScreen('menu-main');
     }
 
     function createExplosion(x, y, color, count = 12) {
@@ -551,49 +632,69 @@
             if(e.y > canvas.height) enemies.splice(i, 1);
         });
 
-        // Lógica Jefes
+        // Lógica Jefes y Patrones
         bosses.forEach((b, i) => {
             if(b.y < b.targetY) b.y += 2;
             
-            if(b.type === 'moving') {
-                b.x += b.dir * 4;
+            if(b.type === 'moving' || b.id === 'B2') {
+                b.x += b.dir * 3;
                 if(b.x > canvas.width - 50 || b.x < 50) b.dir *= -1;
             } else if (b.type === 'doppel') {
-                // IA Doppelganger
-                if(b.x < nave.x - 30) b.x += 3; else if(b.x > nave.x + 30) b.x -= 3;
+                // IA Doppelganger (Agresiva, te persigue)
+                let targetX = nave.x + Math.sin(frameCount/30) * 150; // Orbita tu X
+                let targetY = nave.y - 150 + Math.cos(frameCount/20) * 50; // Intenta estar sobre ti
+                targetX = Math.max(50, Math.min(canvas.width-50, targetX));
+                targetY = Math.max(50, Math.min(canvas.height-150, targetY));
+                
+                b.x += (targetX - b.x) * 0.04;
+                b.y += (targetY - b.y) * 0.04;
                 
                 // Parry automático
                 let danger = bullets.find(bul => Math.hypot(bul.x - b.x, bul.y - b.y) < 70);
-                if(danger && !b.parryCooldown) {
+                if(danger && !b.parryCooldown && Math.random() > 0.5) {
                     b.parryActive = true; b.parryCooldown = true;
                     setTimeout(()=>b.parryActive=false, 300); setTimeout(()=>b.parryCooldown=false, 2500);
                 }
 
-                // Disparo (Triple o Simple)
-                if(Date.now() - b.lastShot > 400) {
+                // Disparo (Triple o Ráfaga)
+                if(Date.now() - b.lastShot > 150) {
                     const ang = Math.atan2(nave.y - b.y, nave.x - b.x);
-                    if(Math.random() > 0.5) { // Triple
-                        for(let j=-1; j<=1; j++) enemyBullets.push({x: b.x, y: b.y, vx: Math.cos(ang+(j*0.2))*10, vy: Math.sin(ang+(j*0.2))*10, color: '#ffcc00'});
-                    } else {
-                        enemyBullets.push({x: b.x, y: b.y, vx: Math.cos(ang)*12, vy: Math.sin(ang)*12, color: '#ff3366'});
+                    enemyBullets.push({x: b.x, y: b.y, vx: Math.cos(ang)*14, vy: Math.sin(ang)*14, color: '#ff0044'}); // Ráfaga continua
+                    
+                    if(frameCount % 60 === 0) { // Disparo Triple expansivo
+                        for(let j=-2; j<=2; j++) enemyBullets.push({x: b.x, y: b.y, vx: Math.cos(ang+(j*0.2))*10, vy: Math.sin(ang+(j*0.2))*10, color: '#ffcc00'});
                     }
                     b.lastShot = Date.now();
                 }
 
-                // Bomba si tiene poca vida o jugador cerca
-                if(b.bombs > 0 && (b.hp < 1500 || Math.hypot(b.x-nave.x, b.y-nave.y) < 150)) {
+                // Bomba IA
+                if(b.bombs > 0 && (b.hp < b.maxHp*0.3 || Math.hypot(b.x-nave.x, b.y-nave.y) < 100)) {
                     triggerBomb(false, b); b.bombs--;
                 }
             }
 
-            // Disparo normal jefes estaticos/moviles
-            if(b.type !== 'doppel' && Date.now() - b.lastShot > (700 / config.diff)) {
-                const total = 10 + (config.diff * 2);
-                for(let j=0; j<total; j++) {
-                    const a = (frameCount/15) + (j * (Math.PI*2/total));
-                    enemyBullets.push({x: b.x, y: b.y, vx: Math.cos(a)*5, vy: Math.sin(a)*5, color: '#ff3366'});
+            // Disparos Patrón Touhou (Jefes 1 y 2)
+            if(b.type !== 'doppel') {
+                let fireRate = b.type === 'static' ? 300 : 400; // Más rápido para el estático
+                if(Date.now() - b.lastShot > fireRate) {
+                    let total = 8 + (config.diff * 2);
+                    
+                    if (b.type === 'static' || b.id === 'B1') {
+                        // Patrón Espiral
+                        for(let j=0; j<total; j++) {
+                            const a = (frameCount/15) + (j * (Math.PI*2/total));
+                            enemyBullets.push({x: b.x, y: b.y, vx: Math.cos(a)*4, vy: Math.sin(a)*4, color: '#ff3366'});
+                        }
+                    } else if (b.type === 'moving' || b.id === 'B2') {
+                        // Patrón Olas / Abanico
+                        let baseDir = Math.PI/2 + Math.sin(frameCount/20) * 0.8; 
+                        for(let j=-2; j<=2; j++) {
+                            const a = baseDir + (j * 0.2);
+                            enemyBullets.push({x: b.x, y: b.y, vx: Math.cos(a)*5.5, vy: Math.sin(a)*5.5, color: '#ffcc00'});
+                        }
+                    }
+                    b.lastShot = Date.now();
                 }
-                b.lastShot = Date.now();
             }
 
             if(b.hp <= 0) {
@@ -621,7 +722,7 @@
             });
 
             bosses.forEach(b => {
-                if(!hit && Math.hypot(bul.x - b.x, bul.y - b.y) < 45) {
+                if(!hit && Math.hypot(bul.x - b.x, bul.y - b.y) < (b.type === 'doppel' ? 30 : 45)) {
                     if(b.type === 'doppel' && b.parryActive) { createExplosion(bul.x, bul.y, '#00ffcc', 5); hit = true; }
                     else {
                         hit = true; b.hp -= bul.dmg; updateBossHP(b);
@@ -660,18 +761,18 @@
         
         ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Estrellas
+        // Estrellas (Fondo)
         stars.forEach(s => {
             ctx.fillStyle = `rgba(255, 255, 255, ${s.z})`; ctx.fillRect(s.x, s.y, s.size, s.size);
             if(gameState === 'PLAYING') s.y += s.z * 4; 
             if(s.y > canvas.height) s.y = 0;
         });
 
-        if(gameState === 'PLAYING' || gameState === 'PAUSED') {
+        if(gameState === 'PLAYING' || gameState === 'PAUSED' || gameState === 'CONTINUE' || gameState === 'WIN') {
             // Pickups
             pickUps.forEach(p => { ctx.fillStyle = '#ffcc00'; ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = '#000'; ctx.fillText('B', p.x-4, p.y+4); });
 
-            // Enemigos
+            // Enemigos Comunes
             enemies.forEach(e => {
                 ctx.fillStyle = e.type === 'elite' ? '#00ffcc' : (e.shield ? '#ffcc00' : '#ff3366');
                 if(e.type === 'elite') { ctx.beginPath(); ctx.moveTo(e.x, e.y+15); ctx.lineTo(e.x-15, e.y-10); ctx.lineTo(e.x+15, e.y-10); ctx.fill(); } 
@@ -680,12 +781,25 @@
 
             // Jefes
             bosses.forEach(b => {
-                ctx.fillStyle = b.type === 'doppel' ? '#aa00ff' : '#ff3366';
-                ctx.beginPath(); ctx.arc(b.x, b.y, 45, 0, Math.PI*2); ctx.fill();
-                if(b.parryActive) { ctx.strokeStyle='#00ffcc'; ctx.lineWidth=3; ctx.stroke(); }
+                if(b.type === 'doppel') {
+                    // Dibujar al Doppel como una nave enemiga (Triángulo Rojo Oscuro)
+                    const angle = Math.atan2(nave.y - b.y, nave.x - b.x); // Apunta al jugador
+                    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(angle);
+                    if(b.parryActive) { ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, 35, 0, Math.PI*2); ctx.stroke(); }
+                    
+                    ctx.fillStyle = '#ff0044'; // Color del Doppel
+                    ctx.shadowBlur = 15; ctx.shadowColor = '#ff0044';
+                    ctx.beginPath(); ctx.moveTo(20,0); ctx.lineTo(-15, -15); ctx.lineTo(-15, 15); ctx.fill();
+                    ctx.restore();
+                } else {
+                    ctx.shadowBlur = 20; ctx.shadowColor = '#ff3366';
+                    ctx.fillStyle = '#ff3366';
+                    ctx.beginPath(); ctx.arc(b.x, b.y, 45, 0, Math.PI*2); ctx.fill();
+                    ctx.shadowBlur = 0;
+                }
             });
 
-            // Balas
+            // Balas Enemigas y Jugador
             enemyBullets.forEach(eb => { ctx.fillStyle = eb.color; ctx.beginPath(); ctx.arc(eb.x, eb.y, 5, 0, Math.PI*2); ctx.fill(); });
             bullets.forEach(b => { ctx.fillStyle = b.color; ctx.fillRect(b.x-2, b.y-10, 4, 20); });
 
@@ -694,11 +808,13 @@
                 if(parryActive) { ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(nave.x, nave.y, 35, 0, Math.PI*2); ctx.stroke(); }
                 const angle = Math.atan2(input.aimY - nave.y, input.aimX - nave.x);
                 ctx.save(); ctx.translate(nave.x, nave.y); ctx.rotate(angle);
+                
+                ctx.shadowBlur = 15; ctx.shadowColor = '#1e90ff';
                 ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(20,0); ctx.lineTo(-15, -15); ctx.lineTo(-15, 15); ctx.fill();
                 ctx.restore();
             }
 
-            // Mira (Crosshair)
+            // Mira (Crosshair) para Mando/Ratón
             if(!isMobile || usingGamepad) {
                 ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)'; ctx.lineWidth = 2;
                 ctx.beginPath(); ctx.arc(input.aimX, input.aimY, 10, 0, Math.PI*2); ctx.moveTo(input.aimX-15, input.aimY); ctx.lineTo(input.aimX+15, input.aimY); ctx.moveTo(input.aimX, input.aimY-15); ctx.lineTo(input.aimX, input.aimY+15); ctx.stroke();
@@ -718,11 +834,11 @@
         requestAnimationFrame(draw);
     }
 
-    // Inicializar Estrellas (Cubre resolución máxima de 2000px para que no queden vacíos)
-    for(let i=0; i<150; i++) stars.push({x: Math.random()*2000, y: Math.random()*2000, z: Math.random(), size: Math.random()*2});
+    // Inicializar Estrellas (Cubre resolución máxima para que no queden vacíos)
+    for(let i=0; i<150; i++) stars.push({x: Math.random()*3000, y: Math.random()*3000, z: Math.random(), size: Math.random()*2});
 
-    applyOptions();
-    draw();
+    applyOptions(); // Inicia la config
+    draw(); // Inicia el render loop
 </script>
 </body>
 </html>
