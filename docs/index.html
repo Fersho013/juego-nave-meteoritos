@@ -39,7 +39,6 @@
         .option-item label { display: block; margin-bottom: 4px; color: #aaa; }
         select, input { width: 100%; background: #111; border: 1px solid #444; color: white; padding: 6px; font-family: inherit; }
 
-        /* --- CHECKBOX LIST PARA CUSTOM --- */
         .custom-list { text-align: left; font-size: 0.9rem; margin-bottom: 15px; border: 1px solid #333; padding: 10px; height: 150px; overflow-y: scroll; background: #0a0a0a; }
         .custom-list label { display: block; margin-bottom: 5px; cursor: pointer; color: #ccc; }
         .custom-list input { width: auto; margin-right: 10px; }
@@ -53,20 +52,31 @@
         .hp-bar-bg { width: 100%; height: 8px; background: #222; border: 1px solid #444; margin-top: 4px; }
         .hp-fill { width: 100%; height: 100%; background: var(--danger); transition: width 0.1s; }
 
-        /* --- MOBILE CONTROLS --- */
+        /* --- MOBILE CONTROLS MEJORADOS --- */
         #mobile-ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; pointer-events: none; z-index: 60; }
-        .touch-zone { position: absolute; bottom: 20px; border-radius: 50%; background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.3); pointer-events: auto; touch-action: none;}
-        #joy-base { left: 20px; width: 120px; height: 120px; }
-        #joy-stick { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 50px; height: 50px; background: rgba(30, 144, 255, 0.5); border-radius: 50%; }
+        .touch-zone { position: absolute; border-radius: 50%; background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.2); pointer-events: auto; touch-action: none;}
+        .joy-stick-inner { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 45px; height: 45px; border-radius: 50%; pointer-events: none; }
         
-        .action-btns { position: absolute; bottom: 20px; right: 20px; width: 160px; height: 160px; pointer-events: auto; }
-        .t-btn { position: absolute; width: 50px; height: 50px; border-radius: 50%; background: rgba(30, 144, 255, 0.3); border: 2px solid var(--primary); color: white; display: flex; justify-content: center; align-items: center; font-weight: bold; }
-        .t-btn:active { background: var(--primary); }
-        #btn-shoot { bottom: 0; right: 55px; width: 60px; height: 60px; }
-        #btn-triple { bottom: 65px; right: 0; background: rgba(255, 204, 0, 0.3); border-color: var(--warning); }
-        #btn-parry { top: 0; right: 55px; background: rgba(0, 255, 204, 0.3); border-color: var(--success); }
-        #btn-bomb { bottom: 55px; left: 0; background: rgba(255, 51, 102, 0.3); border-color: var(--danger); }
-        #btn-pause-m { position: absolute; top: 15px; right: 15px; padding: 10px; background: #222; border: 1px solid #fff; color: #fff; pointer-events: auto; border-radius: 5px;}
+        /* Joystick Izquierdo (Mover) */
+        #joy-base-l { left: 30px; bottom: 30px; width: 120px; height: 120px; }
+        #joy-stick-l { background: rgba(30, 144, 255, 0.6); border: 2px solid var(--primary); }
+
+        /* Joystick Derecho (Apuntar) */
+        #joy-base-r { right: 30px; bottom: 30px; width: 120px; height: 120px; }
+        #joy-stick-r { background: rgba(255, 51, 102, 0.6); border: 2px solid var(--danger); }
+        
+        /* Botones de Acción con Iconos */
+        .t-btn { position: absolute; width: 55px; height: 55px; border-radius: 50%; background: rgba(10, 10, 10, 0.7); border: 2px solid; color: white; display: flex; justify-content: center; align-items: center; font-size: 1.6rem; pointer-events: auto; touch-action: none; transition: transform 0.1s; z-index: 65;}
+        
+        /* Layout Ergonómico (Arco alrededor del Joy Derecho) */
+        #btn-shoot { right: 170px; bottom: 40px; border-color: var(--primary); } /* Disparo Normal */
+        #btn-triple { right: 150px; bottom: 120px; border-color: var(--warning); text-shadow: 0 0 5px var(--warning); } /* Triple */
+        #btn-parry { right: 70px; bottom: 170px; border-color: var(--success); text-shadow: 0 0 5px var(--success); } /* Escudo/Parry */
+        
+        /* Bomba cerca del Joystick Izquierdo para el pulgar izquierdo */
+        #btn-bomb { left: 170px; bottom: 40px; border-color: var(--danger); text-shadow: 0 0 5px var(--danger); } 
+        
+        #btn-pause-m { position: absolute; top: 15px; right: 15px; padding: 10px; background: #222; border: 1px solid #fff; color: #fff; pointer-events: auto; border-radius: 5px; font-weight: bold; font-family: 'Orbitron';}
     </style>
 </head>
 <body>
@@ -80,14 +90,15 @@
         <div id="boss-container"></div>
 
         <div id="mobile-ui">
-            <button id="btn-pause-m" onclick="togglePause()">|| PAUSA</button>
-            <div id="joy-base" class="touch-zone"><div id="joy-stick"></div></div>
-            <div class="action-btns">
-                <div id="btn-shoot" class="t-btn">ATK</div>
-                <div id="btn-triple" class="t-btn">TRP</div>
-                <div id="btn-parry" class="t-btn">PRY</div>
-                <div id="btn-bomb" class="t-btn">BMB</div>
-            </div>
+            <button id="btn-pause-m" onclick="togglePause()">⏸️ PAUSA</button>
+            
+            <div id="joy-base-l" class="touch-zone"><div id="joy-stick-l" class="joy-stick-inner"></div></div>
+            <div id="joy-base-r" class="touch-zone"><div id="joy-stick-r" class="joy-stick-inner"></div></div>
+            
+            <div id="btn-shoot" class="t-btn">🔫</div>
+            <div id="btn-triple" class="t-btn">🔱</div>
+            <div id="btn-parry" class="t-btn">🛡️</div>
+            <div id="btn-bomb" class="t-btn">💣</div>
         </div>
 
         <div id="menu-main" class="ui-screen active">
@@ -117,7 +128,6 @@
         <div id="menu-custom" class="ui-screen">
             <div class="menu-card">
                 <h1>MODO PERSONALIZADO</h1>
-                <div style="font-size: 0.8rem; color: #aaa; margin-bottom: 10px;">Selecciona los enemigos que aparecerán:</div>
                 <div class="custom-list" id="custom-checkboxes">
                     <label><input type="checkbox" value="common" checked> Enemigo Común (Rojo)</label>
                     <label><input type="checkbox" value="special"> Enemigo Especial (Escudo)</label>
@@ -144,10 +154,10 @@
                     <p>• <b>Clic Izq:</b> Disparo | <b>Clic Der:</b> Disparo Triple</p>
                     <p>• <b>Espacio:</b> Bomba | <b>E:</b> Parry | <b>P:</b> Pausa</p>
                     <hr style="border-color:#333;">
-                    <p style="color:var(--success);"><b>[MANDO / GAMEPAD]</b></p>
-                    <p>• <b>Stick Izq:</b> Mover | <b>Stick Der:</b> Apuntar</p>
-                    <p>• <b>RT/R2/ZR:</b> Disparo | <b>LT/L2/ZL:</b> Disparo Triple</p>
-                    <p>• <b>LB/L1:</b> Bomba | <b>RB/R1:</b> Parry | <b>Start:</b> Pausa</p>
+                    <p style="color:var(--success);"><b>[MÓVIL / PANTALLA TÁCTIL]</b></p>
+                    <p>• <b>Pad Izquierdo:</b> Movimiento</p>
+                    <p>• <b>Pad Derecho:</b> Apuntado Manual (Auto-apunta al mover si no se toca)</p>
+                    <p>• <b>Iconos:</b> 🔫 Normal | 🔱 Triple | 🛡️ Parry | 💣 Bomba</p>
                 </div>
                 <button onclick="showScreen('menu-main')">Entendido</button>
             </div>
@@ -224,7 +234,7 @@
     const ctx = canvas.getContext('2d');
     
     // --- ESTADO DEL JUEGO ---
-    let gameState = 'MENU'; // MENU, PLAYING, PAUSED, CONTINUE, WIN
+    let gameState = 'MENU';
     let gameMode = 'progressive';
     let score = 0, lives = 3, bombs = 3, frameCount = 0;
     let parryActive = false, parryCooldown = false;
@@ -241,85 +251,51 @@
     const input = { moveX: 0, moveY: 0, aimX: 400, aimY: 300, shoot: false, triple: false, bomb: false, parry: false, pause: false };
     const keys = {};
     let usingGamepad = false, isMobile = /Mobi|Android/i.test(navigator.userAgent);
-    let isForcedMobile = false; // Nueva variable de estado para el botón
+    let isForcedMobile = false; 
+    let rightJoyActive = false; // Flag para saber si se está usando el joystick derecho
 
-    // --- LÓGICA DEL BOTÓN MODO MÓVIL / PC ---
+    // Lógica del botón de Modo Móvil / PC
     function toggleDeviceMode() {
         isForcedMobile = !isForcedMobile;
         const btn = document.getElementById('btn-device-toggle');
         
         if (isForcedMobile) {
-            // Cambiar a MODO MÓVIL
-            btn.innerText = "CAMBIAR A MODO PC";
-            btn.style.borderColor = "var(--primary)";
-            btn.style.color = "var(--primary)";
+            btn.innerText = "CAMBIAR A MODO PC"; btn.style.borderColor = "var(--primary)"; btn.style.color = "var(--primary)";
             isMobile = true;
-            
-            // Intentar solicitar Pantalla Completa y forzar Landscape
             let elem = document.documentElement;
             if (elem.requestFullscreen) {
                 elem.requestFullscreen().then(() => {
-                    if (screen.orientation && screen.orientation.lock) {
-                        screen.orientation.lock('landscape').catch(e => console.log("El bloqueo de orientación no es soportado o falló", e));
-                    }
-                }).catch(e => console.log("Error de pantalla completa", e));
+                    if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(e => console.log(e));
+                }).catch(e => console.log(e));
             }
-            
-            // Ajustar resolución al 100% de la pantalla actual
-            config.w = window.innerWidth;
-            config.h = window.innerHeight;
-            
+            config.w = window.innerWidth; config.h = window.innerHeight;
         } else {
-            // Cambiar a MODO PC
-            btn.innerText = "CAMBIAR A MODO MÓVIL";
-            btn.style.borderColor = "var(--success)";
-            btn.style.color = "var(--success)";
-            
-            // Re-evaluar por UserAgent por si es realmente un móvil
+            btn.innerText = "CAMBIAR A MODO MÓVIL"; btn.style.borderColor = "var(--success)"; btn.style.color = "var(--success)";
             isMobile = document.getElementById('opt-touch').value === 'force' || /Mobi|Android/i.test(navigator.userAgent);
+            if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(e => console.log(e));
+            if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock();
             
-            // Salir de pantalla completa si está activa
-            if (document.fullscreenElement && document.exitFullscreen) {
-                document.exitFullscreen().catch(e => console.log(e));
-            }
-            if (screen.orientation && screen.orientation.unlock) {
-                screen.orientation.unlock();
-            }
-            
-            // Restaurar configuración PC (800x600 o lo que marque el select)
             let sizeVal = document.getElementById('opt-size').value;
             if (sizeVal !== 'auto') {
                 const size = sizeVal.split('x');
-                config.w = parseInt(size[0]); 
-                config.h = parseInt(size[1]);
+                config.w = parseInt(size[0]); config.h = parseInt(size[1]);
             }
         }
         
-        // Aplicar el nuevo tamaño de forma inmediata
-        canvas.width = config.w;
-        canvas.height = config.h;
+        canvas.width = config.w; canvas.height = config.h;
         document.getElementById('game-container').style.width = config.w + 'px';
         document.getElementById('game-container').style.height = config.h + 'px';
-        
-        // Re-centrar la nave
-        nave.x = canvas.width / 2;
-        nave.y = canvas.height - 100;
+        nave.x = canvas.width / 2; nave.y = canvas.height - 100;
     }
-    
-    // UI y Config inicial
+
     function applyOptions() {
         const sizeVal = document.getElementById('opt-size').value;
         if (sizeVal === 'auto' || isForcedMobile) {
-            config.w = window.innerWidth;
-            config.h = window.innerHeight;
+            config.w = window.innerWidth; config.h = window.innerHeight;
         } else {
-            const size = sizeVal.split('x');
-            config.w = parseInt(size[0]); 
-            config.h = parseInt(size[1]);
+            const size = sizeVal.split('x'); config.w = parseInt(size[0]); config.h = parseInt(size[1]);
         }
-        
-        canvas.width = config.w; 
-        canvas.height = config.h;
+        canvas.width = config.w; canvas.height = config.h;
         document.getElementById('game-container').style.width = config.w + 'px';
         document.getElementById('game-container').style.height = config.h + 'px';
         
@@ -328,30 +304,18 @@
         else if (touchOpt === 'hide') isMobile = false;
         else if (!isForcedMobile) isMobile = /Mobi|Android/i.test(navigator.userAgent);
 
-        // Reubicar nave al cambiar pantalla
-        nave.x = canvas.width / 2;
-        nave.y = canvas.height - 100;
-
+        nave.x = canvas.width / 2; nave.y = canvas.height - 100;
         showScreen('menu-main');
     }
 
-    // Auto-resize para la opción 'auto' o 'Modo Móvil' forzado
     window.addEventListener('resize', () => {
         if(isForcedMobile || document.getElementById('opt-size').value === 'auto') {
-            // Pequeño retardo para dar tiempo a que la rotación del SO se complete
             setTimeout(() => {
-                config.w = window.innerWidth; 
-                config.h = window.innerHeight;
-                canvas.width = config.w; 
-                canvas.height = config.h;
+                config.w = window.innerWidth; config.h = window.innerHeight;
+                canvas.width = config.w; canvas.height = config.h;
                 document.getElementById('game-container').style.width = config.w + 'px';
                 document.getElementById('game-container').style.height = config.h + 'px';
-                
-                // Si estamos en el menú, reubicamos la nave para evitar que quede fuera de pantalla
-                if (gameState === 'MENU') {
-                    nave.x = canvas.width / 2;
-                    nave.y = canvas.height - 100;
-                }
+                if (gameState === 'MENU') { nave.x = canvas.width / 2; nave.y = canvas.height - 100; }
             }, 150);
         }
     });
@@ -373,109 +337,140 @@
         showScreen('menu-main');
     }
 
-    // --- CONTROLADORES DE EVENTOS ---
-    // Teclado
-    window.addEventListener('keydown', e => { 
-        keys[e.code] = true; 
-        if(e.code === 'KeyP') { togglePause(); keys[e.code] = false; }
-    });
+    // --- EVENTOS PC (TECLADO/RATÓN) ---
+    window.addEventListener('keydown', e => { keys[e.code] = true; if(e.code === 'KeyP') { togglePause(); keys[e.code] = false; } });
     window.addEventListener('keyup', e => keys[e.code] = false);
-    
-    // Ratón
-    canvas.addEventListener('mousemove', e => {
-        const rect = canvas.getBoundingClientRect();
-        input.aimX = e.clientX - rect.left; input.aimY = e.clientY - rect.top;
-        usingGamepad = false;
-    });
-    canvas.addEventListener('mousedown', e => {
-        if(e.button === 0) input.shoot = true;
-        if(e.button === 2) input.triple = true;
-    });
-    canvas.addEventListener('mouseup', e => {
-        if(e.button === 0) input.shoot = false;
-        if(e.button === 2) input.triple = false;
-    });
+    canvas.addEventListener('mousemove', e => { const rect = canvas.getBoundingClientRect(); input.aimX = e.clientX - rect.left; input.aimY = e.clientY - rect.top; usingGamepad = false; });
+    canvas.addEventListener('mousedown', e => { if(e.button === 0) input.shoot = true; if(e.button === 2) input.triple = true; });
+    canvas.addEventListener('mouseup', e => { if(e.button === 0) input.shoot = false; if(e.button === 2) input.triple = false; });
     canvas.addEventListener('contextmenu', e => e.preventDefault());
 
-    // Táctil
-    const joyBase = document.getElementById('joy-base');
-    const joyStick = document.getElementById('joy-stick');
-    let joyCenter = {x:0, y:0}, joyActive = false;
-    
-    joyBase.addEventListener('touchstart', e => { joyActive = true; const r = joyBase.getBoundingClientRect(); joyCenter = {x: r.left + r.width/2, y: r.top + r.height/2}; e.preventDefault(); }, {passive: false});
-    document.addEventListener('touchmove', e => {
-        if(!joyActive) return;
-        const touch = Array.from(e.touches).find(t => t.target === joyBase || t.target === joyStick);
-        if(!touch) return;
-        let dx = touch.clientX - joyCenter.x, dy = touch.clientY - joyCenter.y;
-        let dist = Math.hypot(dx, dy);
-        if(dist > 50) { dx = (dx/dist)*50; dy = (dy/dist)*50; }
-        joyStick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-        input.moveX = dx / 50; input.moveY = dy / 50;
-    }, {passive: false});
-    document.addEventListener('touchend', e => { 
-        if(e.touches.length === 0) { joyActive = false; joyStick.style.transform = `translate(-50%, -50%)`; input.moveX = 0; input.moveY = 0; }
-    });
+    // --- MOTOR MULTI-TOUCH NATIVO PARA MÓVILES ---
+    function setupJoystick(baseId, stickId, type) {
+        const base = document.getElementById(baseId);
+        const stick = document.getElementById(stickId);
+        let touchId = null;
+        let center = {x:0, y:0};
 
-    const bindTouch = (id, action) => {
+        base.addEventListener('touchstart', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            if(touchId !== null) return; 
+            
+            const touch = e.changedTouches[0];
+            touchId = touch.identifier;
+            
+            const rect = base.getBoundingClientRect();
+            center = {x: rect.left + rect.width/2, y: rect.top + rect.height/2};
+            if(type === 'right') rightJoyActive = true;
+            updateJoy(touch);
+        }, {passive: false});
+
+        base.addEventListener('touchmove', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            for(let t of e.changedTouches) {
+                if(t.identifier === touchId) { updateJoy(t); break; }
+            }
+        }, {passive: false});
+
+        const endTouch = e => {
+            e.preventDefault();
+            e.stopPropagation();
+            for(let t of e.changedTouches) {
+                if(t.identifier === touchId) {
+                    touchId = null;
+                    stick.style.transform = `translate(-50%, -50%)`;
+                    if(type === 'left') { input.moveX = 0; input.moveY = 0; }
+                    if(type === 'right') rightJoyActive = false;
+                    break;
+                }
+            }
+        };
+
+        base.addEventListener('touchend', endTouch, {passive: false});
+        base.addEventListener('touchcancel', endTouch, {passive: false});
+
+        function updateJoy(touch) {
+            let dx = touch.clientX - center.x; let dy = touch.clientY - center.y;
+            let dist = Math.hypot(dx, dy);
+            let maxDist = 40; // Radio máximo de movimiento visual
+
+            if(dist > maxDist) { dx = (dx/dist)*maxDist; dy = (dy/dist)*maxDist; }
+            stick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+
+            if(type === 'left') {
+                input.moveX = dx / maxDist; input.moveY = dy / maxDist;
+            } else if (type === 'right') {
+                if (dist > 5) { // Pequeña zona muerta para no temblar
+                    // Actualiza la mira relativa a la posición de la nave
+                    input.aimX = nave.x + (dx / maxDist) * 300;
+                    input.aimY = nave.y + (dy / maxDist) * 300;
+                }
+            }
+        }
+    }
+
+    setupJoystick('joy-base-l', 'joy-stick-l', 'left');
+    setupJoystick('joy-base-r', 'joy-stick-r', 'right');
+
+    const bindTouchBtn = (id, action) => {
         const el = document.getElementById(id);
-        el.addEventListener('touchstart', e => { input[action] = true; e.preventDefault(); }, {passive: false});
-        el.addEventListener('touchend', e => { input[action] = false; e.preventDefault(); }, {passive: false});
+        el.addEventListener('touchstart', e => {
+            e.preventDefault(); e.stopPropagation();
+            input[action] = true;
+            el.style.transform = 'scale(0.85)';
+            el.style.backgroundColor = 'rgba(255,255,255,0.2)';
+        }, {passive: false});
+        
+        const endBtn = e => {
+            e.preventDefault(); e.stopPropagation();
+            input[action] = false;
+            el.style.transform = 'scale(1)';
+            el.style.backgroundColor = 'rgba(10, 10, 10, 0.7)';
+        };
+        el.addEventListener('touchend', endBtn, {passive: false});
+        el.addEventListener('touchcancel', endBtn, {passive: false});
     };
-    bindTouch('btn-shoot', 'shoot'); bindTouch('btn-triple', 'triple'); 
-    bindTouch('btn-parry', 'parry'); bindTouch('btn-bomb', 'bomb');
+    bindTouchBtn('btn-shoot', 'shoot'); bindTouchBtn('btn-triple', 'triple'); 
+    bindTouchBtn('btn-parry', 'parry'); bindTouchBtn('btn-bomb', 'bomb');
 
-    // --- PROCESAMIENTO DE INPUT ---
+    // --- PROCESAMIENTO GENERAL DE INPUT ---
     let startBtnPressed = false;
     function pollInput() {
         if(gameState === 'MENU' || gameState === 'CONTINUE' || gameState === 'WIN') return;
 
-        // Reset teclado
         input.moveX = 0; input.moveY = 0;
         if(keys['KeyW']) input.moveY = -1; if(keys['KeyS']) input.moveY = 1;
         if(keys['KeyA']) input.moveX = -1; if(keys['KeyD']) input.moveX = 1;
         
-        // Disparos Especiales teclado
         if(keys['Space']) { input.bomb = true; keys['Space'] = false; } else if(!isMobile) input.bomb = false;
         if(keys['KeyE']) { input.parry = true; keys['KeyE'] = false; } else if(!isMobile) input.parry = false;
 
-        // Gamepad
         const pads = navigator.getGamepads();
         if(pads[0]) {
-            const pad = pads[0];
-            usingGamepad = true;
-            
-            // Movimiento Stick Izq
+            const pad = pads[0]; usingGamepad = true;
             if(Math.abs(pad.axes[0]) > 0.1) input.moveX = pad.axes[0];
             if(Math.abs(pad.axes[1]) > 0.1) input.moveY = pad.axes[1];
-            
-            // Apuntado Stick Der
             if(Math.hypot(pad.axes[2], pad.axes[3]) > 0.2) {
                 input.aimX += pad.axes[2] * 15; input.aimY += pad.axes[3] * 15;
-                input.aimX = Math.max(0, Math.min(canvas.width, input.aimX));
-                input.aimY = Math.max(0, Math.min(canvas.height, input.aimY));
+                input.aimX = Math.max(0, Math.min(canvas.width, input.aimX)); input.aimY = Math.max(0, Math.min(canvas.height, input.aimY));
             }
-
-            // Botones
-            input.shoot = pad.buttons[7].value > 0.2; // RT
-            input.triple = pad.buttons[6].value > 0.2; // LT
-            
-            if(pad.buttons[4].pressed && !input.bomb) { input.bomb = true; } else if(!pad.buttons[4].pressed) input.bomb = false; // LB
-            if(pad.buttons[5].pressed && !input.parry) { input.parry = true; } else if(!pad.buttons[5].pressed) input.parry = false; // RB
-            
-            // Start (Pausa)
-            if(pad.buttons[9].pressed && !startBtnPressed) { togglePause(); startBtnPressed = true; }
-            else if (!pad.buttons[9].pressed) startBtnPressed = false;
+            input.shoot = pad.buttons[7].value > 0.2; input.triple = pad.buttons[6].value > 0.2; 
+            if(pad.buttons[4].pressed && !input.bomb) { input.bomb = true; } else if(!pad.buttons[4].pressed) input.bomb = false; 
+            if(pad.buttons[5].pressed && !input.parry) { input.parry = true; } else if(!pad.buttons[5].pressed) input.parry = false; 
+            if(pad.buttons[9].pressed && !startBtnPressed) { togglePause(); startBtnPressed = true; } else if (!pad.buttons[9].pressed) startBtnPressed = false;
         }
 
-        // Auto-apuntado en móviles si no se usa mando ni ratón
-        if(isMobile && !usingGamepad && (input.moveX !== 0 || input.moveY !== 0)) {
-            input.aimX = nave.x + input.moveX * 100;
-            input.aimY = nave.y + input.moveY * 100;
+        // LÓGICA DE AUTO-APUNTADO: Si es móvil, no usa gamepad y NO está usando el pad derecho
+        if(isMobile && !usingGamepad && !rightJoyActive && (input.moveX !== 0 || input.moveY !== 0)) {
+            // Apunta en la dirección en la que te mueves
+            input.aimX = nave.x + input.moveX * 150;
+            input.aimY = nave.y + input.moveY * 150;
         }
     }
 
-    // --- LÓGICA DE MISIONES ---
+    // --- LÓGICA DE MISIONES Y JUEGO ---
     function startCustom() {
         const cbs = document.querySelectorAll('#custom-checkboxes input:checked');
         customSelection = Array.from(cbs).map(cb => cb.value);
@@ -484,15 +479,12 @@
     }
 
     function startMission(mode) {
-        gameMode = mode;
-        gameState = 'PLAYING';
+        gameMode = mode; gameState = 'PLAYING';
         score = 0; currentWave = 1; wavePhase = 1;
         lives = parseInt(document.getElementById('opt-lives').value);
         bombs = 3; screenShake = 0;
-        
         bullets = []; enemyBullets = []; enemies = []; bosses = []; pickUps = []; particles = [];
         nave.x = canvas.width/2; nave.y = canvas.height - 100; nave.vx = 0; nave.vy = 0;
-        
         showScreen('none');
         document.getElementById('hud').style.display = 'flex';
         document.getElementById('mobile-ui').style.display = isMobile ? 'block' : 'none';
@@ -508,10 +500,8 @@
         updateHUD();
     }
 
-    // --- SISTEMAS DE ENTIDADES ---
     function spawnEnemy(forcedType = null) {
         if(bosses.length > 0 && gameMode !== 'custom') return;
-
         let type = 'common';
         if(forcedType) type = forcedType;
         else if(gameMode === 'progressive') {
@@ -519,57 +509,29 @@
             if(currentWave === 3) type = Math.random() > 0.7 ? 'elite' : (Math.random() > 0.5 ? 'special' : 'common');
         } else if (gameMode === 'custom') {
             const avail = customSelection.filter(v => ['common','special','elite'].includes(v));
-            if(avail.length > 0) type = avail[Math.floor(Math.random()*avail.length)];
-            else return; // Solo hay jefes
+            if(avail.length > 0) type = avail[Math.floor(Math.random()*avail.length)]; else return;
         }
-
-        enemies.push({
-            x: Math.random() * (canvas.width - 40) + 20, y: -30, type: type,
-            hp: type === 'elite' ? 120 : (type === 'special' ? 60 : 30),
-            vx: (Math.random() - 0.5) * 2, vy: type === 'special' ? 3.5 : 2,
-            shield: type === 'special', lastShot: 0
-        });
+        enemies.push({ x: Math.random() * (canvas.width - 40) + 20, y: -30, type: type, hp: type === 'elite' ? 120 : (type === 'special' ? 60 : 30), vx: (Math.random() - 0.5) * 2, vy: type === 'special' ? 3.5 : 2, shield: type === 'special', lastShot: 0 });
     }
 
     function createBoss(type, id) {
-        let b = {
-            id: id, type: type, x: id === 'B1' ? canvas.width*0.3 : canvas.width*0.7, y: -100, targetY: 150,
-            hp: 4000, maxHp: 4000, dir: 1, lastShot: 0,
-            parryCooldown: false, parryActive: false, bombs: 2 // Para Doppel
-        };
+        let b = { id: id, type: type, x: id === 'B1' ? canvas.width*0.3 : canvas.width*0.7, y: -100, targetY: 150, hp: 4000, maxHp: 4000, dir: 1, lastShot: 0, parryCooldown: false, parryActive: false, bombs: 2 };
         if(type === 'static') b.x = canvas.width / 2;
         if(type === 'doppel') { b.x = canvas.width / 2; b.targetY = 100; b.maxHp = 6000; b.hp = 6000; }
-        bosses.push(b);
-        renderBossUI();
+        bosses.push(b); renderBossUI();
     }
 
     function renderBossUI() {
-        const container = document.getElementById('boss-container');
-        container.innerHTML = '';
-        bosses.forEach(b => {
-            container.innerHTML += `<div class="boss-hp-row"><div style="font-size:0.6rem; color:var(--danger)">ADVERTENCIA: ENTIDAD ${b.id}</div><div class="hp-bar-bg"><div id="hp-${b.id}" class="hp-fill"></div></div></div>`;
-        });
+        const container = document.getElementById('boss-container'); container.innerHTML = '';
+        bosses.forEach(b => { container.innerHTML += `<div class="boss-hp-row"><div style="font-size:0.6rem; color:var(--danger)">ADVERTENCIA: ENTIDAD ${b.id}</div><div class="hp-bar-bg"><div id="hp-${b.id}" class="hp-fill"></div></div></div>`; });
         container.style.display = bosses.length ? 'block' : 'none';
     }
 
-    // --- LÓGICA DE PROGRESIÓN Y CONTINUAR ---
     function checkProgression() {
-        if(gameMode === 'custom') {
-            // Si en custom mataste al Doppel, ganas.
-            if(bosses.length === 0 && customSelection.includes('b4') && currentWave > 1) { winGame(); }
-            if(bosses.length === 0 && currentWave === 1) currentWave++; // Flag para saber que ya salieron
-            return;
-        }
-
+        if(gameMode === 'custom') { if(bosses.length === 0 && customSelection.includes('b4') && currentWave > 1) { winGame(); } if(bosses.length === 0 && currentWave === 1) currentWave++; return; }
         if(gameMode === 'solo_boss' && bosses.length === 0) {
-            if(currentWave === 1) { createBoss('static', 'B1'); currentWave++; }
-            else if(currentWave === 2) { createBoss('moving', 'B2'); currentWave++; }
-            else if(currentWave === 3) { createBoss('static', 'B1'); createBoss('moving', 'B2'); currentWave++; }
-            else if(currentWave === 4) { createBoss('doppel', 'DOPPEL'); currentWave++; }
-            else winGame();
-            return;
+            if(currentWave === 1) { createBoss('static', 'B1'); currentWave++; } else if(currentWave === 2) { createBoss('moving', 'B2'); currentWave++; } else if(currentWave === 3) { createBoss('static', 'B1'); createBoss('moving', 'B2'); currentWave++; } else if(currentWave === 4) { createBoss('doppel', 'DOPPEL'); currentWave++; } else winGame(); return;
         }
-
         if(gameMode === 'progressive') {
             if(score > 5000 && wavePhase === 1) { createBoss('static', 'B1'); wavePhase++; }
             if(score > 15000 && wavePhase === 2 && bosses.length === 0) { currentWave = 2; createBoss('moving', 'B2'); wavePhase++; }
@@ -579,255 +541,106 @@
         }
     }
 
-    function promptContinue() {
-        gameState = 'CONTINUE';
-        document.getElementById('hud').style.display = 'none';
-        document.getElementById('mobile-ui').style.display = 'none';
-        showScreen('menu-continue');
-    }
+    function promptContinue() { gameState = 'CONTINUE'; document.getElementById('hud').style.display = 'none'; document.getElementById('mobile-ui').style.display = 'none'; showScreen('menu-continue'); }
+    function acceptContinue() { lives = 3; gameState = 'PLAYING'; showScreen('none'); document.getElementById('hud').style.display = 'flex'; if(isMobile) document.getElementById('mobile-ui').style.display = 'block'; enemyBullets = []; nave.inmune = true; setTimeout(() => nave.inmune = false, 3000); updateHUD(); }
+    function winGame() { gameState = 'WIN'; document.getElementById('hud').style.display = 'none'; document.getElementById('mobile-ui').style.display = 'none'; showScreen('menu-win'); }
 
-    function acceptContinue() {
-        lives = 3; // Restaurar vidas
-        gameState = 'PLAYING';
-        showScreen('none');
-        document.getElementById('hud').style.display = 'flex';
-        if(isMobile) document.getElementById('mobile-ui').style.display = 'block';
-        
-        // Limpiar pantalla de daño residual
-        enemyBullets = [];
-        nave.inmune = true;
-        setTimeout(() => nave.inmune = false, 3000); // 3 segundos de inmunidad al revivir
-        
-        updateHUD();
-    }
-
-    function winGame() {
-        gameState = 'WIN';
-        document.getElementById('hud').style.display = 'none';
-        document.getElementById('mobile-ui').style.display = 'none';
-        showScreen('menu-win');
-    }
-
-    // --- ACCIONES JUGADOR ---
     function spawnBullets(isTriple) {
         const baseAngle = Math.atan2(input.aimY - nave.y, input.aimX - nave.x);
         if(isTriple) {
-            for(let i=-1; i<=1; i++) {
-                const a = baseAngle + (i * 0.2);
-                bullets.push({ x: nave.x, y: nave.y, vx: Math.cos(a)*12, vy: Math.sin(a)*12, color: '#ffcc00', dmg: 25 });
-            }
-            screenShake = 3;
-        } else {
-            bullets.push({ x: nave.x, y: nave.y, vx: Math.cos(baseAngle)*15, vy: Math.sin(baseAngle)*15, color: '#1e90ff', dmg: 20 });
-        }
+            for(let i=-1; i<=1; i++) { const a = baseAngle + (i * 0.2); bullets.push({ x: nave.x, y: nave.y, vx: Math.cos(a)*12, vy: Math.sin(a)*12, color: '#ffcc00', dmg: 25 }); } screenShake = 3;
+        } else { bullets.push({ x: nave.x, y: nave.y, vx: Math.cos(baseAngle)*15, vy: Math.sin(baseAngle)*15, color: '#1e90ff', dmg: 20 }); }
     }
 
     function triggerBomb(isPlayer, origin) {
-        if(isPlayer) {
-            if(bombs <= 0) return;
-            bombs--; input.bomb = false;
-        }
-        screenShake = 40;
-        particles.push({x: origin.x, y: origin.y, vx:0, vy:0, life:1, type:'bomb_ring', color: isPlayer ? '#fff' : '#ff0044'});
-        
-        if(isPlayer) {
-            enemyBullets = [];
-            enemies.forEach(e => createExplosion(e.x, e.y, '#fff', 10)); enemies = [];
-            bosses.forEach(b => { b.hp -= b.maxHp * 0.1; updateBossHP(b); });
-        } else {
-            bullets = []; // Doppel limpia las balas del jugador
-            if(!parryActive) playerHit(true); // Hace daño masivo
-        }
+        if(isPlayer) { if(bombs <= 0) return; bombs--; input.bomb = false; }
+        screenShake = 40; particles.push({x: origin.x, y: origin.y, vx:0, vy:0, life:1, type:'bomb_ring', color: isPlayer ? '#fff' : '#ff0044'});
+        if(isPlayer) { enemyBullets = []; enemies.forEach(e => createExplosion(e.x, e.y, '#fff', 10)); enemies = []; bosses.forEach(b => { b.hp -= b.maxHp * 0.1; updateBossHP(b); }); } else { bullets = []; if(!parryActive) playerHit(true); }
         updateHUD();
     }
 
     function playerHit(heavy = false) {
         if(nave.inmune) return;
-        lives -= heavy ? 2 : 1;
-        screenShake = heavy ? 30 : 15;
-        nave.inmune = true;
-        createExplosion(nave.x, nave.y, '#ff0000', heavy ? 40 : 25);
-        updateHUD();
-        setTimeout(() => nave.inmune = false, 2000);
-        
-        if(lives <= 0) promptContinue();
+        lives -= heavy ? 2 : 1; screenShake = heavy ? 30 : 15; nave.inmune = true; createExplosion(nave.x, nave.y, '#ff0000', heavy ? 40 : 25); updateHUD();
+        setTimeout(() => nave.inmune = false, 2000); if(lives <= 0) promptContinue();
     }
 
-    function updateBossHP(b) {
-        const hpBar = document.getElementById(`hp-${b.id}`);
-        if(hpBar) hpBar.style.width = Math.max(0, (b.hp/b.maxHp)*100) + '%';
-    }
-
-    function createExplosion(x, y, color, count = 12) {
-        for(let i=0; i<count; i++) particles.push({ x, y, vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8, life: 1.0, color: color || '#ff5500', type: 'spark' });
-    }
-
-    function updateHUD() {
-        document.getElementById('val-score').innerText = score;
-        document.getElementById('val-bombs').innerText = bombs;
-        document.getElementById('val-lives').innerText = "❤️".repeat(Math.max(0, lives));
-        document.getElementById('level-tag').innerText = `MODO: ${gameMode.toUpperCase()}`;
-    }
+    function updateBossHP(b) { const hpBar = document.getElementById(`hp-${b.id}`); if(hpBar) hpBar.style.width = Math.max(0, (b.hp/b.maxHp)*100) + '%'; }
+    function createExplosion(x, y, color, count = 12) { for(let i=0; i<count; i++) particles.push({ x, y, vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8, life: 1.0, color: color || '#ff5500', type: 'spark' }); }
+    function updateHUD() { document.getElementById('val-score').innerText = score; document.getElementById('val-bombs').innerText = bombs; document.getElementById('val-lives').innerText = "❤️".repeat(Math.max(0, lives)); document.getElementById('level-tag').innerText = `MODO: ${gameMode.toUpperCase()}`; }
 
     // --- LOOP PRINCIPAL (UPDATE) ---
     function update() {
         pollInput();
         if(gameState !== 'PLAYING') return;
-        frameCount++;
-        checkProgression();
+        frameCount++; checkProgression();
 
-        // Movimiento Nave
         nave.vx += input.moveX * nave.accel; nave.vy += input.moveY * nave.accel;
         nave.vx *= nave.fric; nave.vy *= nave.fric;
         nave.x = Math.max(10, Math.min(canvas.width-10, nave.x + nave.vx));
         nave.y = Math.max(10, Math.min(canvas.height-10, nave.y + nave.vy));
 
-        // Acciones Nave
         if(input.shoot && frameCount % 6 === 0) spawnBullets(false);
         if(input.triple && frameCount % 12 === 0) spawnBullets(true);
         if(input.bomb) triggerBomb(true, nave);
-        
         if(input.parry && !parryCooldown) {
             parryActive = true; parryCooldown = true; input.parry = false;
-            document.getElementById('val-parry').innerText = "ACTIVE";
-            document.getElementById('val-parry').style.color = "var(--success)";
+            document.getElementById('val-parry').innerText = "ACTIVE"; document.getElementById('val-parry').style.color = "var(--success)";
             setTimeout(() => { parryActive = false; document.getElementById('val-parry').innerText = "RECHARGING"; document.getElementById('val-parry').style.color = "var(--danger)"; }, 200);
             setTimeout(() => { parryCooldown = false; document.getElementById('val-parry').innerText = "READY"; document.getElementById('val-parry').style.color = "var(--success)"; }, 2000);
         }
 
-        // Spawn Enemigos
         if(Math.random() < 0.02 + (currentWave*0.005) && bosses.length === 0) spawnEnemy();
 
-        // Lógica Enemigos Comunes
         enemies.forEach((e, i) => {
             e.x += e.vx; e.y += e.vy;
-            if(e.type === 'elite' && frameCount % 70 === 0) {
-                const angle = Math.atan2(nave.y - e.y, nave.x - e.x);
-                enemyBullets.push({x: e.x, y: e.y, vx: Math.cos(angle)*6, vy: Math.sin(angle)*6, color: '#00ffcc'});
-            }
+            if(e.type === 'elite' && frameCount % 70 === 0) { const angle = Math.atan2(nave.y - e.y, nave.x - e.x); enemyBullets.push({x: e.x, y: e.y, vx: Math.cos(angle)*6, vy: Math.sin(angle)*6, color: '#00ffcc'}); }
             if(Math.hypot(e.x - nave.x, e.y - nave.y) < 20) { playerHit(); enemies.splice(i, 1); }
             if(e.y > canvas.height) enemies.splice(i, 1);
         });
 
-        // Lógica Jefes y Patrones
         bosses.forEach((b, i) => {
             if(b.y < b.targetY) b.y += 2;
-            
-            if(b.type === 'moving' || b.id === 'B2') {
-                b.x += b.dir * 3;
-                if(b.x > canvas.width - 50 || b.x < 50) b.dir *= -1;
-            } else if (b.type === 'doppel') {
-                // IA Doppelganger (Agresiva, te persigue)
-                let targetX = nave.x + Math.sin(frameCount/30) * 150; // Orbita tu X
-                let targetY = nave.y - 150 + Math.cos(frameCount/20) * 50; // Intenta estar sobre ti
-                targetX = Math.max(50, Math.min(canvas.width-50, targetX));
-                targetY = Math.max(50, Math.min(canvas.height-150, targetY));
-                
-                b.x += (targetX - b.x) * 0.04;
-                b.y += (targetY - b.y) * 0.04;
-                
-                // Parry automático
+            if(b.type === 'moving' || b.id === 'B2') { b.x += b.dir * 3; if(b.x > canvas.width - 50 || b.x < 50) b.dir *= -1; } 
+            else if (b.type === 'doppel') {
+                let targetX = nave.x + Math.sin(frameCount/30) * 150; let targetY = nave.y - 150 + Math.cos(frameCount/20) * 50;
+                targetX = Math.max(50, Math.min(canvas.width-50, targetX)); targetY = Math.max(50, Math.min(canvas.height-150, targetY));
+                b.x += (targetX - b.x) * 0.04; b.y += (targetY - b.y) * 0.04;
                 let danger = bullets.find(bul => Math.hypot(bul.x - b.x, bul.y - b.y) < 70);
-                if(danger && !b.parryCooldown && Math.random() > 0.5) {
-                    b.parryActive = true; b.parryCooldown = true;
-                    setTimeout(()=>b.parryActive=false, 300); setTimeout(()=>b.parryCooldown=false, 2500);
-                }
-
-                // Disparo (Triple o Ráfaga)
+                if(danger && !b.parryCooldown && Math.random() > 0.5) { b.parryActive = true; b.parryCooldown = true; setTimeout(()=>b.parryActive=false, 300); setTimeout(()=>b.parryCooldown=false, 2500); }
                 if(Date.now() - b.lastShot > 150) {
-                    const ang = Math.atan2(nave.y - b.y, nave.x - b.x);
-                    enemyBullets.push({x: b.x, y: b.y, vx: Math.cos(ang)*14, vy: Math.sin(ang)*14, color: '#ff0044'}); // Ráfaga continua
-                    
-                    if(frameCount % 60 === 0) { // Disparo Triple expansivo
-                        for(let j=-2; j<=2; j++) enemyBullets.push({x: b.x, y: b.y, vx: Math.cos(ang+(j*0.2))*10, vy: Math.sin(ang+(j*0.2))*10, color: '#ffcc00'});
-                    }
-                    b.lastShot = Date.now();
+                    const ang = Math.atan2(nave.y - b.y, nave.x - b.x); enemyBullets.push({x: b.x, y: b.y, vx: Math.cos(ang)*14, vy: Math.sin(ang)*14, color: '#ff0044'});
+                    if(frameCount % 60 === 0) { for(let j=-2; j<=2; j++) enemyBullets.push({x: b.x, y: b.y, vx: Math.cos(ang+(j*0.2))*10, vy: Math.sin(ang+(j*0.2))*10, color: '#ffcc00'}); } b.lastShot = Date.now();
                 }
-
-                // Bomba IA
-                if(b.bombs > 0 && (b.hp < b.maxHp*0.3 || Math.hypot(b.x-nave.x, b.y-nave.y) < 100)) {
-                    triggerBomb(false, b); b.bombs--;
-                }
+                if(b.bombs > 0 && (b.hp < b.maxHp*0.3 || Math.hypot(b.x-nave.x, b.y-nave.y) < 100)) { triggerBomb(false, b); b.bombs--; }
             }
 
-            // Disparos Patrón Touhou (Jefes 1 y 2)
             if(b.type !== 'doppel') {
-                let fireRate = b.type === 'static' ? 300 : 400; // Más rápido para el estático
+                let fireRate = b.type === 'static' ? 300 : 400;
                 if(Date.now() - b.lastShot > fireRate) {
                     let total = 8 + (config.diff * 2);
-                    
-                    if (b.type === 'static' || b.id === 'B1') {
-                        // Patrón Espiral
-                        for(let j=0; j<total; j++) {
-                            const a = (frameCount/15) + (j * (Math.PI*2/total));
-                            enemyBullets.push({x: b.x, y: b.y, vx: Math.cos(a)*4, vy: Math.sin(a)*4, color: '#ff3366'});
-                        }
-                    } else if (b.type === 'moving' || b.id === 'B2') {
-                        // Patrón Olas / Abanico
-                        let baseDir = Math.PI/2 + Math.sin(frameCount/20) * 0.8; 
-                        for(let j=-2; j<=2; j++) {
-                            const a = baseDir + (j * 0.2);
-                            enemyBullets.push({x: b.x, y: b.y, vx: Math.cos(a)*5.5, vy: Math.sin(a)*5.5, color: '#ffcc00'});
-                        }
-                    }
+                    if (b.type === 'static' || b.id === 'B1') { for(let j=0; j<total; j++) { const a = (frameCount/15) + (j * (Math.PI*2/total)); enemyBullets.push({x: b.x, y: b.y, vx: Math.cos(a)*4, vy: Math.sin(a)*4, color: '#ff3366'}); } } 
+                    else if (b.type === 'moving' || b.id === 'B2') { let baseDir = Math.PI/2 + Math.sin(frameCount/20) * 0.8; for(let j=-2; j<=2; j++) { const a = baseDir + (j * 0.2); enemyBullets.push({x: b.x, y: b.y, vx: Math.cos(a)*5.5, vy: Math.sin(a)*5.5, color: '#ffcc00'}); } }
                     b.lastShot = Date.now();
                 }
             }
-
-            if(b.hp <= 0) {
-                createExplosion(b.x, b.y, '#fff', 50);
-                if(Math.random() > 0.3) pickUps.push({x: b.x, y: b.y, type: 'bomb'});
-                bosses.splice(i, 1); score += 10000;
-                renderBossUI();
-            }
+            if(b.hp <= 0) { createExplosion(b.x, b.y, '#fff', 50); if(Math.random() > 0.3) pickUps.push({x: b.x, y: b.y, type: 'bomb'}); bosses.splice(i, 1); score += 10000; renderBossUI(); }
         });
 
-        // Colisiones Balas Jugador -> Enemigos
         bullets.forEach((bul, bi) => {
-            bul.x += bul.vx; bul.y += bul.vy;
-            let hit = false;
-            
-            enemies.forEach((e, ei) => {
-                if(!hit && Math.hypot(bul.x - e.x, bul.y - e.y) < 25) {
-                    hit = true;
-                    if(e.shield) { e.shield = false; e.vy *= 1.5; }
-                    else {
-                        e.hp -= bul.dmg;
-                        if(e.hp <= 0) { createExplosion(e.x, e.y); enemies.splice(ei, 1); score += 150; if(Math.random()>0.95) pickUps.push({x:e.x, y:e.y, type:'bomb'}); }
-                    }
-                }
-            });
-
-            bosses.forEach(b => {
-                if(!hit && Math.hypot(bul.x - b.x, bul.y - b.y) < (b.type === 'doppel' ? 30 : 45)) {
-                    if(b.type === 'doppel' && b.parryActive) { createExplosion(bul.x, bul.y, '#00ffcc', 5); hit = true; }
-                    else {
-                        hit = true; b.hp -= bul.dmg; updateBossHP(b);
-                    }
-                }
-            });
-
+            bul.x += bul.vx; bul.y += bul.vy; let hit = false;
+            enemies.forEach((e, ei) => { if(!hit && Math.hypot(bul.x - e.x, bul.y - e.y) < 25) { hit = true; if(e.shield) { e.shield = false; e.vy *= 1.5; } else { e.hp -= bul.dmg; if(e.hp <= 0) { createExplosion(e.x, e.y); enemies.splice(ei, 1); score += 150; if(Math.random()>0.95) pickUps.push({x:e.x, y:e.y, type:'bomb'}); } } } });
+            bosses.forEach(b => { if(!hit && Math.hypot(bul.x - b.x, bul.y - b.y) < (b.type === 'doppel' ? 30 : 45)) { if(b.type === 'doppel' && b.parryActive) { createExplosion(bul.x, bul.y, '#00ffcc', 5); hit = true; } else { hit = true; b.hp -= bul.dmg; updateBossHP(b); } } });
             if(hit || bul.y < 0 || bul.y > canvas.height || bul.x < 0 || bul.x > canvas.width) bullets.splice(bi, 1);
         });
 
-        // Colisiones Balas Enemigas -> Jugador
         enemyBullets.forEach((eb, ei) => {
             eb.x += eb.vx; eb.y += eb.vy;
-            if(Math.hypot(eb.x - nave.x, eb.y - nave.y) < 12) {
-                if(parryActive) { createExplosion(eb.x, eb.y, '#00ffcc', 5); score += 50; } else { playerHit(); }
-                enemyBullets.splice(ei, 1);
-            }
+            if(Math.hypot(eb.x - nave.x, eb.y - nave.y) < 12) { if(parryActive) { createExplosion(eb.x, eb.y, '#00ffcc', 5); score += 50; } else { playerHit(); } enemyBullets.splice(ei, 1); }
             if(eb.y > canvas.height || eb.x < 0 || eb.x > canvas.width || eb.y < -50) enemyBullets.splice(ei, 1);
         });
 
-        // Pickups
-        pickUps.forEach((p, i) => {
-            p.y += 2;
-            if(Math.hypot(p.x - nave.x, p.y - nave.y) < 30) {
-                if(p.type === 'bomb') bombs++;
-                updateHUD(); pickUps.splice(i, 1);
-            }
-        });
+        pickUps.forEach((p, i) => { p.y += 2; if(Math.hypot(p.x - nave.x, p.y - nave.y) < 30) { if(p.type === 'bomb') bombs++; updateHUD(); pickUps.splice(i, 1); } });
         updateHUD();
     }
 
@@ -835,69 +648,35 @@
     function draw() {
         ctx.save();
         if(screenShake > 0) { ctx.translate((Math.random()-0.5)*screenShake, (Math.random()-0.5)*screenShake); screenShake *= 0.9; if(screenShake < 0.5) screenShake = 0; }
-        
         ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Estrellas (Fondo)
-        stars.forEach(s => {
-            ctx.fillStyle = `rgba(255, 255, 255, ${s.z})`; ctx.fillRect(s.x, s.y, s.size, s.size);
-            if(gameState === 'PLAYING') s.y += s.z * 4; 
-            if(s.y > canvas.height) s.y = 0;
-        });
+        stars.forEach(s => { ctx.fillStyle = `rgba(255, 255, 255, ${s.z})`; ctx.fillRect(s.x, s.y, s.size, s.size); if(gameState === 'PLAYING') s.y += s.z * 4; if(s.y > canvas.height) s.y = 0; });
 
         if(gameState === 'PLAYING' || gameState === 'PAUSED' || gameState === 'CONTINUE' || gameState === 'WIN') {
-            // Pickups
             pickUps.forEach(p => { ctx.fillStyle = '#ffcc00'; ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = '#000'; ctx.fillText('B', p.x-4, p.y+4); });
-
-            // Enemigos Comunes
-            enemies.forEach(e => {
-                ctx.fillStyle = e.type === 'elite' ? '#00ffcc' : (e.shield ? '#ffcc00' : '#ff3366');
-                if(e.type === 'elite') { ctx.beginPath(); ctx.moveTo(e.x, e.y+15); ctx.lineTo(e.x-15, e.y-10); ctx.lineTo(e.x+15, e.y-10); ctx.fill(); } 
-                else { ctx.fillRect(e.x-12, e.y-12, 24, 24); if(e.shield) { ctx.strokeStyle='#fff'; ctx.strokeRect(e.x-15, e.y-15, 30, 30); } }
-            });
-
-            // Jefes
+            enemies.forEach(e => { ctx.fillStyle = e.type === 'elite' ? '#00ffcc' : (e.shield ? '#ffcc00' : '#ff3366'); if(e.type === 'elite') { ctx.beginPath(); ctx.moveTo(e.x, e.y+15); ctx.lineTo(e.x-15, e.y-10); ctx.lineTo(e.x+15, e.y-10); ctx.fill(); } else { ctx.fillRect(e.x-12, e.y-12, 24, 24); if(e.shield) { ctx.strokeStyle='#fff'; ctx.strokeRect(e.x-15, e.y-15, 30, 30); } } });
             bosses.forEach(b => {
                 if(b.type === 'doppel') {
-                    // Dibujar al Doppel como una nave enemiga (Triángulo Rojo Oscuro)
-                    const angle = Math.atan2(nave.y - b.y, nave.x - b.x); // Apunta al jugador
-                    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(angle);
+                    const angle = Math.atan2(nave.y - b.y, nave.x - b.x); ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(angle);
                     if(b.parryActive) { ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, 35, 0, Math.PI*2); ctx.stroke(); }
-                    
-                    ctx.fillStyle = '#ff0044'; // Color del Doppel
-                    ctx.shadowBlur = 15; ctx.shadowColor = '#ff0044';
-                    ctx.beginPath(); ctx.moveTo(20,0); ctx.lineTo(-15, -15); ctx.lineTo(-15, 15); ctx.fill();
-                    ctx.restore();
-                } else {
-                    ctx.shadowBlur = 20; ctx.shadowColor = '#ff3366';
-                    ctx.fillStyle = '#ff3366';
-                    ctx.beginPath(); ctx.arc(b.x, b.y, 45, 0, Math.PI*2); ctx.fill();
-                    ctx.shadowBlur = 0;
-                }
+                    ctx.fillStyle = '#ff0044'; ctx.shadowBlur = 15; ctx.shadowColor = '#ff0044'; ctx.beginPath(); ctx.moveTo(20,0); ctx.lineTo(-15, -15); ctx.lineTo(-15, 15); ctx.fill(); ctx.restore();
+                } else { ctx.shadowBlur = 20; ctx.shadowColor = '#ff3366'; ctx.fillStyle = '#ff3366'; ctx.beginPath(); ctx.arc(b.x, b.y, 45, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0; }
             });
 
-            // Balas Enemigas y Jugador
             enemyBullets.forEach(eb => { ctx.fillStyle = eb.color; ctx.beginPath(); ctx.arc(eb.x, eb.y, 5, 0, Math.PI*2); ctx.fill(); });
             bullets.forEach(b => { ctx.fillStyle = b.color; ctx.fillRect(b.x-2, b.y-10, 4, 20); });
 
-            // Nave Jugador
             if(!nave.inmune || frameCount % 10 < 5) {
                 if(parryActive) { ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(nave.x, nave.y, 35, 0, Math.PI*2); ctx.stroke(); }
                 const angle = Math.atan2(input.aimY - nave.y, input.aimX - nave.x);
                 ctx.save(); ctx.translate(nave.x, nave.y); ctx.rotate(angle);
-                
-                ctx.shadowBlur = 15; ctx.shadowColor = '#1e90ff';
-                ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(20,0); ctx.lineTo(-15, -15); ctx.lineTo(-15, 15); ctx.fill();
-                ctx.restore();
+                ctx.shadowBlur = 15; ctx.shadowColor = '#1e90ff'; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(20,0); ctx.lineTo(-15, -15); ctx.lineTo(-15, 15); ctx.fill(); ctx.restore();
             }
 
-            // Mira (Crosshair) para Mando/Ratón
-            if(!isMobile || usingGamepad) {
-                ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)'; ctx.lineWidth = 2;
-                ctx.beginPath(); ctx.arc(input.aimX, input.aimY, 10, 0, Math.PI*2); ctx.moveTo(input.aimX-15, input.aimY); ctx.lineTo(input.aimX+15, input.aimY); ctx.moveTo(input.aimX, input.aimY-15); ctx.lineTo(input.aimX, input.aimY+15); ctx.stroke();
-            }
+            // Dibuja la mira (Crosshair)
+            ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(input.aimX, input.aimY, 10, 0, Math.PI*2); ctx.moveTo(input.aimX-15, input.aimY); ctx.lineTo(input.aimX+15, input.aimY); ctx.moveTo(input.aimX, input.aimY-15); ctx.lineTo(input.aimX, input.aimY+15); ctx.stroke();
 
-            // Partículas
             particles.forEach((p, i) => {
                 if(p.type === 'bomb_ring') { ctx.strokeStyle = p.color; ctx.globalAlpha = p.life; ctx.lineWidth = 10; ctx.beginPath(); ctx.arc(p.x, p.y, (1 - p.life) * 1500, 0, Math.PI*2); ctx.stroke(); } 
                 else { ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 3, 3); }
@@ -906,16 +685,11 @@
             ctx.globalAlpha = 1;
         }
 
-        ctx.restore();
-        update();
-        requestAnimationFrame(draw);
+        ctx.restore(); update(); requestAnimationFrame(draw);
     }
 
-    // Inicializar Estrellas (Cubre resolución máxima para que no queden vacíos)
     for(let i=0; i<150; i++) stars.push({x: Math.random()*3000, y: Math.random()*3000, z: Math.random(), size: Math.random()*2});
-
-    applyOptions(); // Inicia la config
-    draw(); // Inicia el render loop
+    applyOptions(); draw();
 </script>
 </body>
 </html>
