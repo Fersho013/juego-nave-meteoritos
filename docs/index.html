@@ -95,6 +95,7 @@
                 <h1>SPACE MISSION</h1>
                 <div class="btn-group">
                     <button onclick="showScreen('menu-play')">Jugar</button>
+                    <button id="btn-device-toggle" onclick="toggleDeviceMode()" style="border-color: var(--success); color: var(--success);">Cambiar a Modo Móvil</button>
                     <button onclick="showScreen('menu-custom')">Juego Personalizado</button>
                     <button onclick="showScreen('menu-controls')">Controles</button>
                     <button onclick="showScreen('menu-options')">Configuración</button>
@@ -160,7 +161,7 @@
                         <label>Resolución Área</label>
                         <select id="opt-size">
                             <option value="auto">Auto / Pantalla Completa (Móvil)</option>
-                            <option value="800x600">800 x 600 (PC Estandard)</option>
+                            <option value="800x600" selected>800 x 600 (PC Estandard)</option>
                             <option value="1000x700">1000 x 700 (PC Ampliada)</option>
                             <option value="1200x800">1200 x 800 (PC Máxima)</option>
                         </select>
@@ -240,11 +241,75 @@
     const input = { moveX: 0, moveY: 0, aimX: 400, aimY: 300, shoot: false, triple: false, bomb: false, parry: false, pause: false };
     const keys = {};
     let usingGamepad = false, isMobile = /Mobi|Android/i.test(navigator.userAgent);
+    let isForcedMobile = false; // Nueva variable de estado para el botón
+
+    // --- LÓGICA DEL BOTÓN MODO MÓVIL / PC ---
+    function toggleDeviceMode() {
+        isForcedMobile = !isForcedMobile;
+        const btn = document.getElementById('btn-device-toggle');
+        
+        if (isForcedMobile) {
+            // Cambiar a MODO MÓVIL
+            btn.innerText = "CAMBIAR A MODO PC";
+            btn.style.borderColor = "var(--primary)";
+            btn.style.color = "var(--primary)";
+            isMobile = true;
+            
+            // Intentar solicitar Pantalla Completa y forzar Landscape
+            let elem = document.documentElement;
+            if (elem.requestFullscreen) {
+                elem.requestFullscreen().then(() => {
+                    if (screen.orientation && screen.orientation.lock) {
+                        screen.orientation.lock('landscape').catch(e => console.log("El bloqueo de orientación no es soportado o falló", e));
+                    }
+                }).catch(e => console.log("Error de pantalla completa", e));
+            }
+            
+            // Ajustar resolución al 100% de la pantalla actual
+            config.w = window.innerWidth;
+            config.h = window.innerHeight;
+            
+        } else {
+            // Cambiar a MODO PC
+            btn.innerText = "CAMBIAR A MODO MÓVIL";
+            btn.style.borderColor = "var(--success)";
+            btn.style.color = "var(--success)";
+            
+            // Re-evaluar por UserAgent por si es realmente un móvil
+            isMobile = document.getElementById('opt-touch').value === 'force' || /Mobi|Android/i.test(navigator.userAgent);
+            
+            // Salir de pantalla completa si está activa
+            if (document.fullscreenElement && document.exitFullscreen) {
+                document.exitFullscreen().catch(e => console.log(e));
+            }
+            if (screen.orientation && screen.orientation.unlock) {
+                screen.orientation.unlock();
+            }
+            
+            // Restaurar configuración PC (800x600 o lo que marque el select)
+            let sizeVal = document.getElementById('opt-size').value;
+            if (sizeVal !== 'auto') {
+                const size = sizeVal.split('x');
+                config.w = parseInt(size[0]); 
+                config.h = parseInt(size[1]);
+            }
+        }
+        
+        // Aplicar el nuevo tamaño de forma inmediata
+        canvas.width = config.w;
+        canvas.height = config.h;
+        document.getElementById('game-container').style.width = config.w + 'px';
+        document.getElementById('game-container').style.height = config.h + 'px';
+        
+        // Re-centrar la nave
+        nave.x = canvas.width / 2;
+        nave.y = canvas.height - 100;
+    }
     
     // UI y Config inicial
     function applyOptions() {
         const sizeVal = document.getElementById('opt-size').value;
-        if (sizeVal === 'auto') {
+        if (sizeVal === 'auto' || isForcedMobile) {
             config.w = window.innerWidth;
             config.h = window.innerHeight;
         } else {
@@ -261,6 +326,7 @@
         let touchOpt = document.getElementById('opt-touch').value;
         if(touchOpt === 'force') isMobile = true;
         else if (touchOpt === 'hide') isMobile = false;
+        else if (!isForcedMobile) isMobile = /Mobi|Android/i.test(navigator.userAgent);
 
         // Reubicar nave al cambiar pantalla
         nave.x = canvas.width / 2;
@@ -269,13 +335,24 @@
         showScreen('menu-main');
     }
 
-    // Auto-resize para la opción 'auto'
+    // Auto-resize para la opción 'auto' o 'Modo Móvil' forzado
     window.addEventListener('resize', () => {
-        if(document.getElementById('opt-size').value === 'auto') {
-            config.w = window.innerWidth; config.h = window.innerHeight;
-            canvas.width = config.w; canvas.height = config.h;
-            document.getElementById('game-container').style.width = config.w + 'px';
-            document.getElementById('game-container').style.height = config.h + 'px';
+        if(isForcedMobile || document.getElementById('opt-size').value === 'auto') {
+            // Pequeño retardo para dar tiempo a que la rotación del SO se complete
+            setTimeout(() => {
+                config.w = window.innerWidth; 
+                config.h = window.innerHeight;
+                canvas.width = config.w; 
+                canvas.height = config.h;
+                document.getElementById('game-container').style.width = config.w + 'px';
+                document.getElementById('game-container').style.height = config.h + 'px';
+                
+                // Si estamos en el menú, reubicamos la nave para evitar que quede fuera de pantalla
+                if (gameState === 'MENU') {
+                    nave.x = canvas.width / 2;
+                    nave.y = canvas.height - 100;
+                }
+            }, 150);
         }
     });
 
