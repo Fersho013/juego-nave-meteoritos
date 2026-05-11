@@ -238,6 +238,7 @@
     let gameMode = 'progressive';
     let score = 0, lives = 3, bombs = 3, frameCount = 0;
     let parryActive = false, parryCooldown = false;
+    let parryTimer = 0; // Temporizador para la barra visual de recarga
     let currentWave = 1, wavePhase = 1; 
     let screenShake = 0; 
     let config = { w: 800, h: 600, diff: 2 };
@@ -250,9 +251,10 @@
     // --- MOTOR DE ENTRADA (INPUT) ---
     const input = { moveX: 0, moveY: 0, aimX: 400, aimY: 300, shoot: false, triple: false, bomb: false, parry: false, pause: false };
     const keys = {};
+    let touchMoveX = 0, touchMoveY = 0; // Variables independientes para el Pad Táctil
     let usingGamepad = false, isMobile = /Mobi|Android/i.test(navigator.userAgent);
     let isForcedMobile = false; 
-    let rightJoyActive = false; // Flag para saber si se está usando el joystick derecho
+    let rightJoyActive = false;
 
     // Lógica del botón de Modo Móvil / PC
     function toggleDeviceMode() {
@@ -353,8 +355,7 @@
         let center = {x:0, y:0};
 
         base.addEventListener('touchstart', e => {
-            e.preventDefault();
-            e.stopPropagation();
+            e.preventDefault(); e.stopPropagation();
             if(touchId !== null) return; 
             
             const touch = e.changedTouches[0];
@@ -367,21 +368,20 @@
         }, {passive: false});
 
         base.addEventListener('touchmove', e => {
-            e.preventDefault();
-            e.stopPropagation();
+            e.preventDefault(); e.stopPropagation();
             for(let t of e.changedTouches) {
                 if(t.identifier === touchId) { updateJoy(t); break; }
             }
         }, {passive: false});
 
         const endTouch = e => {
-            e.preventDefault();
-            e.stopPropagation();
+            e.preventDefault(); e.stopPropagation();
             for(let t of e.changedTouches) {
                 if(t.identifier === touchId) {
                     touchId = null;
                     stick.style.transform = `translate(-50%, -50%)`;
-                    if(type === 'left') { input.moveX = 0; input.moveY = 0; }
+                    // Al soltar, reseteamos las variables independientes
+                    if(type === 'left') { touchMoveX = 0; touchMoveY = 0; }
                     if(type === 'right') rightJoyActive = false;
                     break;
                 }
@@ -394,16 +394,16 @@
         function updateJoy(touch) {
             let dx = touch.clientX - center.x; let dy = touch.clientY - center.y;
             let dist = Math.hypot(dx, dy);
-            let maxDist = 40; // Radio máximo de movimiento visual
+            let maxDist = 40; 
 
             if(dist > maxDist) { dx = (dx/dist)*maxDist; dy = (dy/dist)*maxDist; }
             stick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
 
             if(type === 'left') {
-                input.moveX = dx / maxDist; input.moveY = dy / maxDist;
+                // Guardamos en las variables independientes para no ser borradas por teclado
+                touchMoveX = dx / maxDist; touchMoveY = dy / maxDist;
             } else if (type === 'right') {
-                if (dist > 5) { // Pequeña zona muerta para no temblar
-                    // Actualiza la mira relativa a la posición de la nave
+                if (dist > 5) {
                     input.aimX = nave.x + (dx / maxDist) * 300;
                     input.aimY = nave.y + (dy / maxDist) * 300;
                 }
@@ -440,7 +440,11 @@
     function pollInput() {
         if(gameState === 'MENU' || gameState === 'CONTINUE' || gameState === 'WIN') return;
 
-        input.moveX = 0; input.moveY = 0;
+        // Asignamos primero la lectura limpia del touch
+        input.moveX = touchMoveX; 
+        input.moveY = touchMoveY;
+        
+        // Si hay teclas presionadas, sobreescriben al touch momentáneamente
         if(keys['KeyW']) input.moveY = -1; if(keys['KeyS']) input.moveY = 1;
         if(keys['KeyA']) input.moveX = -1; if(keys['KeyD']) input.moveX = 1;
         
@@ -462,9 +466,7 @@
             if(pad.buttons[9].pressed && !startBtnPressed) { togglePause(); startBtnPressed = true; } else if (!pad.buttons[9].pressed) startBtnPressed = false;
         }
 
-        // LÓGICA DE AUTO-APUNTADO: Si es móvil, no usa gamepad y NO está usando el pad derecho
         if(isMobile && !usingGamepad && !rightJoyActive && (input.moveX !== 0 || input.moveY !== 0)) {
-            // Apunta en la dirección en la que te mueves
             input.aimX = nave.x + input.moveX * 150;
             input.aimY = nave.y + input.moveY * 150;
         }
@@ -482,7 +484,7 @@
         gameMode = mode; gameState = 'PLAYING';
         score = 0; currentWave = 1; wavePhase = 1;
         lives = parseInt(document.getElementById('opt-lives').value);
-        bombs = 3; screenShake = 0;
+        bombs = 3; screenShake = 0; parryTimer = 0; parryCooldown = false;
         bullets = []; enemyBullets = []; enemies = []; bosses = []; pickUps = []; particles = [];
         nave.x = canvas.width/2; nave.y = canvas.height - 100; nave.vx = 0; nave.vy = 0;
         showScreen('none');
@@ -575,6 +577,12 @@
         if(gameState !== 'PLAYING') return;
         frameCount++; checkProgression();
 
+        // Actualización de la Barra de Parry
+        if (parryCooldown) {
+            parryTimer -= 1000/60; // Descontar tiempo (asumiendo 60fps)
+            if (parryTimer <= 0) parryTimer = 0;
+        }
+
         nave.vx += input.moveX * nave.accel; nave.vy += input.moveY * nave.accel;
         nave.vx *= nave.fric; nave.vy *= nave.fric;
         nave.x = Math.max(10, Math.min(canvas.width-10, nave.x + nave.vx));
@@ -583,8 +591,10 @@
         if(input.shoot && frameCount % 6 === 0) spawnBullets(false);
         if(input.triple && frameCount % 12 === 0) spawnBullets(true);
         if(input.bomb) triggerBomb(true, nave);
+        
         if(input.parry && !parryCooldown) {
             parryActive = true; parryCooldown = true; input.parry = false;
+            parryTimer = 2000; // 2 segundos de cooldown
             document.getElementById('val-parry').innerText = "ACTIVE"; document.getElementById('val-parry').style.color = "var(--success)";
             setTimeout(() => { parryActive = false; document.getElementById('val-parry').innerText = "RECHARGING"; document.getElementById('val-parry').style.color = "var(--danger)"; }, 200);
             setTimeout(() => { parryCooldown = false; document.getElementById('val-parry').innerText = "READY"; document.getElementById('val-parry').style.color = "var(--success)"; }, 2000);
@@ -634,18 +644,50 @@
             if(hit || bul.y < 0 || bul.y > canvas.height || bul.x < 0 || bul.x > canvas.width) bullets.splice(bi, 1);
         });
 
-        enemyBullets.forEach((eb, ei) => {
+        // Bucle Seguro para iterar Balas Enemigas (Destrucción por Parry y Colisión)
+        for (let ei = enemyBullets.length - 1; ei >= 0; ei--) {
+            let eb = enemyBullets[ei];
             eb.x += eb.vx; eb.y += eb.vy;
-            if(Math.hypot(eb.x - nave.x, eb.y - nave.y) < 12) { if(parryActive) { createExplosion(eb.x, eb.y, '#00ffcc', 5); score += 50; } else { playerHit(); } enemyBullets.splice(ei, 1); }
-            if(eb.y > canvas.height || eb.x < 0 || eb.x > canvas.width || eb.y < -50) enemyBullets.splice(ei, 1);
-        });
+            let destroyed = false;
+            
+            // Parry purga balas cercanas
+            if (parryActive && Math.hypot(eb.x - nave.x, eb.y - nave.y) < 45) {
+                createExplosion(eb.x, eb.y, '#00ffcc', 5);
+                score += 50;
+                enemyBullets.splice(ei, 1);
+                destroyed = true;
+            }
+            
+            // Colisión normal con el jugador
+            if (!destroyed && Math.hypot(eb.x - nave.x, eb.y - nave.y) < 12) {
+                playerHit();
+                enemyBullets.splice(ei, 1);
+                destroyed = true;
+            }
+            
+            // Fuera de pantalla
+            if (!destroyed && (eb.y > canvas.height || eb.x < 0 || eb.x > canvas.width || eb.y < -50)) {
+                enemyBullets.splice(ei, 1);
+            }
+        }
 
         pickUps.forEach((p, i) => { p.y += 2; if(Math.hypot(p.x - nave.x, p.y - nave.y) < 30) { if(p.type === 'bomb') bombs++; updateHUD(); pickUps.splice(i, 1); } });
         updateHUD();
     }
 
-    // --- RENDERIZADO (DRAW) ---
-    function draw() {
+    // --- RENDERIZADO (DRAW) LIMITADO A 60 FPS ---
+    let lastDrawTime = 0;
+    const fpsInterval = 1000 / 60; // Fija el límite en 60 FPS exactos
+
+    function draw(currentTime) {
+        requestAnimationFrame(draw);
+        if (!currentTime) currentTime = performance.now();
+        
+        // Control de Delta Time para monitores de Altos Hz
+        const deltaTime = currentTime - lastDrawTime;
+        if (deltaTime < fpsInterval) return;
+        lastDrawTime = currentTime - (deltaTime % fpsInterval);
+
         ctx.save();
         if(screenShake > 0) { ctx.translate((Math.random()-0.5)*screenShake, (Math.random()-0.5)*screenShake); screenShake *= 0.9; if(screenShake < 0.5) screenShake = 0; }
         ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -671,9 +713,17 @@
                 const angle = Math.atan2(input.aimY - nave.y, input.aimX - nave.x);
                 ctx.save(); ctx.translate(nave.x, nave.y); ctx.rotate(angle);
                 ctx.shadowBlur = 15; ctx.shadowColor = '#1e90ff'; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(20,0); ctx.lineTo(-15, -15); ctx.lineTo(-15, 15); ctx.fill(); ctx.restore();
+                
+                // --- RENDER BARRA DE RECARGA PARRY ---
+                if (parryCooldown && parryTimer > 0) {
+                    let ratio = 1 - (parryTimer / 2000); // Se vacía rápido y se llena
+                    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                    ctx.fillRect(nave.x - 20, nave.y + 25, 40, 4);
+                    ctx.fillStyle = '#00ffcc';
+                    ctx.fillRect(nave.x - 20, nave.y + 25, 40 * ratio, 4);
+                }
             }
 
-            // Dibuja la mira (Crosshair)
             ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)'; ctx.lineWidth = 2;
             ctx.beginPath(); ctx.arc(input.aimX, input.aimY, 10, 0, Math.PI*2); ctx.moveTo(input.aimX-15, input.aimY); ctx.lineTo(input.aimX+15, input.aimY); ctx.moveTo(input.aimX, input.aimY-15); ctx.lineTo(input.aimX, input.aimY+15); ctx.stroke();
 
@@ -685,11 +735,12 @@
             ctx.globalAlpha = 1;
         }
 
-        ctx.restore(); update(); requestAnimationFrame(draw);
+        ctx.restore(); update();
     }
 
     for(let i=0; i<150; i++) stars.push({x: Math.random()*3000, y: Math.random()*3000, z: Math.random(), size: Math.random()*2});
-    applyOptions(); draw();
+    applyOptions(); 
+    requestAnimationFrame(draw); // Inicia el motor visual anclado al refresco calibrado
 </script>
 </body>
 </html>
