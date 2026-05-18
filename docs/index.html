@@ -47,6 +47,10 @@
         #hud { position: absolute; top: 0; left: 0; width: 100%; padding: 15px 25px; display: none; justify-content: space-between; pointer-events: none; z-index: 50; }
         .stat-box { font-size: 0.9rem; background: rgba(0,0,0,0.5); padding: 5px 10px; border-left: 3px solid var(--primary); }
         
+        /* MODIFICADO: Botón de volumen maestro */
+        .volume-btn { position: absolute; top: 15px; left: 15px; width: 45px; height: 45px; border-radius: 50%; background: rgba(10, 10, 10, 0.8); border: 2px solid var(--primary); color: white; display: flex; justify-content: center; align-items: center; font-size: 1.2rem; cursor: pointer; z-index: 200; transition: transform 0.2s; pointer-events: auto; }
+        .volume-btn:active { transform: scale(0.9); }
+
         #boss-container { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); width: 70%; display: none; z-index: 50; }
         .boss-hp-row { margin-bottom: 8px; }
         .hp-bar-bg { width: 100%; height: 8px; background: #222; border: 1px solid #444; margin-top: 4px; }
@@ -68,11 +72,8 @@
         /* Botones de Acción con Iconos */
         .t-btn { position: absolute; width: 55px; height: 55px; border-radius: 50%; background: rgba(10, 10, 10, 0.7); border: 2px solid; color: white; display: flex; justify-content: center; align-items: center; font-size: 1.6rem; pointer-events: auto; touch-action: none; transition: transform 0.1s; z-index: 65;}
         
-        /* Layout Ergonómico (Arco alrededor del Joy Derecho) MODIFICADO: Eliminado btn-shoot */
         #btn-triple { right: 150px; bottom: 120px; border-color: var(--warning); text-shadow: 0 0 5px var(--warning); } /* Triple */
         #btn-parry { right: 70px; bottom: 170px; border-color: var(--success); text-shadow: 0 0 5px var(--success); } /* Escudo/Parry */
-        
-        /* Bomba cerca del Joystick Izquierdo para el pulgar izquierdo */
         #btn-bomb { left: 170px; bottom: 40px; border-color: var(--danger); text-shadow: 0 0 5px var(--danger); } 
         
         #btn-pause-m { position: absolute; top: 15px; right: 15px; padding: 10px; background: #222; border: 1px solid #fff; color: #fff; pointer-events: auto; border-radius: 5px; font-weight: bold; font-family: 'Orbitron';}
@@ -81,6 +82,8 @@
 <body>
 
     <div id="game-container">
+        <button id="btn-volume" class="volume-btn" onclick="toggleVolume()">🔊</button>
+
         <div id="hud">
             <div class="stat-box">SCORE: <span id="val-score">0</span><br>BOMBS: <span id="val-bombs">3</span> [LB/SPACE]</div>
             <div id="level-tag" style="color: var(--warning);">READY</div>
@@ -90,10 +93,8 @@
 
         <div id="mobile-ui">
             <button id="btn-pause-m" onclick="togglePause()">⏸️ PAUSA</button>
-            
             <div id="joy-base-l" class="touch-zone"><div id="joy-stick-l" class="joy-stick-inner"></div></div>
             <div id="joy-base-r" class="touch-zone"><div id="joy-stick-r" class="joy-stick-inner"></div></div>
-            
             <div id="btn-triple" class="t-btn">🔱</div>
             <div id="btn-parry" class="t-btn">🛡️</div>
             <div id="btn-bomb" class="t-btn">💣</div>
@@ -104,11 +105,31 @@
                 <h1>SPACE MISSION</h1>
                 <div class="btn-group">
                     <button onclick="showScreen('menu-play')">Jugar</button>
+                    <button onclick="showScreen('menu-customize')" style="border-color: #9933ff; color: #9933ff;">Personalizar Nave</button>
                     <button id="btn-device-toggle" onclick="toggleDeviceMode()" style="border-color: var(--success); color: var(--success);">Cambiar a Modo Móvil</button>
                     <button onclick="showScreen('menu-custom')">Juego Personalizado</button>
                     <button onclick="showScreen('menu-controls')">Controles</button>
                     <button onclick="showScreen('menu-options')">Configuración</button>
                 </div>
+            </div>
+        </div>
+
+        <div id="menu-customize" class="ui-screen">
+            <div class="menu-card">
+                <h1>PERSONALIZAR NAVE</h1>
+                <canvas id="previewCanvas" width="150" height="150" style="margin: 0 auto 20px; display: block; border: 2px solid #333; background: #0a0a0a; border-radius: 10px;"></canvas>
+                <p style="font-size: 0.85rem; color: #aaa; margin-bottom: 15px;">Selecciona el color primario de tu nave:</p>
+                
+                <div class="options-grid" style="grid-template-columns: repeat(3, 1fr); gap: 10px;">
+                    <button style="color: #ff3366; border-color: #ff3366;" onclick="changeNaveColor('#ff3366')">ROJO</button>
+                    <button style="color: #1e90ff; border-color: #1e90ff;" onclick="changeNaveColor('#1e90ff')">AZUL</button>
+                    <button style="color: #ffffff; border-color: #ffffff;" onclick="changeNaveColor('#ffffff')">BLANCO</button>
+                    <button style="color: #ffcc00; border-color: #ffcc00;" onclick="changeNaveColor('#ffcc00')">AMARILLO</button>
+                    <button style="color: #00ffcc; border-color: #00ffcc;" onclick="changeNaveColor('#00ffcc')">VERDE</button>
+                    <button style="color: #9933ff; border-color: #9933ff;" onclick="changeNaveColor('#9933ff')">MORADO</button>
+                    <button style="color: #ff66cc; border-color: #ff66cc; grid-column: span 3;" onclick="changeNaveColor('#ff66cc')">ROSA</button>
+                </div>
+                <button onclick="showScreen('menu-main')" style="margin-top: 20px; border-color:#666; color:#666;">Volver</button>
             </div>
         </div>
 
@@ -228,23 +249,40 @@
     </div>
 
 <script>
-    // --- MODIFICADO: IMPLEMENTACIÓN DE WEB AUDIO API (SFX) ---
+    // --- IMPLEMENTACIÓN DE WEB AUDIO API (SFX) Y CONTROL MAESTRO DE VOLUMEN ---
     let audioCtx;
+    let masterGainNode;
+    let isMuted = false;
+
     function initAudio() {
         if (!audioCtx) {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            masterGainNode = audioCtx.createGain();
+            masterGainNode.connect(audioCtx.destination);
+            masterGainNode.gain.value = isMuted ? 0 : 0.5; // Volumen por defecto
         } else if (audioCtx.state === 'suspended') {
             audioCtx.resume();
         }
     }
 
+    // MODIFICADO: Toggle global de volumen
+    function toggleVolume() {
+        initAudio(); // Forzamos inicialización por si se toca antes de jugar
+        isMuted = !isMuted;
+        document.getElementById('btn-volume').innerText = isMuted ? "🔇" : "🔊";
+        if (masterGainNode) {
+            masterGainNode.gain.value = isMuted ? 0 : 0.5;
+        }
+    }
+
+    // MODIFICADO: Conexión de SFX al masterGainNode
     const sfx = {
         shoot: () => {
             if (!audioCtx) return;
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.type = 'square';
-            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.connect(gain); gain.connect(masterGainNode);
             osc.frequency.setValueAtTime(800, audioCtx.currentTime);
             osc.frequency.exponentialRampToValueAtTime(150, audioCtx.currentTime + 0.1);
             gain.gain.setValueAtTime(0.02, audioCtx.currentTime);
@@ -256,7 +294,7 @@
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.type = 'sine';
-            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.connect(gain); gain.connect(masterGainNode);
             osc.frequency.setValueAtTime(400, audioCtx.currentTime);
             osc.frequency.linearRampToValueAtTime(1200, audioCtx.currentTime + 0.25);
             gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
@@ -268,7 +306,7 @@
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.type = 'sawtooth';
-            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.connect(gain); gain.connect(masterGainNode);
             osc.frequency.setValueAtTime(150, audioCtx.currentTime);
             osc.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.6);
             gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
@@ -280,7 +318,7 @@
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.type = 'sawtooth';
-            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.connect(gain); gain.connect(masterGainNode);
             osc.frequency.setValueAtTime(250, audioCtx.currentTime);
             osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.4);
             gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
@@ -299,14 +337,16 @@
     let score = 0, lives = 3, bombs = 3, frameCount = 0;
     let parryActive = false, parryCooldown = false;
     let parryTimer = 0; 
-    let currentWave = 1, wavePhase = 1; 
     let screenShake = 0; 
     let config = { w: 800, h: 600, diff: 2 };
     let customSelection = [];
 
     // --- OBJETOS ---
-    const nave = { x: 400, y: 500, vx: 0, vy: 0, accel: 0.9, fric: 0.90, inmune: false };
-    let bullets = [], enemyBullets = [], enemies = [], particles = [], stars = [], bosses = [], pickUps = [];
+    // MODIFICADO: Añadido color por defecto de la nave
+    const nave = { x: 400, y: 500, vx: 0, vy: 0, accel: 0.9, fric: 0.90, inmune: false, color: '#ffffff' };
+    
+    // MODIFICADO: Añadido arreglo para los textos flotantes ("+1 VIDA")
+    let bullets = [], enemyBullets = [], enemies = [], particles = [], stars = [], bosses = [], pickUps = [], floatingTexts = [];
     
     // --- MOTOR DE ENTRADA (INPUT) ---
     const input = { moveX: 0, moveY: 0, aimX: 400, aimY: 300, shoot: false, triple: false, bomb: false, parry: false, pause: false };
@@ -316,7 +356,27 @@
     let isForcedMobile = false; 
     let rightJoyActive = false;
 
-    // Lógica del botón de Modo Móvil / PC
+    // --- LIVE PREVIEW MENU CUSTOMIZATION ---
+    // MODIFICADO: Renderizado continuo del mini-canvas de la nave
+    const pCanvas = document.getElementById('previewCanvas');
+    const pCtx = pCanvas.getContext('2d');
+    function renderPreview() {
+        pCtx.clearRect(0, 0, pCanvas.width, pCanvas.height);
+        pCtx.save();
+        pCtx.translate(pCanvas.width / 2, pCanvas.height / 2);
+        pCtx.rotate(-Math.PI / 2); // Apuntando hacia arriba en el menú
+        pCtx.shadowBlur = 15; pCtx.shadowColor = nave.color;
+        pCtx.fillStyle = nave.color;
+        pCtx.beginPath(); pCtx.moveTo(25, 0); pCtx.lineTo(-20, -20); pCtx.lineTo(-20, 20); pCtx.fill();
+        pCtx.restore();
+        requestAnimationFrame(renderPreview);
+    }
+    renderPreview();
+
+    function changeNaveColor(newColor) {
+        nave.color = newColor;
+    }
+
     function toggleDeviceMode() {
         isForcedMobile = !isForcedMobile;
         const btn = document.getElementById('btn-device-toggle');
@@ -383,7 +443,7 @@
     });
 
     function showScreen(id) {
-        initAudio(); // MODIFICADO: Iniciar/reanudar AudioContext con interacción de interfaz
+        initAudio(); 
         document.querySelectorAll('.ui-screen').forEach(s => s.classList.remove('active'));
         if(id !== 'none' && document.getElementById(id)) document.getElementById(id).classList.add('active');
     }
@@ -400,17 +460,15 @@
         showScreen('menu-main');
     }
 
-    // --- EVENTOS PC (TECLADO/RATÓN) ---
+    // --- EVENTOS PC ---
     window.addEventListener('keydown', e => { keys[e.code] = true; if(e.code === 'KeyP') { togglePause(); keys[e.code] = false; } });
     window.addEventListener('keyup', e => keys[e.code] = false);
     canvas.addEventListener('mousemove', e => { const rect = canvas.getBoundingClientRect(); input.aimX = e.clientX - rect.left; input.aimY = e.clientY - rect.top; usingGamepad = false; });
-    
-    // El ratón de PC sigue manteniendo la lógica inalterada para el disparo con clicks
     canvas.addEventListener('mousedown', e => { initAudio(); if(e.button === 0) input.shoot = true; if(e.button === 2) input.triple = true; });
     canvas.addEventListener('mouseup', e => { if(e.button === 0) input.shoot = false; if(e.button === 2) input.triple = false; });
     canvas.addEventListener('contextmenu', e => e.preventDefault());
 
-    // --- MOTOR MULTI-TOUCH NATIVO PARA MÓVILES ---
+    // --- MOTOR MULTI-TOUCH NATIVO ---
     function setupJoystick(baseId, stickId, type) {
         const base = document.getElementById(baseId);
         const stick = document.getElementById(stickId);
@@ -418,7 +476,7 @@
         let center = {x:0, y:0};
 
         base.addEventListener('touchstart', e => {
-            initAudio(); // MODIFICADO: Inicia el audio también al tocar el joystick
+            initAudio(); 
             e.preventDefault(); e.stopPropagation();
             if(touchId !== null) return; 
             
@@ -447,7 +505,7 @@
                     if(type === 'left') { touchMoveX = 0; touchMoveY = 0; }
                     if(type === 'right') { 
                         rightJoyActive = false; 
-                        input.shoot = false; // MODIFICADO: Detener disparo inmediatamente al soltar el joystick derecho
+                        input.shoot = false; 
                     }
                     break;
                 }
@@ -471,9 +529,9 @@
                 if (dist > 5) {
                     input.aimX = nave.x + (dx / maxDist) * 300;
                     input.aimY = nave.y + (dy / maxDist) * 300;
-                    input.shoot = true; // MODIFICADO: Disparo automático mientras el Pad Derecho este apuntando
+                    input.shoot = true; 
                 } else {
-                    input.shoot = false; // MODIFICADO: Dejar de disparar si la palanca vuelve casi al centro
+                    input.shoot = false; 
                 }
             }
         }
@@ -485,7 +543,7 @@
     const bindTouchBtn = (id, action) => {
         const el = document.getElementById(id);
         el.addEventListener('touchstart', e => {
-            initAudio(); // MODIFICADO: Inicia audio en los botones también
+            initAudio(); 
             e.preventDefault(); e.stopPropagation();
             input[action] = true;
             el.style.transform = 'scale(0.85)';
@@ -502,12 +560,9 @@
         el.addEventListener('touchcancel', endBtn, {passive: false});
     };
     
-    // MODIFICADO: Eliminado bindTouchBtn de 'btn-shoot'
     bindTouchBtn('btn-triple', 'triple'); 
     bindTouchBtn('btn-parry', 'parry'); bindTouchBtn('btn-bomb', 'bomb');
 
-    // --- PROCESAMIENTO GENERAL DE INPUT ---
-    let startBtnPressed = false;
     function pollInput() {
         if(gameState === 'MENU' || gameState === 'CONTINUE' || gameState === 'WIN') return;
 
@@ -541,7 +596,6 @@
         }
     }
 
-    // --- LÓGICA DE MISIONES Y JUEGO ---
     function startCustom() {
         const cbs = document.querySelectorAll('#custom-checkboxes input:checked');
         customSelection = Array.from(cbs).map(cb => cb.value);
@@ -550,12 +604,12 @@
     }
 
     function startMission(mode) {
-        initAudio(); // MODIFICADO: Inicia el audio al jugar
+        initAudio(); 
         gameMode = mode; gameState = 'PLAYING';
         score = 0; currentWave = 1; wavePhase = 1;
         lives = parseInt(document.getElementById('opt-lives').value);
         bombs = 3; screenShake = 0; parryTimer = 0; parryCooldown = false;
-        bullets = []; enemyBullets = []; enemies = []; bosses = []; pickUps = []; particles = [];
+        bullets = []; enemyBullets = []; enemies = []; bosses = []; pickUps = []; particles = []; floatingTexts = [];
         nave.x = canvas.width/2; nave.y = canvas.height - 100; nave.vx = 0; nave.vy = 0;
         showScreen('none');
         document.getElementById('hud').style.display = 'flex';
@@ -575,7 +629,10 @@
     function spawnEnemy(forcedType = null) {
         if(bosses.length > 0 && gameMode !== 'custom') return;
         let type = 'common';
+        
+        // MODIFICADO: Sistema de aparición del enemigo especial de Vidas (Life Carrier) - 4% de probabilidad
         if(forcedType) type = forcedType;
+        else if (Math.random() < 0.04 && bosses.length === 0) type = 'life'; 
         else if(gameMode === 'progressive') {
             if(currentWave === 2) type = Math.random() > 0.7 ? 'special' : 'common';
             if(currentWave === 3) type = Math.random() > 0.7 ? 'elite' : (Math.random() > 0.5 ? 'special' : 'common');
@@ -583,7 +640,12 @@
             const avail = customSelection.filter(v => ['common','special','elite'].includes(v));
             if(avail.length > 0) type = avail[Math.floor(Math.random()*avail.length)]; else return;
         }
-        enemies.push({ x: Math.random() * (canvas.width - 40) + 20, y: -30, type: type, hp: type === 'elite' ? 120 : (type === 'special' ? 60 : 30), vx: (Math.random() - 0.5) * 2, vy: type === 'special' ? 3.5 : 2, shield: type === 'special', lastShot: 0 });
+
+        // MODIFICADO: El enemigo 'life' es más lento y tiene características únicas
+        let enemyHp = type === 'elite' ? 120 : (type === 'special' ? 60 : (type === 'life' ? 40 : 30));
+        let enemyVy = type === 'special' ? 3.5 : (type === 'life' ? 1 : 2); // 'life' se mueve mucho más lento
+        
+        enemies.push({ x: Math.random() * (canvas.width - 40) + 20, y: -30, type: type, hp: enemyHp, vx: (Math.random() - 0.5) * 2, vy: enemyVy, shield: type === 'special', lastShot: 0 });
     }
 
     function createBoss(type, id) {
@@ -618,7 +680,7 @@
     function winGame() { gameState = 'WIN'; document.getElementById('hud').style.display = 'none'; document.getElementById('mobile-ui').style.display = 'none'; showScreen('menu-win'); }
 
     function spawnBullets(isTriple) {
-        sfx.shoot(); // MODIFICADO: Sonido de Disparo Web Audio API
+        sfx.shoot(); 
         const baseAngle = Math.atan2(input.aimY - nave.y, input.aimX - nave.x);
         if(isTriple) {
             for(let i=-1; i<=1; i++) { const a = baseAngle + (i * 0.2); bullets.push({ x: nave.x, y: nave.y, vx: Math.cos(a)*12, vy: Math.sin(a)*12, color: '#ffcc00', dmg: 25 }); } screenShake = 3;
@@ -626,7 +688,7 @@
     }
 
     function triggerBomb(isPlayer, origin) {
-        if(isPlayer) { if(bombs <= 0) return; bombs--; input.bomb = false; sfx.bomb(); /* MODIFICADO: Sonido Bomba */ }
+        if(isPlayer) { if(bombs <= 0) return; bombs--; input.bomb = false; sfx.bomb(); }
         screenShake = 40; particles.push({x: origin.x, y: origin.y, vx:0, vy:0, life:1, type:'bomb_ring', color: isPlayer ? '#fff' : '#ff0044'});
         if(isPlayer) { enemyBullets = []; enemies.forEach(e => createExplosion(e.x, e.y, '#fff', 10)); enemies = []; bosses.forEach(b => { b.hp -= b.maxHp * 0.1; updateBossHP(b); }); } else { bullets = []; if(!parryActive) playerHit(true); }
         updateHUD();
@@ -634,7 +696,7 @@
 
     function playerHit(heavy = false) {
         if(nave.inmune) return;
-        sfx.hit(); // MODIFICADO: Sonido de Daño/Vida Perdida
+        sfx.hit(); 
         lives -= heavy ? 2 : 1; screenShake = heavy ? 30 : 15; nave.inmune = true; createExplosion(nave.x, nave.y, '#ff0000', heavy ? 40 : 25); updateHUD();
         setTimeout(() => nave.inmune = false, 2000); if(lives <= 0) promptContinue();
     }
@@ -654,23 +716,20 @@
             if (parryTimer <= 0) parryTimer = 0;
         }
 
+        // Lógica de movimiento
         nave.vx += input.moveX * nave.accel; nave.vy += input.moveY * nave.accel;
         nave.vx *= nave.fric; nave.vy *= nave.fric;
         nave.x = Math.max(10, Math.min(canvas.width-10, nave.x + nave.vx));
         nave.y = Math.max(10, Math.min(canvas.height-10, nave.y + nave.vy));
 
-        // MODIFICADO: Generador Visual de Propulsor trasero al detectar velocidad
+        // Partículas propulsoras
         if (Math.hypot(nave.vx, nave.vy) > 0.2) {
             const aimAngle = Math.atan2(input.aimY - nave.y, input.aimX - nave.x);
-            // Coloca las partículas levemente detrás de la nave
             const px = nave.x - Math.cos(aimAngle) * 15;
             const py = nave.y - Math.sin(aimAngle) * 15;
-            // Genera la estela expulsada en dirección opuesta
             particles.push({
-                x: px + (Math.random()-0.5)*10, 
-                y: py + (Math.random()-0.5)*10, 
-                vx: -Math.cos(aimAngle)*2 + (Math.random()-0.5), 
-                vy: -Math.sin(aimAngle)*2 + (Math.random()-0.5), 
+                x: px + (Math.random()-0.5)*10, y: py + (Math.random()-0.5)*10, 
+                vx: -Math.cos(aimAngle)*2 + (Math.random()-0.5), vy: -Math.sin(aimAngle)*2 + (Math.random()-0.5), 
                 life: 0.8, color: '#ffcc00', type: 'spark'
             });
         }
@@ -680,7 +739,7 @@
         if(input.bomb) triggerBomb(true, nave);
         
         if(input.parry && !parryCooldown) {
-            sfx.parry(); // MODIFICADO: Sonido de Escudo/Parry
+            sfx.parry(); 
             parryActive = true; parryCooldown = true; input.parry = false;
             parryTimer = 2000; 
             document.getElementById('val-parry').innerText = "ACTIVE"; document.getElementById('val-parry').style.color = "var(--success)";
@@ -725,9 +784,32 @@
             if(b.hp <= 0) { createExplosion(b.x, b.y, '#fff', 50); if(Math.random() > 0.3) pickUps.push({x: b.x, y: b.y, type: 'bomb'}); bosses.splice(i, 1); score += 10000; renderBossUI(); }
         });
 
+        // Colisiones de Balas del Jugador
         bullets.forEach((bul, bi) => {
             bul.x += bul.vx; bul.y += bul.vy; let hit = false;
-            enemies.forEach((e, ei) => { if(!hit && Math.hypot(bul.x - e.x, bul.y - e.y) < 25) { hit = true; if(e.shield) { e.shield = false; e.vy *= 1.5; } else { e.hp -= bul.dmg; if(e.hp <= 0) { createExplosion(e.x, e.y); enemies.splice(ei, 1); score += 150; if(Math.random()>0.95) pickUps.push({x:e.x, y:e.y, type:'bomb'}); } } } });
+            enemies.forEach((e, ei) => { 
+                if(!hit && Math.hypot(bul.x - e.x, bul.y - e.y) < 25) { 
+                    hit = true; 
+                    if(e.shield) { e.shield = false; e.vy *= 1.5; } 
+                    else { 
+                        e.hp -= bul.dmg; 
+                        if(e.hp <= 0) { 
+                            createExplosion(e.x, e.y); 
+                            enemies.splice(ei, 1); 
+                            score += 150; 
+
+                            // MODIFICADO: Lógica de recompensa del enemigo "Life Carrier"
+                            if(e.type === 'life') {
+                                lives++;
+                                updateHUD();
+                                floatingTexts.push({x: e.x, y: e.y, text: "+1 VIDA", life: 1.0, color: '#ff66cc'});
+                            }
+
+                            if(Math.random() > 0.95 && e.type !== 'life') pickUps.push({x:e.x, y:e.y, type:'bomb'}); 
+                        } 
+                    } 
+                } 
+            });
             bosses.forEach(b => { if(!hit && Math.hypot(bul.x - b.x, bul.y - b.y) < (b.type === 'doppel' ? 30 : 45)) { if(b.type === 'doppel' && b.parryActive) { createExplosion(bul.x, bul.y, '#00ffcc', 5); hit = true; } else { hit = true; b.hp -= bul.dmg; updateBossHP(b); } } });
             if(hit || bul.y < 0 || bul.y > canvas.height || bul.x < 0 || bul.x > canvas.width) bullets.splice(bi, 1);
         });
@@ -756,6 +838,14 @@
         }
 
         pickUps.forEach((p, i) => { p.y += 2; if(Math.hypot(p.x - nave.x, p.y - nave.y) < 30) { if(p.type === 'bomb') bombs++; updateHUD(); pickUps.splice(i, 1); } });
+        
+        // MODIFICADO: Actualización de los Textos Flotantes Visuales
+        floatingTexts.forEach((ft, i) => {
+            ft.y -= 1; // Flota hacia arriba
+            ft.life -= 0.02; // Se desvanece
+            if(ft.life <= 0) floatingTexts.splice(i, 1);
+        });
+
         updateHUD();
     }
 
@@ -779,7 +869,14 @@
 
         if(gameState === 'PLAYING' || gameState === 'PAUSED' || gameState === 'CONTINUE' || gameState === 'WIN') {
             pickUps.forEach(p => { ctx.fillStyle = '#ffcc00'; ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = '#000'; ctx.fillText('B', p.x-4, p.y+4); });
-            enemies.forEach(e => { ctx.fillStyle = e.type === 'elite' ? '#00ffcc' : (e.shield ? '#ffcc00' : '#ff3366'); if(e.type === 'elite') { ctx.beginPath(); ctx.moveTo(e.x, e.y+15); ctx.lineTo(e.x-15, e.y-10); ctx.lineTo(e.x+15, e.y-10); ctx.fill(); } else { ctx.fillRect(e.x-12, e.y-12, 24, 24); if(e.shield) { ctx.strokeStyle='#fff'; ctx.strokeRect(e.x-15, e.y-15, 30, 30); } } });
+            
+            // MODIFICADO: Renderizado distintivo para el Enemigo Especial "Life Carrier"
+            enemies.forEach(e => { 
+                ctx.fillStyle = e.type === 'elite' ? '#00ffcc' : (e.shield ? '#ffcc00' : (e.type === 'life' ? '#ff66cc' : '#ff3366')); 
+                if(e.type === 'elite') { ctx.beginPath(); ctx.moveTo(e.x, e.y+15); ctx.lineTo(e.x-15, e.y-10); ctx.lineTo(e.x+15, e.y-10); ctx.fill(); } 
+                else { ctx.fillRect(e.x-12, e.y-12, 24, 24); if(e.shield) { ctx.strokeStyle='#fff'; ctx.strokeRect(e.x-15, e.y-15, 30, 30); } } 
+            });
+            
             bosses.forEach(b => {
                 if(b.type === 'doppel') {
                     const angle = Math.atan2(nave.y - b.y, nave.x - b.x); ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(angle);
@@ -795,7 +892,12 @@
                 if(parryActive) { ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(nave.x, nave.y, 35, 0, Math.PI*2); ctx.stroke(); }
                 const angle = Math.atan2(input.aimY - nave.y, input.aimX - nave.x);
                 ctx.save(); ctx.translate(nave.x, nave.y); ctx.rotate(angle);
-                ctx.shadowBlur = 15; ctx.shadowColor = '#1e90ff'; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(20,0); ctx.lineTo(-15, -15); ctx.lineTo(-15, 15); ctx.fill(); ctx.restore();
+                
+                // MODIFICADO: Renderizado dinámico según el color configurado
+                ctx.shadowBlur = 15; ctx.shadowColor = nave.color; 
+                ctx.fillStyle = nave.color; 
+                
+                ctx.beginPath(); ctx.moveTo(20,0); ctx.lineTo(-15, -15); ctx.lineTo(-15, 15); ctx.fill(); ctx.restore();
                 
                 if (parryCooldown && parryTimer > 0) {
                     let ratio = 1 - (parryTimer / 2000); 
@@ -813,6 +915,15 @@
                 if(p.type === 'bomb_ring') { ctx.strokeStyle = p.color; ctx.globalAlpha = p.life; ctx.lineWidth = 10; ctx.beginPath(); ctx.arc(p.x, p.y, (1 - p.life) * 1500, 0, Math.PI*2); ctx.stroke(); } 
                 else { ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 3, 3); }
                 p.life -= 0.02; if(p.life <= 0) particles.splice(i, 1);
+            });
+            ctx.globalAlpha = 1;
+
+            // MODIFICADO: Pintar los textos flotantes (Ej: "+1 VIDA")
+            floatingTexts.forEach(ft => {
+                ctx.globalAlpha = Math.max(0, ft.life);
+                ctx.fillStyle = ft.color;
+                ctx.font = "bold 16px Orbitron";
+                ctx.fillText(ft.text, ft.x - 25, ft.y - 15);
             });
             ctx.globalAlpha = 1;
         }
