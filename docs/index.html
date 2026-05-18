@@ -68,8 +68,7 @@
         /* Botones de Acción con Iconos */
         .t-btn { position: absolute; width: 55px; height: 55px; border-radius: 50%; background: rgba(10, 10, 10, 0.7); border: 2px solid; color: white; display: flex; justify-content: center; align-items: center; font-size: 1.6rem; pointer-events: auto; touch-action: none; transition: transform 0.1s; z-index: 65;}
         
-        /* Layout Ergonómico (Arco alrededor del Joy Derecho) */
-        #btn-shoot { right: 170px; bottom: 40px; border-color: var(--primary); } /* Disparo Normal */
+        /* Layout Ergonómico (Arco alrededor del Joy Derecho) MODIFICADO: Eliminado btn-shoot */
         #btn-triple { right: 150px; bottom: 120px; border-color: var(--warning); text-shadow: 0 0 5px var(--warning); } /* Triple */
         #btn-parry { right: 70px; bottom: 170px; border-color: var(--success); text-shadow: 0 0 5px var(--success); } /* Escudo/Parry */
         
@@ -95,7 +94,6 @@
             <div id="joy-base-l" class="touch-zone"><div id="joy-stick-l" class="joy-stick-inner"></div></div>
             <div id="joy-base-r" class="touch-zone"><div id="joy-stick-r" class="joy-stick-inner"></div></div>
             
-            <div id="btn-shoot" class="t-btn">🔫</div>
             <div id="btn-triple" class="t-btn">🔱</div>
             <div id="btn-parry" class="t-btn">🛡️</div>
             <div id="btn-bomb" class="t-btn">💣</div>
@@ -156,8 +154,8 @@
                     <hr style="border-color:#333;">
                     <p style="color:var(--success);"><b>[MÓVIL / PANTALLA TÁCTIL]</b></p>
                     <p>• <b>Pad Izquierdo:</b> Movimiento</p>
-                    <p>• <b>Pad Derecho:</b> Apuntado Manual (Auto-apunta al mover si no se toca)</p>
-                    <p>• <b>Iconos:</b> 🔫 Normal | 🔱 Triple | 🛡️ Parry | 💣 Bomba</p>
+                    <p>• <b>Pad Derecho:</b> Apuntar y Disparar Automáticamente</p>
+                    <p>• <b>Iconos:</b> 🔱 Triple | 🛡️ Parry | 💣 Bomba</p>
                 </div>
                 <button onclick="showScreen('menu-main')">Entendido</button>
             </div>
@@ -230,6 +228,68 @@
     </div>
 
 <script>
+    // --- MODIFICADO: IMPLEMENTACIÓN DE WEB AUDIO API (SFX) ---
+    let audioCtx;
+    function initAudio() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        } else if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+    }
+
+    const sfx = {
+        shoot: () => {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'square';
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(150, audioCtx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.02, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+        },
+        parry: () => {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+            osc.frequency.linearRampToValueAtTime(1200, audioCtx.currentTime + 0.25);
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+        },
+        bomb: () => {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sawtooth';
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.6);
+            gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.6);
+        },
+        hit: () => {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sawtooth';
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.frequency.setValueAtTime(250, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.4);
+            gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.4);
+        }
+    };
+    // ---------------------------------------------------------
+
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     
@@ -238,7 +298,7 @@
     let gameMode = 'progressive';
     let score = 0, lives = 3, bombs = 3, frameCount = 0;
     let parryActive = false, parryCooldown = false;
-    let parryTimer = 0; // Temporizador para la barra visual de recarga
+    let parryTimer = 0; 
     let currentWave = 1, wavePhase = 1; 
     let screenShake = 0; 
     let config = { w: 800, h: 600, diff: 2 };
@@ -251,7 +311,7 @@
     // --- MOTOR DE ENTRADA (INPUT) ---
     const input = { moveX: 0, moveY: 0, aimX: 400, aimY: 300, shoot: false, triple: false, bomb: false, parry: false, pause: false };
     const keys = {};
-    let touchMoveX = 0, touchMoveY = 0; // Variables independientes para el Pad Táctil
+    let touchMoveX = 0, touchMoveY = 0; 
     let usingGamepad = false, isMobile = /Mobi|Android/i.test(navigator.userAgent);
     let isForcedMobile = false; 
     let rightJoyActive = false;
@@ -323,6 +383,7 @@
     });
 
     function showScreen(id) {
+        initAudio(); // MODIFICADO: Iniciar/reanudar AudioContext con interacción de interfaz
         document.querySelectorAll('.ui-screen').forEach(s => s.classList.remove('active'));
         if(id !== 'none' && document.getElementById(id)) document.getElementById(id).classList.add('active');
     }
@@ -343,7 +404,9 @@
     window.addEventListener('keydown', e => { keys[e.code] = true; if(e.code === 'KeyP') { togglePause(); keys[e.code] = false; } });
     window.addEventListener('keyup', e => keys[e.code] = false);
     canvas.addEventListener('mousemove', e => { const rect = canvas.getBoundingClientRect(); input.aimX = e.clientX - rect.left; input.aimY = e.clientY - rect.top; usingGamepad = false; });
-    canvas.addEventListener('mousedown', e => { if(e.button === 0) input.shoot = true; if(e.button === 2) input.triple = true; });
+    
+    // El ratón de PC sigue manteniendo la lógica inalterada para el disparo con clicks
+    canvas.addEventListener('mousedown', e => { initAudio(); if(e.button === 0) input.shoot = true; if(e.button === 2) input.triple = true; });
     canvas.addEventListener('mouseup', e => { if(e.button === 0) input.shoot = false; if(e.button === 2) input.triple = false; });
     canvas.addEventListener('contextmenu', e => e.preventDefault());
 
@@ -355,6 +418,7 @@
         let center = {x:0, y:0};
 
         base.addEventListener('touchstart', e => {
+            initAudio(); // MODIFICADO: Inicia el audio también al tocar el joystick
             e.preventDefault(); e.stopPropagation();
             if(touchId !== null) return; 
             
@@ -380,9 +444,11 @@
                 if(t.identifier === touchId) {
                     touchId = null;
                     stick.style.transform = `translate(-50%, -50%)`;
-                    // Al soltar, reseteamos las variables independientes
                     if(type === 'left') { touchMoveX = 0; touchMoveY = 0; }
-                    if(type === 'right') rightJoyActive = false;
+                    if(type === 'right') { 
+                        rightJoyActive = false; 
+                        input.shoot = false; // MODIFICADO: Detener disparo inmediatamente al soltar el joystick derecho
+                    }
                     break;
                 }
             }
@@ -400,12 +466,14 @@
             stick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
 
             if(type === 'left') {
-                // Guardamos en las variables independientes para no ser borradas por teclado
                 touchMoveX = dx / maxDist; touchMoveY = dy / maxDist;
             } else if (type === 'right') {
                 if (dist > 5) {
                     input.aimX = nave.x + (dx / maxDist) * 300;
                     input.aimY = nave.y + (dy / maxDist) * 300;
+                    input.shoot = true; // MODIFICADO: Disparo automático mientras el Pad Derecho este apuntando
+                } else {
+                    input.shoot = false; // MODIFICADO: Dejar de disparar si la palanca vuelve casi al centro
                 }
             }
         }
@@ -417,6 +485,7 @@
     const bindTouchBtn = (id, action) => {
         const el = document.getElementById(id);
         el.addEventListener('touchstart', e => {
+            initAudio(); // MODIFICADO: Inicia audio en los botones también
             e.preventDefault(); e.stopPropagation();
             input[action] = true;
             el.style.transform = 'scale(0.85)';
@@ -432,7 +501,9 @@
         el.addEventListener('touchend', endBtn, {passive: false});
         el.addEventListener('touchcancel', endBtn, {passive: false});
     };
-    bindTouchBtn('btn-shoot', 'shoot'); bindTouchBtn('btn-triple', 'triple'); 
+    
+    // MODIFICADO: Eliminado bindTouchBtn de 'btn-shoot'
+    bindTouchBtn('btn-triple', 'triple'); 
     bindTouchBtn('btn-parry', 'parry'); bindTouchBtn('btn-bomb', 'bomb');
 
     // --- PROCESAMIENTO GENERAL DE INPUT ---
@@ -440,11 +511,9 @@
     function pollInput() {
         if(gameState === 'MENU' || gameState === 'CONTINUE' || gameState === 'WIN') return;
 
-        // Asignamos primero la lectura limpia del touch
         input.moveX = touchMoveX; 
         input.moveY = touchMoveY;
         
-        // Si hay teclas presionadas, sobreescriben al touch momentáneamente
         if(keys['KeyW']) input.moveY = -1; if(keys['KeyS']) input.moveY = 1;
         if(keys['KeyA']) input.moveX = -1; if(keys['KeyD']) input.moveX = 1;
         
@@ -481,6 +550,7 @@
     }
 
     function startMission(mode) {
+        initAudio(); // MODIFICADO: Inicia el audio al jugar
         gameMode = mode; gameState = 'PLAYING';
         score = 0; currentWave = 1; wavePhase = 1;
         lives = parseInt(document.getElementById('opt-lives').value);
@@ -544,10 +614,11 @@
     }
 
     function promptContinue() { gameState = 'CONTINUE'; document.getElementById('hud').style.display = 'none'; document.getElementById('mobile-ui').style.display = 'none'; showScreen('menu-continue'); }
-    function acceptContinue() { lives = 3; gameState = 'PLAYING'; showScreen('none'); document.getElementById('hud').style.display = 'flex'; if(isMobile) document.getElementById('mobile-ui').style.display = 'block'; enemyBullets = []; nave.inmune = true; setTimeout(() => nave.inmune = false, 3000); updateHUD(); }
+    function acceptContinue() { initAudio(); lives = 3; gameState = 'PLAYING'; showScreen('none'); document.getElementById('hud').style.display = 'flex'; if(isMobile) document.getElementById('mobile-ui').style.display = 'block'; enemyBullets = []; nave.inmune = true; setTimeout(() => nave.inmune = false, 3000); updateHUD(); }
     function winGame() { gameState = 'WIN'; document.getElementById('hud').style.display = 'none'; document.getElementById('mobile-ui').style.display = 'none'; showScreen('menu-win'); }
 
     function spawnBullets(isTriple) {
+        sfx.shoot(); // MODIFICADO: Sonido de Disparo Web Audio API
         const baseAngle = Math.atan2(input.aimY - nave.y, input.aimX - nave.x);
         if(isTriple) {
             for(let i=-1; i<=1; i++) { const a = baseAngle + (i * 0.2); bullets.push({ x: nave.x, y: nave.y, vx: Math.cos(a)*12, vy: Math.sin(a)*12, color: '#ffcc00', dmg: 25 }); } screenShake = 3;
@@ -555,7 +626,7 @@
     }
 
     function triggerBomb(isPlayer, origin) {
-        if(isPlayer) { if(bombs <= 0) return; bombs--; input.bomb = false; }
+        if(isPlayer) { if(bombs <= 0) return; bombs--; input.bomb = false; sfx.bomb(); /* MODIFICADO: Sonido Bomba */ }
         screenShake = 40; particles.push({x: origin.x, y: origin.y, vx:0, vy:0, life:1, type:'bomb_ring', color: isPlayer ? '#fff' : '#ff0044'});
         if(isPlayer) { enemyBullets = []; enemies.forEach(e => createExplosion(e.x, e.y, '#fff', 10)); enemies = []; bosses.forEach(b => { b.hp -= b.maxHp * 0.1; updateBossHP(b); }); } else { bullets = []; if(!parryActive) playerHit(true); }
         updateHUD();
@@ -563,6 +634,7 @@
 
     function playerHit(heavy = false) {
         if(nave.inmune) return;
+        sfx.hit(); // MODIFICADO: Sonido de Daño/Vida Perdida
         lives -= heavy ? 2 : 1; screenShake = heavy ? 30 : 15; nave.inmune = true; createExplosion(nave.x, nave.y, '#ff0000', heavy ? 40 : 25); updateHUD();
         setTimeout(() => nave.inmune = false, 2000); if(lives <= 0) promptContinue();
     }
@@ -577,9 +649,8 @@
         if(gameState !== 'PLAYING') return;
         frameCount++; checkProgression();
 
-        // Actualización de la Barra de Parry
         if (parryCooldown) {
-            parryTimer -= 1000/60; // Descontar tiempo (asumiendo 60fps)
+            parryTimer -= 1000/60; 
             if (parryTimer <= 0) parryTimer = 0;
         }
 
@@ -588,13 +659,30 @@
         nave.x = Math.max(10, Math.min(canvas.width-10, nave.x + nave.vx));
         nave.y = Math.max(10, Math.min(canvas.height-10, nave.y + nave.vy));
 
+        // MODIFICADO: Generador Visual de Propulsor trasero al detectar velocidad
+        if (Math.hypot(nave.vx, nave.vy) > 0.2) {
+            const aimAngle = Math.atan2(input.aimY - nave.y, input.aimX - nave.x);
+            // Coloca las partículas levemente detrás de la nave
+            const px = nave.x - Math.cos(aimAngle) * 15;
+            const py = nave.y - Math.sin(aimAngle) * 15;
+            // Genera la estela expulsada en dirección opuesta
+            particles.push({
+                x: px + (Math.random()-0.5)*10, 
+                y: py + (Math.random()-0.5)*10, 
+                vx: -Math.cos(aimAngle)*2 + (Math.random()-0.5), 
+                vy: -Math.sin(aimAngle)*2 + (Math.random()-0.5), 
+                life: 0.8, color: '#ffcc00', type: 'spark'
+            });
+        }
+
         if(input.shoot && frameCount % 6 === 0) spawnBullets(false);
         if(input.triple && frameCount % 12 === 0) spawnBullets(true);
         if(input.bomb) triggerBomb(true, nave);
         
         if(input.parry && !parryCooldown) {
+            sfx.parry(); // MODIFICADO: Sonido de Escudo/Parry
             parryActive = true; parryCooldown = true; input.parry = false;
-            parryTimer = 2000; // 2 segundos de cooldown
+            parryTimer = 2000; 
             document.getElementById('val-parry').innerText = "ACTIVE"; document.getElementById('val-parry').style.color = "var(--success)";
             setTimeout(() => { parryActive = false; document.getElementById('val-parry').innerText = "RECHARGING"; document.getElementById('val-parry').style.color = "var(--danger)"; }, 200);
             setTimeout(() => { parryCooldown = false; document.getElementById('val-parry').innerText = "READY"; document.getElementById('val-parry').style.color = "var(--success)"; }, 2000);
@@ -644,13 +732,11 @@
             if(hit || bul.y < 0 || bul.y > canvas.height || bul.x < 0 || bul.x > canvas.width) bullets.splice(bi, 1);
         });
 
-        // Bucle Seguro para iterar Balas Enemigas (Destrucción por Parry y Colisión)
         for (let ei = enemyBullets.length - 1; ei >= 0; ei--) {
             let eb = enemyBullets[ei];
             eb.x += eb.vx; eb.y += eb.vy;
             let destroyed = false;
             
-            // Parry purga balas cercanas
             if (parryActive && Math.hypot(eb.x - nave.x, eb.y - nave.y) < 45) {
                 createExplosion(eb.x, eb.y, '#00ffcc', 5);
                 score += 50;
@@ -658,14 +744,12 @@
                 destroyed = true;
             }
             
-            // Colisión normal con el jugador
             if (!destroyed && Math.hypot(eb.x - nave.x, eb.y - nave.y) < 12) {
                 playerHit();
                 enemyBullets.splice(ei, 1);
                 destroyed = true;
             }
             
-            // Fuera de pantalla
             if (!destroyed && (eb.y > canvas.height || eb.x < 0 || eb.x > canvas.width || eb.y < -50)) {
                 enemyBullets.splice(ei, 1);
             }
@@ -677,13 +761,12 @@
 
     // --- RENDERIZADO (DRAW) LIMITADO A 60 FPS ---
     let lastDrawTime = 0;
-    const fpsInterval = 1000 / 60; // Fija el límite en 60 FPS exactos
+    const fpsInterval = 1000 / 60; 
 
     function draw(currentTime) {
         requestAnimationFrame(draw);
         if (!currentTime) currentTime = performance.now();
         
-        // Control de Delta Time para monitores de Altos Hz
         const deltaTime = currentTime - lastDrawTime;
         if (deltaTime < fpsInterval) return;
         lastDrawTime = currentTime - (deltaTime % fpsInterval);
@@ -714,9 +797,8 @@
                 ctx.save(); ctx.translate(nave.x, nave.y); ctx.rotate(angle);
                 ctx.shadowBlur = 15; ctx.shadowColor = '#1e90ff'; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(20,0); ctx.lineTo(-15, -15); ctx.lineTo(-15, 15); ctx.fill(); ctx.restore();
                 
-                // --- RENDER BARRA DE RECARGA PARRY ---
                 if (parryCooldown && parryTimer > 0) {
-                    let ratio = 1 - (parryTimer / 2000); // Se vacía rápido y se llena
+                    let ratio = 1 - (parryTimer / 2000); 
                     ctx.fillStyle = 'rgba(0,0,0,0.5)';
                     ctx.fillRect(nave.x - 20, nave.y + 25, 40, 4);
                     ctx.fillStyle = '#00ffcc';
@@ -740,7 +822,7 @@
 
     for(let i=0; i<150; i++) stars.push({x: Math.random()*3000, y: Math.random()*3000, z: Math.random(), size: Math.random()*2});
     applyOptions(); 
-    requestAnimationFrame(draw); // Inicia el motor visual anclado al refresco calibrado
+    requestAnimationFrame(draw); 
 </script>
 </body>
 </html>
