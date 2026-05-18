@@ -19,7 +19,9 @@
         /* --- UI SCREENS --- */
         .ui-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; flex-direction: column; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.9); z-index: 100; text-align: center; }
         .ui-screen.active { display: flex; }
-        .menu-card { padding: 30px; border: 1px solid var(--primary); background: rgba(10, 10, 10, 0.95); border-radius: 10px; min-width: 400px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+        
+        /* MODIFICADO: Añadido position relative a la carta para alojar el botón flecha */
+        .menu-card { position: relative; padding: 30px; border: 1px solid var(--primary); background: rgba(10, 10, 10, 0.95); border-radius: 10px; min-width: 400px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
         .menu-card::-webkit-scrollbar { width: 5px; } .menu-card::-webkit-scrollbar-thumb { background: var(--primary); }
 
         h1 { font-size: 2rem; color: var(--primary); text-shadow: 0 0 15px rgba(30, 144, 255, 0.5); margin-bottom: 20px; text-transform: uppercase; }
@@ -34,6 +36,10 @@
         .btn-success { color: var(--success); border-color: var(--success); }
         .btn-success:hover { background: var(--success); box-shadow: 0 0 15px var(--success); }
 
+        /* MODIFICADO: Estilos para el botón flecha (Volver) */
+        .btn-back { position: absolute; top: 15px; left: 15px; background: transparent; border: none; color: #fff; font-size: 2rem; cursor: pointer; padding: 0; line-height: 1; transition: 0.2s; box-shadow: none !important; }
+        .btn-back:hover { color: var(--primary); transform: scale(1.1); background: transparent; }
+
         .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: left; margin-bottom: 20px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; }
         @media (max-width: 600px) { .options-grid { grid-template-columns: 1fr; } }
         .option-item label { display: block; margin-bottom: 4px; color: #aaa; }
@@ -47,7 +53,6 @@
         #hud { position: absolute; top: 0; left: 0; width: 100%; padding: 15px 25px; display: none; justify-content: space-between; pointer-events: none; z-index: 50; }
         .stat-box { font-size: 0.9rem; background: rgba(0,0,0,0.5); padding: 5px 10px; border-left: 3px solid var(--primary); }
         
-        /* MODIFICADO: Botón de volumen maestro */
         .volume-btn { position: absolute; top: 15px; left: 15px; width: 45px; height: 45px; border-radius: 50%; background: rgba(10, 10, 10, 0.8); border: 2px solid var(--primary); color: white; display: flex; justify-content: center; align-items: center; font-size: 1.2rem; cursor: pointer; z-index: 200; transition: transform 0.2s; pointer-events: auto; }
         .volume-btn:active { transform: scale(0.9); }
 
@@ -56,27 +61,28 @@
         .hp-bar-bg { width: 100%; height: 8px; background: #222; border: 1px solid #444; margin-top: 4px; }
         .hp-fill { width: 100%; height: 100%; background: var(--danger); transition: width 0.1s; }
 
-        /* --- MOBILE CONTROLS MEJORADOS --- */
+        /* --- MOBILE CONTROLS --- */
         #mobile-ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; pointer-events: none; z-index: 60; }
         .touch-zone { position: absolute; border-radius: 50%; background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.2); pointer-events: auto; touch-action: none;}
         .joy-stick-inner { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 45px; height: 45px; border-radius: 50%; pointer-events: none; }
         
-        /* Joystick Izquierdo (Mover) */
         #joy-base-l { left: 30px; bottom: 30px; width: 120px; height: 120px; }
         #joy-stick-l { background: rgba(30, 144, 255, 0.6); border: 2px solid var(--primary); }
-
-        /* Joystick Derecho (Apuntar) */
         #joy-base-r { right: 30px; bottom: 30px; width: 120px; height: 120px; }
         #joy-stick-r { background: rgba(255, 51, 102, 0.6); border: 2px solid var(--danger); }
         
-        /* Botones de Acción con Iconos */
         .t-btn { position: absolute; width: 55px; height: 55px; border-radius: 50%; background: rgba(10, 10, 10, 0.7); border: 2px solid; color: white; display: flex; justify-content: center; align-items: center; font-size: 1.6rem; pointer-events: auto; touch-action: none; transition: transform 0.1s; z-index: 65;}
         
-        #btn-triple { right: 150px; bottom: 120px; border-color: var(--warning); text-shadow: 0 0 5px var(--warning); } /* Triple */
-        #btn-parry { right: 70px; bottom: 170px; border-color: var(--success); text-shadow: 0 0 5px var(--success); } /* Escudo/Parry */
+        #btn-triple { right: 150px; bottom: 120px; border-color: var(--warning); text-shadow: 0 0 5px var(--warning); } 
+        #btn-parry { right: 70px; bottom: 170px; border-color: var(--success); text-shadow: 0 0 5px var(--success); } 
         #btn-bomb { left: 170px; bottom: 40px; border-color: var(--danger); text-shadow: 0 0 5px var(--danger); } 
         
-        #btn-pause-m { position: absolute; top: 15px; right: 15px; padding: 10px; background: #222; border: 1px solid #fff; color: #fff; pointer-events: auto; border-radius: 5px; font-weight: bold; font-family: 'Orbitron';}
+        /* MODIFICADO: Botón de pausa en partida rediseñado y minimalista */
+        #btn-pause-m { position: absolute; top: 15px; right: 15px; width: 45px; height: 45px; background: rgba(10, 10, 10, 0.8); border: 2px solid #fff; color: #fff; pointer-events: auto; border-radius: 5px; font-size: 1.5rem; display: flex; justify-content: center; align-items: center; cursor: pointer; }
+
+        /* MODIFICADO: Botón de Gamepad (Touch toggle) en menú de pausa */
+        .btn-gamepad { position: absolute; bottom: 20px; left: 20px; width: 55px; height: 55px; border-radius: 50%; background: rgba(10, 10, 10, 0.9); border: 2px solid var(--primary); color: white; display: flex; justify-content: center; align-items: center; font-size: 1.8rem; cursor: pointer; transition: transform 0.2s; pointer-events: auto; }
+        .btn-gamepad:active { transform: scale(0.9); }
     </style>
 </head>
 <body>
@@ -92,7 +98,7 @@
         <div id="boss-container"></div>
 
         <div id="mobile-ui">
-            <button id="btn-pause-m" onclick="togglePause()">⏸️ PAUSA</button>
+            <button id="btn-pause-m" onclick="togglePause()">⏸</button>
             <div id="joy-base-l" class="touch-zone"><div id="joy-stick-l" class="joy-stick-inner"></div></div>
             <div id="joy-base-r" class="touch-zone"><div id="joy-stick-r" class="joy-stick-inner"></div></div>
             <div id="btn-triple" class="t-btn">🔱</div>
@@ -116,6 +122,7 @@
 
         <div id="menu-customize" class="ui-screen">
             <div class="menu-card">
+                <button class="btn-back" onclick="showScreen('menu-main')">←</button>
                 <h1>PERSONALIZAR NAVE</h1>
                 <canvas id="previewCanvas" width="150" height="150" style="margin: 0 auto 20px; display: block; border: 2px solid #333; background: #0a0a0a; border-radius: 10px;"></canvas>
                 <p style="font-size: 0.85rem; color: #aaa; margin-bottom: 15px;">Selecciona el color primario de tu nave:</p>
@@ -129,23 +136,23 @@
                     <button style="color: #9933ff; border-color: #9933ff;" onclick="changeNaveColor('#9933ff')">MORADO</button>
                     <button style="color: #ff66cc; border-color: #ff66cc; grid-column: span 3;" onclick="changeNaveColor('#ff66cc')">ROSA</button>
                 </div>
-                <button onclick="showScreen('menu-main')" style="margin-top: 20px; border-color:#666; color:#666;">Volver</button>
             </div>
         </div>
 
         <div id="menu-play" class="ui-screen">
             <div class="menu-card">
+                <button class="btn-back" onclick="showScreen('menu-main')">←</button>
                 <h1>SELECCIONAR MODO</h1>
                 <div class="btn-group">
                     <button onclick="startMission('progressive')">Juego Progresivo</button>
                     <button onclick="startMission('solo_boss')">Solo Boss (Rush)</button>
-                    <button onclick="showScreen('menu-main')" style="border-color:#666; color:#666;">Volver</button>
                 </div>
             </div>
         </div>
 
         <div id="menu-custom" class="ui-screen">
             <div class="menu-card">
+                <button class="btn-back" onclick="showScreen('menu-main')">←</button>
                 <h1>MODO PERSONALIZADO</h1>
                 <div class="custom-list" id="custom-checkboxes">
                     <label><input type="checkbox" value="common" checked> Enemigo Común (Rojo)</label>
@@ -159,31 +166,35 @@
                 </div>
                 <div class="btn-group">
                     <button onclick="startCustom()">Iniciar Simulador</button>
-                    <button onclick="showScreen('menu-main')" style="border-color:#666; color:#666;">Volver</button>
                 </div>
             </div>
         </div>
 
         <div id="menu-controls" class="ui-screen">
             <div class="menu-card">
+                <button class="btn-back" onclick="showScreen('menu-main')">←</button>
                 <h1>MANUAL DE VUELO</h1>
-                <div style="text-align: left; color: #ccc; font-size:0.85rem; line-height: 1.6; margin-bottom: 20px;">
-                    <p style="color:var(--primary);"><b>[TECLADO Y RATÓN]</b></p>
-                    <p>• <b>WASD:</b> Mover | <b>Ratón:</b> Apuntar</p>
-                    <p>• <b>Clic Izq:</b> Disparo | <b>Clic Der:</b> Disparo Triple</p>
-                    <p>• <b>Espacio:</b> Bomba | <b>E:</b> Parry | <b>P:</b> Pausa</p>
-                    <hr style="border-color:#333;">
-                    <p style="color:var(--success);"><b>[MÓVIL / PANTALLA TÁCTIL]</b></p>
-                    <p>• <b>Pad Izquierdo:</b> Movimiento</p>
-                    <p>• <b>Pad Derecho:</b> Apuntar y Disparar Automáticamente</p>
-                    <p>• <b>Iconos:</b> 🔱 Triple | 🛡️ Parry | 💣 Bomba</p>
+                
+                <div class="options-grid" style="grid-template-columns: 1fr; gap: 10px; margin-bottom: 20px;">
+                    <div>
+                        <div style="color:var(--primary); font-family:'Orbitron', sans-serif; font-weight:bold; margin-bottom: 5px;">[TECLADO Y RATÓN]</div>
+                        <div>• WASD: Mover | Ratón: Apuntar</div>
+                        <div>• Clic Izq: Disparo | Clic Der: Disparo Triple</div>
+                        <div>• Espacio: Bomba | E: Parry | P: Pausa</div>
+                    </div>
+                    <hr style="border-color:#333; width: 100%; margin: 5px 0;">
+                    <div>
+                        <div style="color:var(--success); font-family:'Orbitron', sans-serif; font-weight:bold; margin-bottom: 5px;">[MÓVIL / PANTALLA TÁCTIL]</div>
+                        <div>• Pad Izq: Movimiento | Pad Der: Apuntar y Disparar</div>
+                        <div>• Iconos: 🔱 Triple | 🛡️ Parry | 💣 Bomba</div>
+                    </div>
                 </div>
-                <button onclick="showScreen('menu-main')">Entendido</button>
             </div>
         </div>
 
         <div id="menu-options" class="ui-screen">
             <div class="menu-card">
+                <button class="btn-back" onclick="showScreen('menu-main')">←</button>
                 <h1>CONFIGURACIÓN</h1>
                 <div class="options-grid">
                     <div class="option-item">
@@ -213,6 +224,8 @@
         </div>
 
         <div id="menu-pause" class="ui-screen">
+            <button class="btn-gamepad" onclick="toggleTouchUI()" title="Ocultar/Mostrar Controles Táctiles">🎮</button>
+            
             <div class="menu-card">
                 <h1>PAUSA</h1>
                 <div class="btn-group">
@@ -249,7 +262,6 @@
     </div>
 
 <script>
-    // --- IMPLEMENTACIÓN DE WEB AUDIO API (SFX) Y CONTROL MAESTRO DE VOLUMEN ---
     let audioCtx;
     let masterGainNode;
     let isMuted = false;
@@ -259,15 +271,14 @@
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             masterGainNode = audioCtx.createGain();
             masterGainNode.connect(audioCtx.destination);
-            masterGainNode.gain.value = isMuted ? 0 : 0.5; // Volumen por defecto
+            masterGainNode.gain.value = isMuted ? 0 : 0.5; 
         } else if (audioCtx.state === 'suspended') {
             audioCtx.resume();
         }
     }
 
-    // MODIFICADO: Toggle global de volumen
     function toggleVolume() {
-        initAudio(); // Forzamos inicialización por si se toca antes de jugar
+        initAudio(); 
         isMuted = !isMuted;
         document.getElementById('btn-volume').innerText = isMuted ? "🔇" : "🔊";
         if (masterGainNode) {
@@ -275,7 +286,6 @@
         }
     }
 
-    // MODIFICADO: Conexión de SFX al masterGainNode
     const sfx = {
         shoot: () => {
             if (!audioCtx) return;
@@ -326,12 +336,10 @@
             osc.start(); osc.stop(audioCtx.currentTime + 0.4);
         }
     };
-    // ---------------------------------------------------------
 
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     
-    // --- ESTADO DEL JUEGO ---
     let gameState = 'MENU';
     let gameMode = 'progressive';
     let score = 0, lives = 3, bombs = 3, frameCount = 0;
@@ -341,30 +349,24 @@
     let config = { w: 800, h: 600, diff: 2 };
     let customSelection = [];
 
-    // --- OBJETOS ---
-    // MODIFICADO: Añadido color por defecto de la nave
     const nave = { x: 400, y: 500, vx: 0, vy: 0, accel: 0.9, fric: 0.90, inmune: false, color: '#ffffff' };
-    
-    // MODIFICADO: Añadido arreglo para los textos flotantes ("+1 VIDA")
     let bullets = [], enemyBullets = [], enemies = [], particles = [], stars = [], bosses = [], pickUps = [], floatingTexts = [];
     
-    // --- MOTOR DE ENTRADA (INPUT) ---
     const input = { moveX: 0, moveY: 0, aimX: 400, aimY: 300, shoot: false, triple: false, bomb: false, parry: false, pause: false };
     const keys = {};
     let touchMoveX = 0, touchMoveY = 0; 
     let usingGamepad = false, isMobile = /Mobi|Android/i.test(navigator.userAgent);
     let isForcedMobile = false; 
     let rightJoyActive = false;
+    let isTouchUIHidden = false; // MODIFICADO: Estado para alternar HUD táctil
 
-    // --- LIVE PREVIEW MENU CUSTOMIZATION ---
-    // MODIFICADO: Renderizado continuo del mini-canvas de la nave
     const pCanvas = document.getElementById('previewCanvas');
     const pCtx = pCanvas.getContext('2d');
     function renderPreview() {
         pCtx.clearRect(0, 0, pCanvas.width, pCanvas.height);
         pCtx.save();
         pCtx.translate(pCanvas.width / 2, pCanvas.height / 2);
-        pCtx.rotate(-Math.PI / 2); // Apuntando hacia arriba en el menú
+        pCtx.rotate(-Math.PI / 2); 
         pCtx.shadowBlur = 15; pCtx.shadowColor = nave.color;
         pCtx.fillStyle = nave.color;
         pCtx.beginPath(); pCtx.moveTo(25, 0); pCtx.lineTo(-20, -20); pCtx.lineTo(-20, 20); pCtx.fill();
@@ -375,6 +377,27 @@
 
     function changeNaveColor(newColor) {
         nave.color = newColor;
+    }
+
+    // MODIFICADO: Control dinámico para visibilidad de botón de Volumen y HUD
+    function updateVolumeVisibility() {
+        const volBtn = document.getElementById('btn-volume');
+        if (gameState === 'MENU' || gameState === 'PAUSED') {
+            volBtn.style.display = 'flex';
+        } else {
+            volBtn.style.display = 'none';
+        }
+    }
+
+    // MODIFICADO: Alternar visibilidad de los controles táctiles (Mando)
+    function toggleTouchUI() {
+        isTouchUIHidden = !isTouchUIHidden;
+        const mobileUi = document.getElementById('mobile-ui');
+        if (isTouchUIHidden) {
+            mobileUi.style.display = 'none';
+        } else if (isMobile) {
+            mobileUi.style.display = 'block';
+        }
     }
 
     function toggleDeviceMode() {
@@ -446,21 +469,27 @@
         initAudio(); 
         document.querySelectorAll('.ui-screen').forEach(s => s.classList.remove('active'));
         if(id !== 'none' && document.getElementById(id)) document.getElementById(id).classList.add('active');
+        updateVolumeVisibility(); // MODIFICADO: Refresca el botón volumen al cambiar menú
     }
 
     function togglePause() {
         if(gameState === 'PLAYING') { gameState = 'PAUSED'; showScreen('menu-pause'); }
         else if(gameState === 'PAUSED') { gameState = 'PLAYING'; showScreen('none'); }
+        updateVolumeVisibility(); // MODIFICADO: Muestra/oculta botón volumen al pausar
     }
 
     function exitToMenu() {
         gameState = 'MENU';
         document.getElementById('hud').style.display = 'none';
         document.getElementById('mobile-ui').style.display = 'none';
+        
+        // MODIFICADO: BUG FIX. Limpiar estado y contenedor visual del jefe al abandonar.
+        bosses = [];
+        renderBossUI(); 
+        
         showScreen('menu-main');
     }
 
-    // --- EVENTOS PC ---
     window.addEventListener('keydown', e => { keys[e.code] = true; if(e.code === 'KeyP') { togglePause(); keys[e.code] = false; } });
     window.addEventListener('keyup', e => keys[e.code] = false);
     canvas.addEventListener('mousemove', e => { const rect = canvas.getBoundingClientRect(); input.aimX = e.clientX - rect.left; input.aimY = e.clientY - rect.top; usingGamepad = false; });
@@ -468,7 +497,6 @@
     canvas.addEventListener('mouseup', e => { if(e.button === 0) input.shoot = false; if(e.button === 2) input.triple = false; });
     canvas.addEventListener('contextmenu', e => e.preventDefault());
 
-    // --- MOTOR MULTI-TOUCH NATIVO ---
     function setupJoystick(baseId, stickId, type) {
         const base = document.getElementById(baseId);
         const stick = document.getElementById(stickId);
@@ -611,9 +639,11 @@
         bombs = 3; screenShake = 0; parryTimer = 0; parryCooldown = false;
         bullets = []; enemyBullets = []; enemies = []; bosses = []; pickUps = []; particles = []; floatingTexts = [];
         nave.x = canvas.width/2; nave.y = canvas.height - 100; nave.vx = 0; nave.vy = 0;
+        
         showScreen('none');
         document.getElementById('hud').style.display = 'flex';
-        document.getElementById('mobile-ui').style.display = isMobile ? 'block' : 'none';
+        // MODIFICADO: Respeta si el usuario ocultó el HUD táctil con el gamepad virtual
+        document.getElementById('mobile-ui').style.display = (isMobile && !isTouchUIHidden) ? 'block' : 'none';
         
         if(mode === 'custom') {
             customSelection.forEach(val => {
@@ -630,7 +660,6 @@
         if(bosses.length > 0 && gameMode !== 'custom') return;
         let type = 'common';
         
-        // MODIFICADO: Sistema de aparición del enemigo especial de Vidas (Life Carrier) - 4% de probabilidad
         if(forcedType) type = forcedType;
         else if (Math.random() < 0.04 && bosses.length === 0) type = 'life'; 
         else if(gameMode === 'progressive') {
@@ -641,9 +670,8 @@
             if(avail.length > 0) type = avail[Math.floor(Math.random()*avail.length)]; else return;
         }
 
-        // MODIFICADO: El enemigo 'life' es más lento y tiene características únicas
         let enemyHp = type === 'elite' ? 120 : (type === 'special' ? 60 : (type === 'life' ? 40 : 30));
-        let enemyVy = type === 'special' ? 3.5 : (type === 'life' ? 1 : 2); // 'life' se mueve mucho más lento
+        let enemyVy = type === 'special' ? 3.5 : (type === 'life' ? 1 : 2); 
         
         enemies.push({ x: Math.random() * (canvas.width - 40) + 20, y: -30, type: type, hp: enemyHp, vx: (Math.random() - 0.5) * 2, vy: enemyVy, shield: type === 'special', lastShot: 0 });
     }
@@ -676,7 +704,7 @@
     }
 
     function promptContinue() { gameState = 'CONTINUE'; document.getElementById('hud').style.display = 'none'; document.getElementById('mobile-ui').style.display = 'none'; showScreen('menu-continue'); }
-    function acceptContinue() { initAudio(); lives = 3; gameState = 'PLAYING'; showScreen('none'); document.getElementById('hud').style.display = 'flex'; if(isMobile) document.getElementById('mobile-ui').style.display = 'block'; enemyBullets = []; nave.inmune = true; setTimeout(() => nave.inmune = false, 3000); updateHUD(); }
+    function acceptContinue() { initAudio(); lives = 3; gameState = 'PLAYING'; showScreen('none'); document.getElementById('hud').style.display = 'flex'; if(isMobile && !isTouchUIHidden) document.getElementById('mobile-ui').style.display = 'block'; enemyBullets = []; nave.inmune = true; setTimeout(() => nave.inmune = false, 3000); updateHUD(); }
     function winGame() { gameState = 'WIN'; document.getElementById('hud').style.display = 'none'; document.getElementById('mobile-ui').style.display = 'none'; showScreen('menu-win'); }
 
     function spawnBullets(isTriple) {
@@ -705,7 +733,6 @@
     function createExplosion(x, y, color, count = 12) { for(let i=0; i<count; i++) particles.push({ x, y, vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8, life: 1.0, color: color || '#ff5500', type: 'spark' }); }
     function updateHUD() { document.getElementById('val-score').innerText = score; document.getElementById('val-bombs').innerText = bombs; document.getElementById('val-lives').innerText = "❤️".repeat(Math.max(0, lives)); document.getElementById('level-tag').innerText = `MODO: ${gameMode.toUpperCase()}`; }
 
-    // --- LOOP PRINCIPAL (UPDATE) ---
     function update() {
         pollInput();
         if(gameState !== 'PLAYING') return;
@@ -716,13 +743,11 @@
             if (parryTimer <= 0) parryTimer = 0;
         }
 
-        // Lógica de movimiento
         nave.vx += input.moveX * nave.accel; nave.vy += input.moveY * nave.accel;
         nave.vx *= nave.fric; nave.vy *= nave.fric;
         nave.x = Math.max(10, Math.min(canvas.width-10, nave.x + nave.vx));
         nave.y = Math.max(10, Math.min(canvas.height-10, nave.y + nave.vy));
 
-        // Partículas propulsoras
         if (Math.hypot(nave.vx, nave.vy) > 0.2) {
             const aimAngle = Math.atan2(input.aimY - nave.y, input.aimX - nave.x);
             const px = nave.x - Math.cos(aimAngle) * 15;
@@ -784,7 +809,6 @@
             if(b.hp <= 0) { createExplosion(b.x, b.y, '#fff', 50); if(Math.random() > 0.3) pickUps.push({x: b.x, y: b.y, type: 'bomb'}); bosses.splice(i, 1); score += 10000; renderBossUI(); }
         });
 
-        // Colisiones de Balas del Jugador
         bullets.forEach((bul, bi) => {
             bul.x += bul.vx; bul.y += bul.vy; let hit = false;
             enemies.forEach((e, ei) => { 
@@ -798,7 +822,6 @@
                             enemies.splice(ei, 1); 
                             score += 150; 
 
-                            // MODIFICADO: Lógica de recompensa del enemigo "Life Carrier"
                             if(e.type === 'life') {
                                 lives++;
                                 updateHUD();
@@ -839,17 +862,15 @@
 
         pickUps.forEach((p, i) => { p.y += 2; if(Math.hypot(p.x - nave.x, p.y - nave.y) < 30) { if(p.type === 'bomb') bombs++; updateHUD(); pickUps.splice(i, 1); } });
         
-        // MODIFICADO: Actualización de los Textos Flotantes Visuales
         floatingTexts.forEach((ft, i) => {
-            ft.y -= 1; // Flota hacia arriba
-            ft.life -= 0.02; // Se desvanece
+            ft.y -= 1; 
+            ft.life -= 0.02; 
             if(ft.life <= 0) floatingTexts.splice(i, 1);
         });
 
         updateHUD();
     }
 
-    // --- RENDERIZADO (DRAW) LIMITADO A 60 FPS ---
     let lastDrawTime = 0;
     const fpsInterval = 1000 / 60; 
 
@@ -870,7 +891,6 @@
         if(gameState === 'PLAYING' || gameState === 'PAUSED' || gameState === 'CONTINUE' || gameState === 'WIN') {
             pickUps.forEach(p => { ctx.fillStyle = '#ffcc00'; ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = '#000'; ctx.fillText('B', p.x-4, p.y+4); });
             
-            // MODIFICADO: Renderizado distintivo para el Enemigo Especial "Life Carrier"
             enemies.forEach(e => { 
                 ctx.fillStyle = e.type === 'elite' ? '#00ffcc' : (e.shield ? '#ffcc00' : (e.type === 'life' ? '#ff66cc' : '#ff3366')); 
                 if(e.type === 'elite') { ctx.beginPath(); ctx.moveTo(e.x, e.y+15); ctx.lineTo(e.x-15, e.y-10); ctx.lineTo(e.x+15, e.y-10); ctx.fill(); } 
@@ -893,7 +913,6 @@
                 const angle = Math.atan2(input.aimY - nave.y, input.aimX - nave.x);
                 ctx.save(); ctx.translate(nave.x, nave.y); ctx.rotate(angle);
                 
-                // MODIFICADO: Renderizado dinámico según el color configurado
                 ctx.shadowBlur = 15; ctx.shadowColor = nave.color; 
                 ctx.fillStyle = nave.color; 
                 
@@ -918,7 +937,6 @@
             });
             ctx.globalAlpha = 1;
 
-            // MODIFICADO: Pintar los textos flotantes (Ej: "+1 VIDA")
             floatingTexts.forEach(ft => {
                 ctx.globalAlpha = Math.max(0, ft.life);
                 ctx.fillStyle = ft.color;
@@ -932,7 +950,10 @@
     }
 
     for(let i=0; i<150; i++) stars.push({x: Math.random()*3000, y: Math.random()*3000, z: Math.random(), size: Math.random()*2});
+    
+    // MODIFICADO: Asegurar que el estado del volumen inicia correctamente visualmente
     applyOptions(); 
+    updateVolumeVisibility();
     requestAnimationFrame(draw); 
 </script>
 </body>
