@@ -92,7 +92,7 @@
         <button id="btn-volume" class="volume-btn" onclick="toggleVolume()">🔊</button>
 
         <div id="hud">
-            <div class="stat-box">SCORE: <span id="val-score">0</span><br>BOMBS: <span id="val-bombs">3</span> [LB/SPACE]</div>
+            <div class="stat-box">SCORE: <span id="val-score">0</span><br>BOMBS: <span id="val-bombs">3</span> [LB/SPACE]<br>ARMA: <span id="val-weapon" style="color:var(--primary)">NORMAL</span></div>
             <div id="level-tag" style="color: var(--warning);">READY</div>
             <div style="text-align:center; pointer-events:none;">
                 <div id="combo-display" style="display:none; font-size:1.1rem; font-family:'Orbitron',sans-serif; color:var(--warning); text-shadow:0 0 10px var(--warning); font-weight:bold;"></div>
@@ -192,7 +192,8 @@
                     <div>
                         <div style="color:var(--success); font-family:'Orbitron', sans-serif; font-weight:bold; margin-bottom: 5px;">[MÓVIL / PANTALLA TÁCTIL]</div>
                         <div>• Pad Izq: Movimiento | Pad Der: Apuntar y Disparar</div>
-                        <div>• Iconos: 🔱 Triple | 🛡️ Parry | 💣 Bomba</div>
+                        <div>• Iconos: 🔱 Triple | 🛡️ Parry | 💣 Bomba | ⚡ Dash</div>
+                        <div>• Caja naranja 🟧: Recoger para cambiar arma (S=Spread, L=Laser)</div>
                     </div>
                 </div>
             </div>
@@ -353,6 +354,31 @@
             gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
             gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
             osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+        },
+        powerup: () => {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.connect(gain); gain.connect(masterGainNode);
+            osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+            osc.frequency.linearRampToValueAtTime(800, audioCtx.currentTime + 0.1);
+            osc.frequency.linearRampToValueAtTime(1200, audioCtx.currentTime + 0.2);
+            gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+        },
+        laser: () => {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sawtooth';
+            osc.connect(gain); gain.connect(masterGainNode);
+            osc.frequency.setValueAtTime(900, audioCtx.currentTime);
+            osc.frequency.linearRampToValueAtTime(600, audioCtx.currentTime + 0.05);
+            gain.gain.setValueAtTime(0.015, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.07);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.07);
         }
     };
 
@@ -374,6 +400,17 @@
 
     // --- COMBO ---
     let comboCount = 0, comboMultiplier = 1, comboResetTimer = null;
+
+    // --- HIT STOP ---
+    let hitStopFrames = 0;
+
+    // --- WEAPON POWERUP ---
+    let currentWeapon = 'normal'; // 'normal' | 'spread' | 'laser'
+    let weaponTimer = 0; // frames remaining for powerup
+    let weaponPowerUps = []; // active weapon pickup items
+
+    // --- DEBRIS ---
+    let debrisChunks = [];
 
     const nave = { x: 400, y: 500, vx: 0, vy: 0, accel: 0.9, fric: 0.90, inmune: false, color: '#ffffff' };
     let bullets = [], enemyBullets = [], enemies = [], particles = [], stars = [], bosses = [], pickUps = [], floatingTexts = [];
@@ -669,6 +706,7 @@
         bombs = 3; screenShake = 0; parryTimer = 0; parryCooldown = false;
         dashActive = false; dashCooldown = false; dashTimer = 0;
         comboCount = 0; comboMultiplier = 1; if(comboResetTimer) { clearTimeout(comboResetTimer); comboResetTimer = null; }
+        currentWeapon = 'normal'; weaponTimer = 0; weaponPowerUps = []; debrisChunks = []; hitStopFrames = 0;
         bullets = []; enemyBullets = []; enemies = []; bosses = []; pickUps = []; particles = []; floatingTexts = [];
         nave.x = canvas.width/2; nave.y = canvas.height - 100; nave.vx = 0; nave.vy = 0;
         
@@ -757,12 +795,46 @@
     function acceptContinue() { initAudio(); lives = 3; gameState = 'PLAYING'; showScreen('none'); document.getElementById('hud').style.display = 'flex'; if(isMobile && !isTouchUIHidden) document.getElementById('mobile-ui').style.display = 'block'; enemyBullets = []; nave.inmune = true; setTimeout(() => nave.inmune = false, 3000); updateHUD(); }
     function winGame() { gameState = 'WIN'; document.getElementById('hud').style.display = 'none'; document.getElementById('mobile-ui').style.display = 'none'; showScreen('menu-win'); }
 
+    function spawnDebris(x, y, color, count = 3) {
+        for(let i = 0; i < count; i++) {
+            const pts = [];
+            const sides = 3 + Math.floor(Math.random() * 3);
+            for(let j = 0; j < sides; j++) {
+                const a = (j / sides) * Math.PI * 2 + Math.random() * 0.8;
+                const r = 5 + Math.random() * 10;
+                pts.push([Math.cos(a)*r, Math.sin(a)*r]);
+            }
+            debrisChunks.push({
+                x, y, pts,
+                vx: (Math.random()-0.5) * 5,
+                vy: (Math.random()-0.5) * 5 - 1,
+                rot: 0,
+                rotSpeed: (Math.random()-0.5) * 0.15,
+                life: 1.0,
+                color: color || '#888'
+            });
+        }
+    }
+
     function spawnBullets(isTriple) {
-        sfx.shoot(); 
         const baseAngle = Math.atan2(input.aimY - nave.y, input.aimX - nave.x);
-        if(isTriple) {
+        if(currentWeapon === 'laser') {
+            sfx.laser();
+            return; // laser is handled as a continuous beam in draw(), not bullet objects
+        }
+        sfx.shoot();
+        if(currentWeapon === 'spread') {
+            const count = 5;
+            for(let i=0; i<count; i++) { 
+                const a = baseAngle + (i - 2) * 0.25; 
+                bullets.push({ x: nave.x, y: nave.y, vx: Math.cos(a)*13, vy: Math.sin(a)*13, color: '#ff9900', dmg: 15 }); 
+            }
+            screenShake = 2;
+        } else if(isTriple) {
             for(let i=-1; i<=1; i++) { const a = baseAngle + (i * 0.2); bullets.push({ x: nave.x, y: nave.y, vx: Math.cos(a)*12, vy: Math.sin(a)*12, color: '#ffcc00', dmg: 25 }); } screenShake = 3;
-        } else { bullets.push({ x: nave.x, y: nave.y, vx: Math.cos(baseAngle)*15, vy: Math.sin(baseAngle)*15, color: '#1e90ff', dmg: 20 }); }
+        } else { 
+            bullets.push({ x: nave.x, y: nave.y, vx: Math.cos(baseAngle)*15, vy: Math.sin(baseAngle)*15, color: '#1e90ff', dmg: 20 }); 
+        }
     }
 
     function triggerBomb(isPlayer, origin) {
@@ -775,13 +847,24 @@
     function playerHit(heavy = false) {
         if(nave.inmune) return;
         sfx.hit(); 
+        hitStopFrames = heavy ? 7 : 4;
         lives -= heavy ? 2 : 1; screenShake = heavy ? 30 : 15; nave.inmune = true; createExplosion(nave.x, nave.y, '#ff0000', heavy ? 40 : 25); updateHUD();
         setTimeout(() => nave.inmune = false, 2000); if(lives <= 0) promptContinue();
     }
 
     function updateBossHP(b) { const hpBar = document.getElementById(`hp-${b.id}`); if(hpBar) hpBar.style.width = Math.max(0, (b.hp/b.maxHp)*100) + '%'; }
     function createExplosion(x, y, color, count = 12) { for(let i=0; i<count; i++) particles.push({ x, y, vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8, life: 1.0, color: color || '#ff5500', type: 'spark' }); }
-    function updateHUD() { document.getElementById('val-score').innerText = score; document.getElementById('val-bombs').innerText = bombs; document.getElementById('val-lives').innerText = "❤️".repeat(Math.max(0, lives)); document.getElementById('level-tag').innerText = `MODO: ${gameMode.toUpperCase()}`; }
+    function updateHUD() { 
+        document.getElementById('val-score').innerText = score; 
+        document.getElementById('val-bombs').innerText = bombs; 
+        document.getElementById('val-lives').innerText = "❤️".repeat(Math.max(0, lives)); 
+        document.getElementById('level-tag').innerText = `MODO: ${gameMode.toUpperCase()}`;
+        const wEl = document.getElementById('val-weapon');
+        if(wEl) { 
+            wEl.innerText = currentWeapon === 'spread' ? 'SPREAD ★' : currentWeapon === 'laser' ? 'LASER ★' : 'NORMAL';
+            wEl.style.color = currentWeapon !== 'normal' ? '#ff9900' : 'var(--primary)';
+        }
+    }
     function updateComboDisplay() {
         const el = document.getElementById('combo-display');
         if(comboCount >= 3) {
@@ -797,7 +880,41 @@
     function update() {
         pollInput();
         if(gameState !== 'PLAYING') return;
+
+        // --- HIT STOP ---
+        if(hitStopFrames > 0) { hitStopFrames--; return; }
+
         frameCount++; checkProgression();
+
+        // --- WEAPON POWERUP TIMER ---
+        if(currentWeapon !== 'normal') {
+            weaponTimer--;
+            if(weaponTimer <= 0) { currentWeapon = 'normal'; weaponTimer = 0; }
+        }
+
+        // --- WEAPON PICKUPS ---
+        for(let wi = weaponPowerUps.length - 1; wi >= 0; wi--) {
+            const wp = weaponPowerUps[wi];
+            wp.y += wp.vy; wp.life--;
+            if(Math.hypot(wp.x - nave.x, wp.y - nave.y) < 25) {
+                currentWeapon = wp.letter === 'S' ? 'spread' : 'laser';
+                weaponTimer = 600; // ~10 seconds at 60fps
+                sfx.powerup();
+                floatingTexts.push({x: wp.x, y: wp.y, text: wp.letter === 'S' ? '★ SPREAD!' : '★ LASER!', life: 1.2, color: '#ff9900'});
+                weaponPowerUps.splice(wi, 1);
+            } else if(wp.life <= 0 || wp.y > canvas.height) {
+                weaponPowerUps.splice(wi, 1);
+            }
+        }
+
+        // --- DEBRIS ---
+        for(let di = debrisChunks.length - 1; di >= 0; di--) {
+            const d = debrisChunks[di];
+            d.x += d.vx; d.y += d.vy; d.rot += d.rotSpeed;
+            d.vx *= 0.98; d.vy *= 0.98;
+            d.life -= 0.008;
+            if(d.life <= 0) debrisChunks.splice(di, 1);
+        }
 
         if (parryCooldown) {
             parryTimer -= 1000/60; 
@@ -823,6 +940,28 @@
         if(input.shoot && frameCount % 6 === 0) spawnBullets(false);
         if(input.triple && frameCount % 12 === 0) spawnBullets(true);
         if(input.bomb) triggerBomb(true, nave);
+        // LASER: damage entities along the beam every 3 frames
+        if(currentWeapon === 'laser' && input.shoot && frameCount % 3 === 0) {
+            sfx.laser();
+            const ang = Math.atan2(input.aimY - nave.y, input.aimX - nave.x);
+            const cos = Math.cos(ang), sin = Math.sin(ang);
+            enemies.forEach((e, ei) => {
+                // Point-to-line distance
+                const dx = e.x - nave.x, dy = e.y - nave.y;
+                const proj = dx*cos + dy*sin;
+                const perpDist = Math.abs(dx*sin - dy*cos);
+                if(proj > 0 && perpDist < 18) {
+                    if(e.shield) { e.shield = false; } 
+                    else { e.hp -= 8; if(e.hp <= 0) { createExplosion(e.x,e.y); spawnDebris(e.x,e.y,'#00ccff'); enemies.splice(ei,1); comboCount++; comboMultiplier = comboCount>=10?3:comboCount>=5?2:1; score+=100*comboMultiplier; updateComboDisplay(); } }
+                }
+            });
+            bosses.forEach(b => {
+                if(b.type==='doppel'&&b.parryActive) return;
+                const dx=b.x-nave.x, dy=b.y-nave.y;
+                const proj=dx*cos+dy*sin, perp=Math.abs(dx*sin-dy*cos);
+                if(proj>0 && perp<50) { b.hp-=5; updateBossHP(b); }
+            });
+        }
         
         if(input.parry && !parryCooldown) {
             sfx.parry(); 
@@ -865,6 +1004,19 @@
                 e.vx += Math.cos(ang) * 0.4; e.vy += Math.sin(ang) * 0.4;
                 const spd = Math.hypot(e.vx, e.vy); if(spd > 9) { e.vx = (e.vx/spd)*9; e.vy = (e.vy/spd)*9; }
             }
+            // ELITE DODGE: detect if player is aiming at this enemy
+            if(e.type === 'elite' && !(e.dodgeCooldown)) {
+                const aimAngle = Math.atan2(input.aimY - nave.y, input.aimX - nave.x);
+                const toEnemy = Math.atan2(e.y - nave.y, e.x - nave.x);
+                const angleDiff = Math.abs(((aimAngle - toEnemy) + Math.PI) % (Math.PI*2) - Math.PI);
+                const dist = Math.hypot(e.x - nave.x, e.y - nave.y);
+                if(angleDiff < 0.12 && dist < 350 && input.shoot) {
+                    // Dash lateral
+                    e.vx += (Math.random() > 0.5 ? 1 : -1) * 8;
+                    e.dodgeCooldown = true;
+                    setTimeout(() => { if(e) e.dodgeCooldown = false; }, 1200);
+                }
+            }
             if(e.type === 'elite' && frameCount % 70 === 0) { const angle = Math.atan2(nave.y - e.y, nave.x - e.x); enemyBullets.push({x: e.x, y: e.y, vx: Math.cos(angle)*6, vy: Math.sin(angle)*6, color: '#00ffcc'}); }
             if(Math.hypot(e.x - nave.x, e.y - nave.y) < 20) { playerHit(); enemies.splice(i, 1); }
             if(e.y > canvas.height) enemies.splice(i, 1);
@@ -872,7 +1024,10 @@
 
         bosses.forEach((b, i) => {
             if(b.y < b.targetY) b.y += 2;
-            if(b.type === 'moving' || b.id === 'B2') { b.x += b.dir * 3; if(b.x > canvas.width - 50 || b.x < 50) b.dir *= -1; } 
+            if(b.type === 'moving' || b.id === 'B2') { 
+            const enrageSpeed = b.hp < b.maxHp * 0.3 ? 5 : 3;
+            b.x += b.dir * enrageSpeed; if(b.x > canvas.width - 50 || b.x < 50) b.dir *= -1; 
+        } 
             else if (b.type === 'doppel') {
                 let targetX = nave.x + Math.sin(frameCount/30) * 150; let targetY = nave.y - 150 + Math.cos(frameCount/20) * 50;
                 targetX = Math.max(50, Math.min(canvas.width-50, targetX)); targetY = Math.max(50, Math.min(canvas.height-150, targetY));
@@ -887,20 +1042,27 @@
             }
 
             if(b.type !== 'doppel') {
-                let fireRate = b.type === 'static' ? 300 : 400;
+                const enraged = b.hp < b.maxHp * 0.3;
+                if(!b.enraged && enraged) { b.enraged = true; screenShake = 8; floatingTexts.push({x: b.x, y: b.y - 60, text: '⚠ PÁNICO ⚠', life: 2.0, color: '#ff0000'}); }
+                let fireRate = b.type === 'static' ? (enraged ? 150 : 300) : (enraged ? 200 : 400);
                 // Telegraph: warn 600ms before firing
                 if(!b.telegraphActive && (Date.now() - b.lastShot) > (fireRate - 600)) {
                     b.telegraphActive = true;
                     setTimeout(() => { b.telegraphActive = false; }, 600);
                 }
                 if(Date.now() - b.lastShot > fireRate) {
-                    let total = 8 + (config.diff * 2);
-                    if (b.type === 'static' || b.id === 'B1') { for(let j=0; j<total; j++) { const a = (frameCount/15) + (j * (Math.PI*2/total)); enemyBullets.push({x: b.x, y: b.y, vx: Math.cos(a)*4, vy: Math.sin(a)*4, color: '#ff3366'}); } } 
-                    else if (b.type === 'moving' || b.id === 'B2') { let baseDir = Math.PI/2 + Math.sin(frameCount/20) * 0.8; for(let j=-2; j<=2; j++) { const a = baseDir + (j * 0.2); enemyBullets.push({x: b.x, y: b.y, vx: Math.cos(a)*5.5, vy: Math.sin(a)*5.5, color: '#ffcc00'}); } }
+                    let total = (8 + (config.diff * 2)) * (enraged ? 1.5 : 1) | 0;
+                    if (b.type === 'static' || b.id === 'B1') { for(let j=0; j<total; j++) { const a = (frameCount/15) + (j * (Math.PI*2/total)); enemyBullets.push({x: b.x, y: b.y, vx: Math.cos(a)*4, vy: Math.sin(a)*4, color: enraged ? '#ff6600' : '#ff3366'}); } } 
+                    else if (b.type === 'moving' || b.id === 'B2') { let baseDir = Math.PI/2 + Math.sin(frameCount/20) * 0.8; for(let j=-2; j<=2; j++) { const a = baseDir + (j * 0.2); enemyBullets.push({x: b.x, y: b.y, vx: Math.cos(a)*5.5, vy: Math.sin(a)*5.5, color: enraged ? '#ff6600' : '#ffcc00'}); } }
                     b.lastShot = Date.now();
                 }
             }
-            if(b.hp <= 0) { createExplosion(b.x, b.y, '#fff', 50); if(Math.random() > 0.3) pickUps.push({x: b.x, y: b.y, type: 'bomb'}); bosses.splice(i, 1); score += 10000; renderBossUI(); }
+            if(b.hp <= 0) { 
+                createExplosion(b.x, b.y, '#fff', 50); 
+                spawnDebris(b.x, b.y, '#ff3366', 5);
+                hitStopFrames = 8;
+                if(Math.random() > 0.3) pickUps.push({x: b.x, y: b.y, type: 'bomb'}); bosses.splice(i, 1); score += 10000; renderBossUI(); 
+            }
         });
 
         bullets.forEach((bul, bi) => {
@@ -912,7 +1074,11 @@
                     else { 
                         e.hp -= bul.dmg; 
                         if(e.hp <= 0) { 
-                            createExplosion(e.x, e.y); 
+                            createExplosion(e.x, e.y);
+                            // HIT STOP on elite kill
+                            if(e.type === 'elite') hitStopFrames = 5;
+                            // DEBRIS on elite/special kill
+                            if(e.type === 'elite' || e.type === 'special') spawnDebris(e.x, e.y, e.type === 'elite' ? '#00ffcc' : '#ffcc00');
                             enemies.splice(ei, 1);
                             // COMBO
                             comboCount++;
@@ -928,6 +1094,11 @@
                                 lives++;
                                 updateHUD();
                                 floatingTexts.push({x: e.x, y: e.y - 20, text: "+1 VIDA", life: 1.0, color: '#ff66cc'});
+                            }
+                            // WEAPON POWERUP drop from elite
+                            if(e.type === 'elite' && Math.random() > 0.4) {
+                                const wt = Math.random() > 0.5 ? 'S' : 'L';
+                                weaponPowerUps.push({x: e.x, y: e.y, letter: wt, vy: 1.5, life: 600});
                             }
 
                             if(Math.random() > 0.95 && e.type !== 'life') pickUps.push({x:e.x, y:e.y, type:'bomb'}); 
@@ -1038,6 +1209,10 @@
             });
             
             bosses.forEach(b => {
+                const enraged = b.hp < b.maxHp * 0.3;
+                const bossColor = enraged ? '#ff6600' : '#ff3366';
+                const bossGlow = enraged ? '#ff6600' : '#ff3366';
+                const enragePulse = enraged ? (0.8 + Math.sin(frameCount * 0.25) * 0.2) : 1;
                 // Telegraph: draw warning glow/pulse before firing
                 if(b.telegraphActive) {
                     ctx.globalAlpha = 0.25 + Math.sin(Date.now()/60)*0.15;
@@ -1058,11 +1233,65 @@
                     const angle = Math.atan2(nave.y - b.y, nave.x - b.x); ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(angle);
                     if(b.parryActive) { ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, 35, 0, Math.PI*2); ctx.stroke(); }
                     ctx.fillStyle = '#ff0044'; ctx.shadowBlur = 15; ctx.shadowColor = '#ff0044'; ctx.beginPath(); ctx.moveTo(20,0); ctx.lineTo(-15, -15); ctx.lineTo(-15, 15); ctx.fill(); ctx.restore();
-                } else { ctx.shadowBlur = 20; ctx.shadowColor = '#ff3366'; ctx.fillStyle = '#ff3366'; ctx.beginPath(); ctx.arc(b.x, b.y, 45, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0; }
+                } else { 
+                    ctx.shadowBlur = enraged ? 30 * enragePulse : 20; ctx.shadowColor = bossGlow; ctx.fillStyle = bossColor; 
+                    ctx.globalAlpha = enragePulse;
+                    ctx.beginPath(); ctx.arc(b.x, b.y, 45, 0, Math.PI*2); ctx.fill(); 
+                    // Enrage propulsor jets
+                    if(enraged) {
+                        ctx.fillStyle = '#ffff00'; ctx.globalAlpha = 0.7;
+                        for(let j=0; j<3; j++) {
+                            const ja = (frameCount*0.15) + j*(Math.PI*2/3);
+                            ctx.beginPath(); ctx.arc(b.x + Math.cos(ja)*30, b.y + Math.sin(ja)*30, 6 + Math.sin(frameCount*0.3+j)*3, 0, Math.PI*2); ctx.fill();
+                        }
+                    }
+                    ctx.globalAlpha = 1; ctx.shadowBlur = 0; 
+                }
             });
 
             enemyBullets.forEach(eb => { ctx.fillStyle = eb.color; ctx.beginPath(); ctx.arc(eb.x, eb.y, 5, 0, Math.PI*2); ctx.fill(); });
             bullets.forEach(b => { ctx.fillStyle = b.color; ctx.fillRect(b.x-2, b.y-10, 4, 20); });
+
+            // --- LASER BEAM ---
+            if(currentWeapon === 'laser' && input.shoot) {
+                const ang = Math.atan2(input.aimY - nave.y, input.aimX - nave.x);
+                const endX = nave.x + Math.cos(ang) * canvas.width * 2;
+                const endY = nave.y + Math.sin(ang) * canvas.width * 2;
+                // Outer glow
+                ctx.save();
+                ctx.globalAlpha = 0.18 + Math.sin(frameCount*0.4)*0.07;
+                ctx.strokeStyle = '#00ccff'; ctx.lineWidth = 18;
+                ctx.shadowBlur = 20; ctx.shadowColor = '#00ccff';
+                ctx.beginPath(); ctx.moveTo(nave.x, nave.y); ctx.lineTo(endX, endY); ctx.stroke();
+                // Core beam
+                ctx.globalAlpha = 0.85;
+                ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3;
+                ctx.beginPath(); ctx.moveTo(nave.x, nave.y); ctx.lineTo(endX, endY); ctx.stroke();
+                ctx.shadowBlur = 0; ctx.globalAlpha = 1; ctx.restore();
+            }
+
+            // --- WEAPON POWERUP CRATES ---
+            weaponPowerUps.forEach(wp => {
+                const pulse = 0.7 + Math.sin(frameCount * 0.12) * 0.3;
+                ctx.globalAlpha = pulse;
+                ctx.fillStyle = '#ff9900'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+                ctx.fillRect(wp.x - 14, wp.y - 14, 28, 28);
+                ctx.strokeRect(wp.x - 14, wp.y - 14, 28, 28);
+                ctx.fillStyle = '#fff'; ctx.font = 'bold 16px Orbitron';
+                ctx.fillText(wp.letter, wp.x - 6, wp.y + 6);
+                ctx.globalAlpha = 1;
+            });
+
+            // --- DEBRIS ---
+            debrisChunks.forEach(d => {
+                ctx.save(); ctx.globalAlpha = d.life;
+                ctx.translate(d.x, d.y); ctx.rotate(d.rot);
+                ctx.fillStyle = d.color; ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(d.pts[0][0], d.pts[0][1]);
+                d.pts.forEach(p => ctx.lineTo(p[0], p[1]));
+                ctx.closePath(); ctx.fill(); ctx.stroke();
+                ctx.restore();
+            });
 
             if(!nave.inmune || frameCount % 10 < 5) {
                 if(parryActive) { ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(nave.x, nave.y, 35, 0, Math.PI*2); ctx.stroke(); }
