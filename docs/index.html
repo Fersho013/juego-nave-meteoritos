@@ -166,10 +166,12 @@
                     <label><input type="checkbox" value="elite"> Enemigo Élite (Francotirador)</label>
                     <label><input type="checkbox" value="kamikaze"> Enemigo Kamikaze (Acelerado)</label>
                     <hr style="border-color:#333;">
-                    <label><input type="checkbox" value="b1"> Jefe 1 (Estático)</label>
-                    <label><input type="checkbox" value="b2"> Jefe 2 (Móvil)</label>
-                    <label><input type="checkbox" value="b3"> Jefe 3 (Gemelos)</label>
-                    <label><input type="checkbox" value="b4"> Jefe Final (Doppel)</label>
+                    <label><input type="checkbox" value="b1"> Jefe 1 — Estático</label>
+                    <label><input type="checkbox" value="b2"> Jefe 2 — Móvil</label>
+                    <label><input type="checkbox" value="b3"> Jefe 3 — Gemelos B1+B2</label>
+                    <label><input type="checkbox" value="b_hunter"> Jefe Hunter (Perseguidor)</label>
+                    <label><input type="checkbox" value="b_berserker"> Jefe Berserker (Melee)</label>
+                    <label><input type="checkbox" value="b4"> Jefe Final — Doppel</label>
                 </div>
                 <div class="btn-group">
                     <button onclick="startCustom()">Iniciar Simulador</button>
@@ -735,6 +737,8 @@
                 if(val === 'b1') createBoss('static', 'B1');
                 if(val === 'b2') createBoss('moving', 'B2');
                 if(val === 'b3') { createBoss('static', 'B1'); createBoss('moving', 'B2'); }
+                if(val === 'b_hunter') createBoss('hunter', 'B_HUNTER');
+                if(val === 'b_berserker') createBoss('berserker', 'B_BERSERK');
                 if(val === 'b4') createBoss('doppel', 'DOPPEL');
             });
         }
@@ -827,7 +831,7 @@
             // Dash state machine: 'chase' | 'telegraph' | 'dashing' | 'exhausted'
             b.dashState = 'chase';
             b.dashTimer = 0;
-            b.dashInterval = 3500;   // ms between dash sequences
+            b.dashInterval = 2400;   // ms between dash sequences
             b.lastDashTime = Date.now();
             b.dashVx = 0; b.dashVy = 0;
             b.dashCount = 0;         // for phase 2 triple combo
@@ -850,7 +854,7 @@
     }
 
     function checkProgression() {
-        if(gameMode === 'custom') { if(bosses.length === 0 && customSelection.includes('b4') && currentWave > 1) { winGame(); } if(bosses.length === 0 && currentWave === 1) currentWave++; return; }
+        if(gameMode === 'custom') { const hasBoss = customSelection.some(v => ['b1','b2','b3','b_hunter','b_berserker','b4'].includes(v)); if(bosses.length === 0 && hasBoss && currentWave > 1) { winGame(); } if(bosses.length === 0 && currentWave === 1) currentWave++; return; }
         if(gameMode === 'solo_boss' && bosses.length === 0) {
             if(currentWave === 1) { createBoss('static', 'B1'); currentWave++; }
             else if(currentWave === 2) { createBoss('moving', 'B2'); currentWave++; }
@@ -1293,9 +1297,9 @@
                 // --- PHASE STATE MACHINE ---
                 if(b.dashState === 'chase') {
                     // Elastic follow — moderate max speed
-                    const maxSpd = enraged ? 3.8 : 2.8;
-                    b.vx += (nave.x - b.x) * 0.015;
-                    b.vy += (nave.y - b.y) * 0.015;
+                    const maxSpd = enraged ? 5.2 : 3.8;
+                    b.vx += (nave.x - b.x) * 0.022;
+                    b.vy += (nave.y - b.y) * 0.022;
                     const spd = Math.hypot(b.vx, b.vy);
                     if(spd > maxSpd) { b.vx = (b.vx/spd)*maxSpd; b.vy = (b.vy/spd)*maxSpd; }
                     b.x += b.vx; b.y += b.vy;
@@ -1303,7 +1307,7 @@
                     b.y = Math.max(30, Math.min(canvas.height*0.75, b.y));
 
                     // Time to initiate dash sequence
-                    const interval = enraged ? 2000 : 3500;
+                    const interval = enraged ? 1400 : 2400;
                     if(now - b.lastDashTime > interval) {
                         b.vx = 0; b.vy = 0;
                         b.dashCount = 0;
@@ -1317,7 +1321,7 @@
                     if(now - b.dashTimer > telegraphDuration) {
                         // Launch dash toward player's current position
                         const ang = Math.atan2(nave.y - b.y, nave.x - b.x);
-                        const spd = enraged ? 22 : 18;
+                        const spd = enraged ? 30 : 24;
                         b.dashVx = Math.cos(ang) * spd;
                         b.dashVy = Math.sin(ang) * spd;
                         b.dashState = 'dashing';
@@ -1333,7 +1337,7 @@
                     if(b.y > canvas.height-20) { b.y = canvas.height-20; b.dashVy = -Math.abs(b.dashVy) * 0.5; }
                     // Stop when slow enough or out of canvas diagonal
                     const curSpd = Math.hypot(b.dashVx, b.dashVy);
-                    b.dashVx *= 0.92; b.dashVy *= 0.92;
+                    b.dashVx *= 0.95; b.dashVy *= 0.95;
                     if(curSpd < 1.5 || now - b.dashTimer > 1200) {
                         b.vx = 0; b.vy = 0; b.dashVx = 0; b.dashVy = 0;
                         b.dashCount++;
@@ -1363,7 +1367,7 @@
                 }
 
                 // --- CONTACT DAMAGE ---
-                if(Math.hypot(b.x - nave.x, b.y - nave.y) < 38) {
+                if(Math.hypot(b.x - nave.x, b.y - nave.y) < 46) {
                     playerHit(b.dashState === 'dashing');
                 }
 
@@ -1435,7 +1439,7 @@
                 } 
             });
             bosses.forEach(b => { 
-                const bRadius = b.type === 'doppel' ? 30 : (b.type === 'berserker' ? 32 : 45);
+                const bRadius = b.type === 'doppel' ? 30 : (b.type === 'berserker' ? 44 : 45);
                 if(!hit && Math.hypot(bul.x - b.x, bul.y - b.y) < bRadius) { 
                     if(b.immune) { 
                         // Berserker last breath: bullets bounce off
@@ -1604,9 +1608,9 @@
                     ctx.fillStyle = baseColor;
 
                     // Spike count: 6 normal, 8 enraged (longer)
-                    const spikeCount = enraged ? 8 : 6;
-                    const outerR = enraged ? 34 : 28;
-                    const innerR = enraged ? 12 : 14;
+                    const spikeCount = enraged ? 10 : 8;
+                    const outerR = enraged ? 50 : 44;
+                    const innerR = enraged ? 16 : 18;
                     ctx.beginPath();
                     for(let s = 0; s < spikeCount * 2; s++) {
                         const a = (s / (spikeCount * 2)) * Math.PI * 2;
