@@ -97,6 +97,7 @@
             <div style="text-align:center; pointer-events:none;">
                 <div id="combo-display" style="display:none; font-size:1.1rem; font-family:'Orbitron',sans-serif; color:var(--warning); text-shadow:0 0 10px var(--warning); font-weight:bold;"></div>
             <div id="wave-progress" style="display:none; font-size:0.72rem; font-family:'Orbitron',sans-serif; color:#aaa; margin-top:4px; min-width:140px;"></div>
+            <div id="bomb-alert" style="display:none; font-size:0.85rem; font-family:'Orbitron',sans-serif; font-weight:bold; margin-top:6px; padding:4px 8px; border:2px solid var(--warning); background:rgba(0,0,0,0.7);"></div>
             </div>
             <div class="stat-box">LIVES: <span id="val-lives">❤️❤️❤️</span><br>PARRY: <span id="val-parry">READY</span><br>DASH: <span id="val-dash">READY</span></div>
         </div>
@@ -881,6 +882,8 @@
                 startWaveTransition('JEFE FINAL — DOPPEL', 8, () => { currentWave = 4; createBoss('doppel', 'DOPPEL'); });
             }
             else if(wavePhase === 9 && bosses.length === 0) winGame();
+            // Win if both doppel clones are dead
+            if(bosses.length === 0 && ['solo_boss','progressive'].includes(gameMode) && wavePhase >= 8 && !bosses.some(b=>b.type==='doppel')) { winGame(); }
             // Boss killed -> start next wave transition
             if(wavePhase === 2 && bosses.length === 0 && !waveTransition && frameCount > 10) {
                 startWaveTransition('SECTOR 2', 3, () => { currentWave = 2; waveKills = 0; });
@@ -1003,9 +1006,14 @@
     function updateWaveProgress() {
         if(gameMode !== 'progressive') return;
         const el = document.getElementById('wave-progress');
+        const alertEl = document.getElementById('bomb-alert');
         if(!el) return;
         const isWavePhase = [1,3,5,7].includes(wavePhase);
-        if(!isWavePhase || waveTransition) { el.style.display = 'none'; return; }
+        if(!isWavePhase || waveTransition) {
+            el.style.display = 'none';
+            if(alertEl) alertEl.style.display = 'none';
+            return;
+        }
         const pct = Math.min(100, (waveKills / waveKillTarget) * 100);
         const sectorNum = wavePhase === 1 ? 1 : wavePhase === 3 ? 2 : wavePhase === 5 ? 3 : 4;
         el.style.display = 'block';
@@ -1013,6 +1021,20 @@
             <div style="width:100%;height:4px;background:#333;border-radius:2px;margin-top:3px;">
               <div style="width:${pct}%;height:4px;background:${pct>=100?'#00ff00':'var(--primary)'};border-radius:2px;transition:width 0.1s;"></div>
             </div>`;
+        // Bomb alert when wave complete
+        if(alertEl) {
+            if(pct >= 100 && bosses.length === 0) {
+                alertEl.style.display = 'block';
+                const pulse = Math.sin(Date.now() / 250);
+                const col = pulse > 0 ? 'var(--warning)' : '#ff3366';
+                alertEl.style.color = col;
+                alertEl.style.borderColor = col;
+                alertEl.style.textShadow = `0 0 10px ${col}`;
+                alertEl.innerText = '💣 USA BOMBA → IR AL JEFE 💣';
+            } else {
+                alertEl.style.display = 'none';
+            }
+        }
     }
 
     function update() {
@@ -1022,7 +1044,7 @@
         // --- HIT STOP ---
         if(hitStopFrames > 0) { hitStopFrames--; return; }
 
-        frameCount++; checkProgression();
+        frameCount++; checkProgression(); if(gameMode==='progressive') updateWaveProgress();
 
         // --- WEAPON POWERUP TIMER ---
         if(currentWeapon !== 'normal') {
@@ -1084,21 +1106,43 @@
             const ang = Math.atan2(input.aimY - nave.y, input.aimX - nave.x);
             const cos = Math.cos(ang), sin = Math.sin(ang);
             enemies.forEach((e, ei) => {
-                // Point-to-line distance
                 const dx = e.x - nave.x, dy = e.y - nave.y;
                 const proj = dx*cos + dy*sin;
                 const perpDist = Math.abs(dx*sin - dy*cos);
                 if(proj > 0 && perpDist < 18) {
-                    if(e.shield) { e.shield = false; } 
-                    else { e.hp -= 8; if(e.hp <= 0) { createExplosion(e.x,e.y); spawnDebris(e.x,e.y,'#00ccff'); enemies.splice(ei,1); comboCount++; comboMultiplier = comboCount>=10?3:comboCount>=5?2:1; score+=100*comboMultiplier; updateComboDisplay(); } }
+                    if(e.shield) { e.shield = false; }
+                    else {
+                        // INSTA-KILL: destroy on contact, award points + combo
+                        createExplosion(e.x, e.y);
+                        if(e.type === 'elite' || e.type === 'special') spawnDebris(e.x, e.y, '#00ccff');
+                        enemies.splice(ei, 1);
+                        if(e.type !== 'life') {
+                            comboCount++; comboMultiplier = comboCount>=10?3:comboCount>=5?2:1;
+                            if(comboResetTimer) clearTimeout(comboResetTimer);
+                            comboResetTimer = setTimeout(() => { comboCount=0; comboMultiplier=1; updateComboDisplay(); }, 2500);
+                            const pts = 150 * comboMultiplier;
+                            score += pts;
+                            floatingTexts.push({x: e.x, y: e.y, text: comboMultiplier>1?`+${pts} x${comboMultiplier}!`:`+${pts}`, life:1.0, color: comboMultiplier>=3?'#ff3366':comboMultiplier===2?'#ffcc00':'#00ccff'});
+                            updateComboDisplay();
+                            if(gameMode === 'progressive') { waveKills++; updateWaveProgress(); }
+                            if(e.type === 'elite' && Math.random() > 0.4) {
+                                const wt = Math.random() > 0.5 ? 'S' : 'L';
+                                weaponPowerUps.push({x: e.x, y: e.y, letter: wt, vy: 1.5, life: 600});
+                            }
+                        } else {
+                            lives++; updateHUD();
+                            floatingTexts.push({x: e.x, y: e.y, text: '+1 VIDA', life:1.0, color:'#ff66cc'});
+                        }
+                    }
                 }
             });
             bosses.forEach(b => {
                 if(b.type==='doppel'&&b.parryActive) return;
-                if(b.immune) return; // berserker last breath
+                if(b.immune) return;
+                if(b.type==='doppel_y'&&b.dodging) return; // yellow doppel dodge
                 const dx=b.x-nave.x, dy=b.y-nave.y;
                 const proj=dx*cos+dy*sin, perp=Math.abs(dx*sin-dy*cos);
-                if(proj>0 && perp<50) { b.hp-=5; updateBossHP(b); }
+                if(proj>0 && perp<50) { b.hp-=100; updateBossHP(b); }  // 100 dmg/tick vs bosses
             });
         }
         
@@ -1171,9 +1215,84 @@
             if(b.y < b.targetY) b.y += 2;
             if(b.type === 'moving' || b.id === 'B2') { 
             const enrageSpeed = b.hp < b.maxHp * 0.3 ? 5 : 3;
-            b.x += b.dir * enrageSpeed; if(b.x > canvas.width - 50 || b.x < 50) b.dir *= -1; 
+            b.x += b.dir * enrageSpeed; if(b.x > canvas.width - 50 || b.x < 50) b.dir *= -1;
+            // B2 aimed fire: burst aimed at player current position
+            const b2Enraged = b.hp < b.maxHp * 0.3;
+            if(!b2Enraged) {
+                // Normal: 5-shot spread aimed at player, every 400ms
+                if(!b.telegraphActive && (Date.now() - b.lastShot) > (400 - 600)) {
+                    b.telegraphActive = true;
+                    setTimeout(() => { if(b) b.telegraphActive = false; }, 600);
+                }
+                if(Date.now() - b.lastShot > 400) {
+                    const ang = Math.atan2(nave.y - b.y, nave.x - b.x);
+                    for(let j=-2; j<=2; j++) {
+                        const a = ang + j * 0.18;
+                        enemyBullets.push({x: b.x, y: b.y, vx: Math.cos(a)*5.5, vy: Math.sin(a)*5.5, color: '#ffcc00'});
+                    }
+                    b.lastShot = Date.now();
+                }
+            } else {
+                // Enraged: tighter 3-shot burst at player every 200ms — no respite
+                if(Date.now() - b.lastShot > 200) {
+                    const ang = Math.atan2(nave.y - b.y, nave.x - b.x);
+                    for(let j=-1; j<=1; j++) {
+                        const a = ang + j * 0.1;
+                        enemyBullets.push({x: b.x, y: b.y, vx: Math.cos(a)*7, vy: Math.sin(a)*7, color: '#ff6600'});
+                    }
+                    b.lastShot = Date.now();
+                }
+            }
         } 
             else if (b.type === 'doppel') {
+                // --- TRANSFORMATION at 50% HP ---
+                if(!b.transformed && b.hp <= b.maxHp * 0.5) {
+                    b.transformed = true;
+                    b.immune = true;
+                    b.vx = 0; b.vy = 0;
+                    floatingTexts.push({x: b.x, y: b.y - 70, text: '⚡ TRANSFORMACIÓN ⚡', life: 3.0, color: '#ffff00'});
+                    screenShake = 12;
+                    setTimeout(() => {
+                        // Remove original, spawn two clones
+                        const bi2 = bosses.indexOf(b);
+                        if(bi2 !== -1) bosses.splice(bi2, 1);
+                        // Yellow — defensive sniper
+                        bosses.push({
+                            id:'DOPPEL_Y', type:'doppel_y',
+                            x: canvas.width*0.3, y: 140, targetY: 140,
+                            hp: 3000, maxHp: 3000,
+                            vx:0, vy:0,
+                            lastMissile: Date.now(),
+                            dodgeCooldown: false, dodging: false,
+                            parryCooldown: false, parryActive: false,
+                            enraged: false, bombs: 0
+                        });
+                        // Orange — berserker-style melee
+                        bosses.push({
+                            id:'DOPPEL_O', type:'doppel_o',
+                            x: canvas.width*0.7, y: 140, targetY: 140,
+                            hp: 3000, maxHp: 3000,
+                            vx:0, vy:0,
+                            dashState: 'chase',
+                            dashTimer: 0, dashVx:0, dashVy:0,
+                            dashCount:0, maxDashes:3,
+                            lastDashTime: Date.now(),
+                            lastExplosion: 0,
+                            explodeCooldown: false,
+                            enraged: false, bombs: 0
+                        });
+                        renderBossUI();
+                        hitStopFrames = 10; screenShake = 20;
+                        createExplosion(canvas.width/2, canvas.height/2, '#ffff00', 40);
+                    }, 1500);
+                }
+                if(b.immune) {
+                    // Trembling in center during transformation
+                    b.x = canvas.width/2 + Math.sin(frameCount*0.4)*6;
+                    b.y = canvas.height/2 + Math.cos(frameCount*0.3)*6;
+                    return;
+                }
+                // Normal Doppel phase (first half)
                 let targetX = nave.x + Math.sin(frameCount/30) * 150; let targetY = nave.y - 150 + Math.cos(frameCount/20) * 50;
                 targetX = Math.max(50, Math.min(canvas.width-50, targetX)); targetY = Math.max(50, Math.min(canvas.height-150, targetY));
                 b.x += (targetX - b.x) * 0.04; b.y += (targetY - b.y) * 0.04;
@@ -1184,6 +1303,159 @@
                     if(frameCount % 60 === 0) { for(let j=-2; j<=2; j++) enemyBullets.push({x: b.x, y: b.y, vx: Math.cos(ang+(j*0.2))*10, vy: Math.sin(ang+(j*0.2))*10, color: '#ffcc00'}); } b.lastShot = Date.now();
                 }
                 if(b.bombs > 0 && (b.hp < b.maxHp*0.3 || Math.hypot(b.x-nave.x, b.y-nave.y) < 100)) { triggerBomb(false, b); b.bombs--; }
+            }
+
+            else if(b.type === 'doppel_y') {
+                // --- YELLOW DOPPEL: defensive sniper ---
+                const now = Date.now();
+                const enraged = b.enraged;
+                const missileRate = enraged ? 3000 : 7000;
+
+                // Keep distance from player, orbit around edges
+                const distToPlayer = Math.hypot(nave.x - b.x, nave.y - b.y);
+                const safeZone = 280;
+                if(distToPlayer < safeZone) {
+                    // Move away
+                    const ang = Math.atan2(b.y - nave.y, b.x - nave.x);
+                    b.vx += Math.cos(ang) * 0.3; b.vy += Math.sin(ang) * 0.3;
+                } else {
+                    // Orbit gently
+                    b.vx += Math.sin(frameCount/40) * 0.15;
+                    b.vy += Math.cos(frameCount/40) * 0.15;
+                }
+                const spd = Math.hypot(b.vx, b.vy); if(spd > 3.5) { b.vx=(b.vx/spd)*3.5; b.vy=(b.vy/spd)*3.5; }
+                // Dodge bullets
+                if(!b.dodgeCooldown) {
+                    const threat = bullets.find(bul => Math.hypot(bul.x - b.x, bul.y - b.y) < 130);
+                    if(threat) {
+                        b.vx += (Math.random() > 0.5 ? 1 : -1) * 7;
+                        b.dodging = true;
+                        b.dodgeCooldown = true;
+                        setTimeout(() => { if(b) { b.dodgeCooldown = false; b.dodging = false; } }, 800);
+                    }
+                }
+                b.x += b.vx; b.y += b.vy;
+                b.vx *= 0.96; b.vy *= 0.96;
+                b.x = Math.max(30, Math.min(canvas.width-30, b.x));
+                b.y = Math.max(30, Math.min(canvas.height*0.6, b.y));
+
+                // Enrage: if orange dies first
+                if(!b.enraged && bosses.every(bx => bx.type !== 'doppel_o')) {
+                    b.enraged = true;
+                    b.lastMissile = 0; // fire immediately
+                    screenShake = 12;
+                    floatingTexts.push({x: b.x, y: b.y-60, text:'⚠ FURIA AMARILLA ⚠', life:2.0, color:'#ffff00'});
+                }
+                // Guided missile
+                if(now - b.lastMissile > missileRate) {
+                    const ang = Math.atan2(nave.y - b.y, nave.x - b.x);
+                    enemyBullets.push({x: b.x, y: b.y, vx: Math.cos(ang)*4, vy: Math.sin(ang)*4,
+                        color: '#ffff00', isMissile: true,
+                        hp: 3, // interceptable
+                        life: 420 // frames before self-destruct
+                    });
+                    floatingTexts.push({x: b.x, y: b.y-40, text:'⚠ MISIL', life:1.0, color:'#ffff00'});
+                    b.lastMissile = now;
+                }
+            }
+
+            else if(b.type === 'doppel_o') {
+                // --- ORANGE DOPPEL: hyper-aggressive berserker melee ---
+                const now = Date.now();
+                const enraged = b.enraged;
+
+                // Enrage: if yellow dies first
+                if(!b.enraged && bosses.every(bx => bx.type !== 'doppel_y')) {
+                    b.enraged = true;
+                    b.maxDashes = 4;
+                    screenShake = 12;
+                    floatingTexts.push({x: b.x, y: b.y-60, text:'⚠ FURIA NARANJA ⚠', life:2.0, color:'#ff6600'});
+                }
+
+                // Periodic center-explosion when enraged
+                if(enraged && !b.explodeCooldown && now - b.lastExplosion > 10000) {
+                    b.lastExplosion = now;
+                    b.explodeCooldown = true;
+                    b.dashState = 'toCenter';
+                    floatingTexts.push({x: b.x, y: b.y-60, text:'¡EXPLOSIÓN!', life:1.5, color:'#ff4400'});
+                }
+                if(b.dashState === 'toCenter') {
+                    const cx = canvas.width/2, cy = canvas.height/2;
+                    const dx = cx-b.x, dy = cy-b.y, dist = Math.hypot(dx,dy);
+                    if(dist > 8) { b.x += (dx/dist)*6; b.y += (dy/dist)*6; }
+                    else {
+                        b.x = cx; b.y = cy;
+                        if(!b.centerTimer) {
+                            b.centerTimer = setTimeout(() => {
+                                // 2-second countdown then explode
+                                b.lastBreathCount = 2;
+                                b.dashState = 'centerExploding';
+                                b.centerTimer = null;
+                                b.countInterval = setInterval(() => {
+                                    b.lastBreathCount--;
+                                    screenShake = 8;
+                                    if(b.lastBreathCount <= 0) {
+                                        clearInterval(b.countInterval);
+                                        hitStopFrames = 10; screenShake = 30;
+                                        for(let j=0; j<24; j++) {
+                                            const a=(j/24)*Math.PI*2;
+                                            enemyBullets.push({x:b.x,y:b.y,vx:Math.cos(a)*16,vy:Math.sin(a)*16,color:'#ff6600',isBerserkerSpike:true});
+                                        }
+                                        createExplosion(b.x,b.y,'#ff6600',60);
+                                        spawnDebris(b.x,b.y,'#ff6600',5);
+                                        b.dashState = 'chase';
+                                        b.explodeCooldown = false;
+                                        b.lastBreathCount = 0;
+                                    }
+                                }, 1000);
+                            }, 500);
+                        }
+                    }
+                    return; // skip dash while going to center
+                }
+
+                // Normal orange: super-aggressive berserker (faster, more dashes)
+                const maxSpd = enraged ? 7 : 5.5;
+                b.vx += (nave.x - b.x) * 0.028; b.vy += (nave.y - b.y) * 0.028;
+                const spd = Math.hypot(b.vx, b.vy);
+                if(spd > maxSpd && b.dashState==='chase') { b.vx=(b.vx/spd)*maxSpd; b.vy=(b.vy/spd)*maxSpd; }
+                if(b.dashState === 'chase') {
+                    b.x += b.vx; b.y += b.vy;
+                    b.x = Math.max(20, Math.min(canvas.width-20, b.x));
+                    b.y = Math.max(20, Math.min(canvas.height*0.85, b.y));
+                    const interval = enraged ? 900 : 1500;
+                    if(now - b.lastDashTime > interval) {
+                        b.vx=0; b.vy=0; b.dashCount=0;
+                        b.dashState = 'telegraph'; b.dashTimer = now;
+                    }
+                } else if(b.dashState === 'telegraph') {
+                    const dur = enraged ? 200 : 280;
+                    if(now - b.dashTimer > dur) {
+                        const ang = Math.atan2(nave.y - b.y, nave.x - b.x);
+                        const dspd = enraged ? 38 : 30;
+                        b.dashVx = Math.cos(ang)*dspd; b.dashVy = Math.sin(ang)*dspd;
+                        b.dashState = 'dashing'; b.dashTimer = now;
+                    }
+                } else if(b.dashState === 'dashing') {
+                    b.x += b.dashVx; b.y += b.dashVy;
+                    if(b.x<20){b.x=20;b.dashVx=Math.abs(b.dashVx)*0.4;}
+                    if(b.x>canvas.width-20){b.x=canvas.width-20;b.dashVx=-Math.abs(b.dashVx)*0.4;}
+                    if(b.y<20){b.y=20;b.dashVy=Math.abs(b.dashVy)*0.4;}
+                    if(b.y>canvas.height-20){b.y=canvas.height-20;b.dashVy=-Math.abs(b.dashVy)*0.4;}
+                    b.dashVx *= 0.93; b.dashVy *= 0.93;
+                    const cs = Math.hypot(b.dashVx, b.dashVy);
+                    if(cs < 1.5 || now-b.dashTimer > 900) {
+                        b.vx=0;b.vy=0;b.dashVx=0;b.dashVy=0;
+                        b.dashCount++;
+                        if(b.dashCount >= (b.maxDashes||3)) {
+                            b.dashState='chase'; b.lastDashTime=now;
+                        } else {
+                            b.dashState='telegraph'; b.dashTimer=now;
+                        }
+                    }
+                }
+                // Contact damage (bigger radius than berserker)
+                if(Math.hypot(b.x-nave.x, b.y-nave.y) < 38) playerHit(b.dashState==='dashing');
             }
 
             if(b.type === 'hunter') {
@@ -1438,17 +1710,37 @@
                     } 
                 } 
             });
+            // MISSILE INTERCEPTION: player bullets can destroy missiles
+            if(!hit) {
+                for(let mi = enemyBullets.length-1; mi >= 0; mi--) {
+                    const mb = enemyBullets[mi];
+                    if(mb.isMissile && Math.hypot(bul.x - mb.x, bul.y - mb.y) < 18) {
+                        createExplosion(mb.x, mb.y, '#ffff00', 8);
+                        floatingTexts.push({x: mb.x, y: mb.y, text:'MISIL ✓', life:0.8, color:'#ffff00'});
+                        enemyBullets.splice(mi, 1);
+                        hit = true; break;
+                    }
+                }
+            }
             bosses.forEach(b => { 
-                const bRadius = b.type === 'doppel' ? 30 : (b.type === 'berserker' ? 44 : 45);
+                const bRadius = b.type === 'doppel' ? 30 : (b.type === 'berserker' ? 44 : (b.type === 'doppel_y' || b.type === 'doppel_o' ? 28 : 45));
                 if(!hit && Math.hypot(bul.x - b.x, bul.y - b.y) < bRadius) { 
                     if(b.immune) { 
-                        // Berserker last breath: bullets bounce off
                         createExplosion(bul.x, bul.y, '#ff4400', 3); hit = true;
+                    } else if(b.type === 'doppel_y' && b.dodging) {
+                        // Yellow doppel dodging: bullet misses
+                        createExplosion(bul.x, bul.y, '#ffff00', 2); hit = true;
                     } else if(b.type === 'doppel' && b.parryActive) { createExplosion(bul.x, bul.y, '#00ffcc', 5); hit = true; } 
                     else { 
                         hit = true; b.hp -= bul.dmg; updateBossHP(b);
-                        // DAMAGE NUMBERS on bosses
                         floatingTexts.push({x: b.x + (Math.random()-0.5)*40, y: b.y - 20 + (Math.random()-0.5)*20, text: `-${bul.dmg}`, life: 1.0, color: '#ff3366'});
+                        // Check if clone dies: award points, trigger sibling enrage
+                        if(b.hp <= 0 && (b.type === 'doppel_y' || b.type === 'doppel_o')) {
+                            createExplosion(b.x, b.y, '#fff', 50); hitStopFrames = 8; screenShake = 20;
+                            spawnDebris(b.x, b.y, b.type==='doppel_y'?'#ffff00':'#ff6600', 6);
+                            score += 8000;
+                            const bi2 = bosses.indexOf(b); if(bi2!==-1) { bosses.splice(bi2,1); renderBossUI(); }
+                        }
                     } 
                 } 
             });
@@ -1457,6 +1749,14 @@
 
         for (let ei = enemyBullets.length - 1; ei >= 0; ei--) {
             let eb = enemyBullets[ei];
+            // MISSILE: homing update
+            if(eb.isMissile) {
+                eb.life = (eb.life||420) - 1;
+                if(eb.life <= 0) { enemyBullets.splice(ei, 1); continue; }
+                const mAng = Math.atan2(nave.y - eb.y, nave.x - eb.x);
+                eb.vx += Math.cos(mAng) * 0.35; eb.vy += Math.sin(mAng) * 0.35;
+                const ms = Math.hypot(eb.vx, eb.vy); if(ms > 10) { eb.vx=(eb.vx/ms)*10; eb.vy=(eb.vy/ms)*10; }
+            }
             eb.x += eb.vx; eb.y += eb.vy;
             let destroyed = false;
             
@@ -1545,12 +1845,12 @@
             });
             
             bosses.forEach(b => {
-                const enraged = b.hp < b.maxHp * 0.3;
+                const enraged = b.type === 'doppel_y' || b.type === 'doppel_o' ? b.enraged : (b.hp < b.maxHp * 0.3);
                 const bossColor = enraged ? '#ff6600' : '#ff3366';
                 const bossGlow = enraged ? '#ff6600' : '#ff3366';
                 const enragePulse = enraged ? (0.8 + Math.sin(frameCount * 0.25) * 0.2) : 1;
                 // Telegraph: draw warning glow/pulse before firing
-                if(b.telegraphActive) {
+                if(b.telegraphActive && b.type !== 'doppel_y' && b.type !== 'doppel_o') {
                     ctx.globalAlpha = 0.25 + Math.sin(Date.now()/60)*0.15;
                     ctx.fillStyle = '#ff0000';
                     ctx.beginPath(); ctx.arc(b.x, b.y, b.type === 'doppel' ? 50 : 70, 0, Math.PI*2); ctx.fill();
@@ -1568,7 +1868,61 @@
                 if(b.type === 'doppel') {
                     const angle = Math.atan2(nave.y - b.y, nave.x - b.x); ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(angle);
                     if(b.parryActive) { ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, 35, 0, Math.PI*2); ctx.stroke(); }
-                    ctx.fillStyle = '#ff0044'; ctx.shadowBlur = 15; ctx.shadowColor = '#ff0044'; ctx.beginPath(); ctx.moveTo(20,0); ctx.lineTo(-15, -15); ctx.lineTo(-15, 15); ctx.fill(); ctx.restore();
+                    // During transformation: trembling white flash
+                    const dColor = b.immune ? (frameCount%6<3?'#ffffff':'#ffff00') : '#ff0044';
+                    ctx.fillStyle = dColor; ctx.shadowBlur = b.immune ? 30 : 15; ctx.shadowColor = dColor;
+                    ctx.beginPath(); ctx.moveTo(20,0); ctx.lineTo(-15, -15); ctx.lineTo(-15, 15); ctx.fill(); ctx.restore();
+                } else if(b.type === 'doppel_y') {
+                    // Yellow Doppel — triangle, yellow/gold, pixel style matching image
+                    const angle = Math.atan2(nave.y - b.y, nave.x - b.x);
+                    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(angle);
+                    const yEnrage = b.enraged;
+                    const yPulse = yEnrage ? (0.85 + Math.sin(frameCount*0.25)*0.15) : 1;
+                    ctx.shadowBlur = yEnrage ? 30 : 15;
+                    ctx.shadowColor = yEnrage ? '#ffff00' : '#ffcc00';
+                    ctx.globalAlpha = yPulse;
+                    // Outer border (red like image)
+                    ctx.fillStyle = '#ff2200';
+                    ctx.beginPath(); ctx.moveTo(22, 0); ctx.lineTo(-14, -20); ctx.lineTo(-14, 20); ctx.fill();
+                    // Inner fill (yellow)
+                    ctx.fillStyle = yEnrage ? '#ffffff' : '#ffee00';
+                    ctx.beginPath(); ctx.moveTo(14, 0); ctx.lineTo(-8, -13); ctx.lineTo(-8, 13); ctx.fill();
+                    ctx.globalAlpha = 1; ctx.shadowBlur = 0; ctx.restore();
+                } else if(b.type === 'doppel_o') {
+                    // Orange Doppel — triangle, orange, pixel style matching image
+                    const isTelegraph = b.dashState === 'telegraph';
+                    const isDashing = b.dashState === 'dashing';
+                    const goingCenter = b.dashState === 'toCenter' || b.dashState === 'centerExploding';
+                    const angle = isDashing
+                        ? Math.atan2(b.dashVy, b.dashVx)
+                        : Math.atan2(nave.y - b.y, nave.x - b.x);
+                    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(angle);
+                    const oEnrage = b.enraged;
+                    // Telegraph line
+                    if(isTelegraph) {
+                        ctx.strokeStyle = 'rgba(255,100,0,0.5)'; ctx.lineWidth = 1.5; ctx.setLineDash([5,4]);
+                        const global = { x: nave.x - b.x, y: nave.y - b.y };
+                        ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(global.x, global.y); ctx.stroke();
+                        ctx.setLineDash([]);
+                    }
+                    ctx.shadowBlur = isDashing ? 35 : (oEnrage ? 25 : 15);
+                    ctx.shadowColor = isDashing ? '#fff' : '#ff6600';
+                    // Outer border (red)
+                    ctx.fillStyle = '#ff2200';
+                    ctx.beginPath(); ctx.moveTo(22, 0); ctx.lineTo(-14, -20); ctx.lineTo(-14, 20); ctx.fill();
+                    // Inner fill (orange, white when dashing)
+                    ctx.fillStyle = isDashing ? '#ffffff' : (oEnrage ? '#ff8800' : '#ff7700');
+                    ctx.beginPath(); ctx.moveTo(14, 0); ctx.lineTo(-8, -13); ctx.lineTo(-8, 13); ctx.fill();
+                    ctx.shadowBlur = 0; ctx.restore();
+                    // Countdown during center explosion
+                    if(goingCenter && b.lastBreathCount > 0) {
+                        const p = 0.5 + Math.abs(Math.sin(frameCount*0.3))*0.5;
+                        ctx.globalAlpha = p; ctx.textAlign = 'center';
+                        ctx.font = `bold ${36+p*8}px Orbitron`;
+                        ctx.fillStyle = '#ff4400'; ctx.shadowBlur = 15; ctx.shadowColor = '#ff4400';
+                        ctx.fillText(`${b.lastBreathCount}...`, b.x, b.y - 50);
+                        ctx.shadowBlur = 0; ctx.globalAlpha = 1; ctx.textAlign = 'left';
+                    }
                 } else if(b.type === 'berserker') {
                     const enraged = b.hp < b.maxHp * 0.3;
                     const isLastBreath = b.lastBreath;
@@ -1682,7 +2036,20 @@
             });
 
             enemyBullets.forEach(eb => {
-                if(eb.isLaser) {
+                if(eb.isMissile) {
+                    // Guided missile: glowing yellow teardrop
+                    const mAng = Math.atan2(eb.vy, eb.vx);
+                    ctx.save(); ctx.translate(eb.x, eb.y); ctx.rotate(mAng);
+                    ctx.shadowBlur = 14; ctx.shadowColor = '#ffff00';
+                    ctx.fillStyle = '#ff2200';
+                    ctx.beginPath(); ctx.moveTo(12,0); ctx.lineTo(-8,-7); ctx.lineTo(-8,7); ctx.closePath(); ctx.fill();
+                    ctx.fillStyle = '#ffee00';
+                    ctx.beginPath(); ctx.moveTo(7,0); ctx.lineTo(-4,-4); ctx.lineTo(-4,4); ctx.closePath(); ctx.fill();
+                    // Exhaust trail
+                    ctx.globalAlpha = 0.4; ctx.fillStyle = '#ff6600';
+                    ctx.beginPath(); ctx.arc(-10, 0, 5, 0, Math.PI*2); ctx.fill();
+                    ctx.shadowBlur = 0; ctx.globalAlpha = 1; ctx.restore();
+                } else if(eb.isLaser) {
                     // Hunter laser: elongated magenta bolt
                     const ang = Math.atan2(eb.vy, eb.vx);
                     ctx.save(); ctx.translate(eb.x, eb.y); ctx.rotate(ang);
