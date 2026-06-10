@@ -96,6 +96,7 @@
             <div id="level-tag" style="color: var(--warning);">READY</div>
             <div style="text-align:center; pointer-events:none;">
                 <div id="combo-display" style="display:none; font-size:1.1rem; font-family:'Orbitron',sans-serif; color:var(--warning); text-shadow:0 0 10px var(--warning); font-weight:bold;"></div>
+            <div id="wave-progress" style="display:none; font-size:0.72rem; font-family:'Orbitron',sans-serif; color:#aaa; margin-top:4px; min-width:140px;"></div>
             </div>
             <div class="stat-box">LIVES: <span id="val-lives">❤️❤️❤️</span><br>PARRY: <span id="val-parry">READY</span><br>DASH: <span id="val-dash">READY</span></div>
         </div>
@@ -224,6 +225,11 @@
                             <option value="force">Forzar Activación</option>
                             <option value="hide">Ocultar</option>
                         </select>
+                    </div>
+                    <div class="option-item" style="grid-column: span 2;">
+                        <label>Kills por Oleada (Modo Progresivo) &mdash; <span id="kills-display">50</span></label>
+                        <input type="range" id="opt-kills" min="50" max="200" step="10" value="50" oninput="document.getElementById('kills-display').innerText=this.value" style="width:100%; accent-color:var(--primary);">
+                        <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:#666; margin-top:3px;"><span>50 (Rapido)</span><span>125 (Normal)</span><span>200 (Epico)</span></div>
                     </div>
                 </div>
                 <button onclick="applyOptions()">Aplicar Cambios</button>
@@ -388,6 +394,13 @@
     let gameState = 'MENU';
     let gameMode = 'progressive';
     let score = 0, lives = 3, bombs = 3, frameCount = 0;
+
+    // --- PROGRESSIVE WAVE SYSTEM ---
+    let waveKills = 0;          // kills in current wave
+    let waveKillTarget = 50;    // kills needed to end wave (from settings)
+    let waveTransition = false; // true during sector-change screen
+    let waveTransitionTimer = 0;
+    let waveTransitionMsg = '';
     let parryActive = false, parryCooldown = false;
     let parryTimer = 0; 
     let screenShake = 0; 
@@ -704,6 +717,8 @@
         score = 0; currentWave = 1; wavePhase = 1;
         lives = parseInt(document.getElementById('opt-lives').value);
         bombs = 3; screenShake = 0; parryTimer = 0; parryCooldown = false;
+        waveKills = 0; waveTransition = false; waveTransitionTimer = 0;
+        waveKillTarget = parseInt(document.getElementById('opt-kills').value) || 50;
         dashActive = false; dashCooldown = false; dashTimer = 0;
         comboCount = 0; comboMultiplier = 1; if(comboResetTimer) { clearTimeout(comboResetTimer); comboResetTimer = null; }
         currentWeapon = 'normal'; weaponTimer = 0; weaponPowerUps = []; debrisChunks = []; hitStopFrames = 0;
@@ -726,15 +741,41 @@
         updateHUD();
     }
 
+    function pickWaveType() {
+        // Returns enemy type weighted by current wave percentages
+        const r = Math.random();
+        if(currentWave === 1) {
+            // 90% common, 10% life
+            return r < 0.10 ? 'life' : 'common';
+        } else if(currentWave === 2) {
+            // 45% special, 45% common, 10% life
+            if(r < 0.10) return 'life';
+            return r < 0.55 ? 'special' : 'common';
+        } else if(currentWave === 3) {
+            // 30% elite, 30% special, 25% common, 5% kamikaze, 10% life
+            if(r < 0.10) return 'life';
+            if(r < 0.15) return 'kamikaze';
+            if(r < 0.45) return 'elite';
+            if(r < 0.75) return 'special';
+            return 'common';
+        } else {
+            // Wave 4: 30% elite, 20% special(suicidal), 20% common(suicidal), 20% kamikaze, 10% life
+            if(r < 0.10) return 'life';
+            if(r < 0.30) return 'kamikaze';
+            if(r < 0.60) return 'elite';
+            if(r < 0.80) return 'special';
+            return 'common';
+        }
+    }
+
     function spawnEnemy(forcedType = null) {
         if(bosses.length > 0 && gameMode !== 'custom') return;
+        if(waveTransition && gameMode === 'progressive') return;
         let type = 'common';
         
         if(forcedType) type = forcedType;
-        else if (Math.random() < 0.04 && bosses.length === 0) type = 'life'; 
         else if(gameMode === 'progressive') {
-            if(currentWave === 2) type = Math.random() > 0.7 ? 'special' : 'common';
-            if(currentWave === 3) type = Math.random() > 0.5 ? (Math.random() > 0.5 ? 'elite' : 'kamikaze') : (Math.random() > 0.5 ? 'special' : 'common');
+            type = pickWaveType();
         } else if (gameMode === 'custom') {
             const avail = customSelection.filter(v => ['common','special','elite','kamikaze'].includes(v));
             if(avail.length > 0) type = avail[Math.floor(Math.random()*avail.length)]; else return;
@@ -742,8 +783,10 @@
 
         let enemyHp = type === 'elite' ? 120 : (type === 'special' ? 60 : (type === 'life' ? 40 : (type === 'kamikaze' ? 25 : 30)));
         let enemyVy = type === 'special' ? 3.5 : (type === 'life' ? 1 : (type === 'kamikaze' ? 1.5 : 2));
+        // Wave 4: special and common become suicidal (kamikaze-like)
+        const suicidal = (gameMode === 'progressive' && currentWave >= 4 && (type === 'special' || type === 'common'));
         
-        enemies.push({ x: Math.random() * (canvas.width - 40) + 20, y: -30, type: type, hp: enemyHp, vx: (Math.random() - 0.5) * 2, vy: enemyVy, shield: type === 'special', lastShot: 0 });
+        enemies.push({ x: Math.random() * (canvas.width - 40) + 20, y: -30, type: type, hp: enemyHp, vx: (Math.random() - 0.5) * 2, vy: enemyVy, shield: type === 'special', lastShot: 0, suicidal: suicidal });
     }
 
     function spawnFormation(formType) {
@@ -768,6 +811,14 @@
         let b = { id: id, type: type, x: id === 'B1' ? canvas.width*0.3 : canvas.width*0.7, y: -100, targetY: 150, hp: 4000, maxHp: 4000, dir: 1, lastShot: 0, parryCooldown: false, parryActive: false, bombs: 2 };
         if(type === 'static') b.x = canvas.width / 2;
         if(type === 'doppel') { b.x = canvas.width / 2; b.targetY = 100; b.maxHp = 6000; b.hp = 6000; }
+        // HUNTER: Jefe 3 — perseguidor con laser, esquiva balas
+        if(type === 'hunter') {
+            b.x = canvas.width / 2; b.targetY = 120;
+            b.maxHp = 5000; b.hp = 5000;
+            b.vx = 0; b.vy = 0;
+            b.lastLaser = 0; b.laserCooldown = false;
+            b.dodgeCooldown = false;
+        }
         bosses.push(b); renderBossUI();
     }
 
@@ -780,15 +831,60 @@
     function checkProgression() {
         if(gameMode === 'custom') { if(bosses.length === 0 && customSelection.includes('b4') && currentWave > 1) { winGame(); } if(bosses.length === 0 && currentWave === 1) currentWave++; return; }
         if(gameMode === 'solo_boss' && bosses.length === 0) {
-            if(currentWave === 1) { createBoss('static', 'B1'); currentWave++; } else if(currentWave === 2) { createBoss('moving', 'B2'); currentWave++; } else if(currentWave === 3) { createBoss('static', 'B1'); createBoss('moving', 'B2'); currentWave++; } else if(currentWave === 4) { createBoss('doppel', 'DOPPEL'); currentWave++; } else winGame(); return;
+            if(currentWave === 1) { createBoss('static', 'B1'); currentWave++; }
+            else if(currentWave === 2) { createBoss('moving', 'B2'); currentWave++; }
+            else if(currentWave === 3) { createBoss('static', 'B1'); createBoss('moving', 'B2'); currentWave++; }
+            else if(currentWave === 4) { createBoss('hunter', 'B3'); currentWave++; }
+            else if(currentWave === 5) { createBoss('doppel', 'DOPPEL'); currentWave++; }
+            else winGame(); return;
         }
         if(gameMode === 'progressive') {
-            if(score > 5000 && wavePhase === 1) { createBoss('static', 'B1'); wavePhase++; }
-            if(score > 15000 && wavePhase === 2 && bosses.length === 0) { currentWave = 2; createBoss('moving', 'B2'); wavePhase++; }
-            if(score > 30000 && wavePhase === 3 && bosses.length === 0) { currentWave = 3; createBoss('static', 'B1'); createBoss('moving', 'B2'); wavePhase++; }
-            if(score > 45000 && wavePhase === 4 && bosses.length === 0) { currentWave = 4; createBoss('doppel', 'DOPPEL'); wavePhase++; }
-            if(wavePhase === 5 && bosses.length === 0) winGame();
+            // Kill-count based progression
+            // wavePhase: 1=wave1  2=boss1  3=wave2  4=boss2  5=wave3  6=boss3  7=wave4  8=doppel  9=win
+            if(waveTransition) return; // locked during sector-change screen
+            if(wavePhase === 1 && waveKills >= waveKillTarget && bosses.length === 0 && enemies.length === 0) {
+                startWaveTransition('JEFE 1', 2, () => { createBoss('static', 'B1'); });
+            }
+            else if(wavePhase === 3 && waveKills >= waveKillTarget && bosses.length === 0 && enemies.length === 0) {
+                startWaveTransition('JEFE 2', 4, () => { currentWave = 2; createBoss('moving', 'B2'); });
+            }
+            else if(wavePhase === 5 && waveKills >= waveKillTarget && bosses.length === 0 && enemies.length === 0) {
+                startWaveTransition('JEFE 3', 6, () => { currentWave = 3; createBoss('hunter', 'B3'); });
+            }
+            else if(wavePhase === 7 && waveKills >= waveKillTarget && bosses.length === 0 && enemies.length === 0) {
+                startWaveTransition('JEFE FINAL — DOPPEL', 8, () => { currentWave = 4; createBoss('doppel', 'DOPPEL'); });
+            }
+            else if(wavePhase === 9 && bosses.length === 0) winGame();
+            // Boss killed -> start next wave transition
+            if(wavePhase === 2 && bosses.length === 0 && !waveTransition && frameCount > 10) {
+                startWaveTransition('SECTOR 2', 3, () => { currentWave = 2; waveKills = 0; });
+            }
+            else if(wavePhase === 4 && bosses.length === 0 && !waveTransition && frameCount > 10) {
+                startWaveTransition('SECTOR 3', 5, () => { currentWave = 3; waveKills = 0; });
+            }
+            else if(wavePhase === 6 && bosses.length === 0 && !waveTransition && frameCount > 10) {
+                startWaveTransition('SECTOR 4', 7, () => { currentWave = 4; waveKills = 0; });
+            }
+            else if(wavePhase === 8 && bosses.length === 0 && !waveTransition && frameCount > 10) {
+                wavePhase = 9;
+            }
         }
+    }
+
+    function startWaveTransition(msg, nextPhase, callback) {
+        if(waveTransition) return;
+        waveTransition = true;
+        waveTransitionMsg = msg;
+        waveTransitionTimer = 150; // 2.5s at 60fps
+        wavePhase = nextPhase;
+        enemies = []; enemyBullets = [];
+        screenShake = 5;
+        // Execute callback after delay
+        setTimeout(() => {
+            callback();
+            waveTransition = false;
+            waveTransitionMsg = '';
+        }, 2500);
     }
 
     function promptContinue() { gameState = 'CONTINUE'; document.getElementById('hud').style.display = 'none'; document.getElementById('mobile-ui').style.display = 'none'; showScreen('menu-continue'); }
@@ -858,7 +954,8 @@
         document.getElementById('val-score').innerText = score; 
         document.getElementById('val-bombs').innerText = bombs; 
         document.getElementById('val-lives').innerText = "❤️".repeat(Math.max(0, lives)); 
-        document.getElementById('level-tag').innerText = `MODO: ${gameMode.toUpperCase()}`;
+        const sectorLabel = gameMode === 'progressive' ? ` — SECTOR ${currentWave}` : '';
+        document.getElementById('level-tag').innerText = `MODO: ${gameMode.toUpperCase()}${sectorLabel}`;
         const wEl = document.getElementById('val-weapon');
         if(wEl) { 
             wEl.innerText = currentWeapon === 'spread' ? 'SPREAD ★' : currentWeapon === 'laser' ? 'LASER ★' : 'NORMAL';
@@ -875,6 +972,21 @@
         } else {
             el.style.display = 'none';
         }
+    }
+
+    function updateWaveProgress() {
+        if(gameMode !== 'progressive') return;
+        const el = document.getElementById('wave-progress');
+        if(!el) return;
+        const isWavePhase = [1,3,5,7].includes(wavePhase);
+        if(!isWavePhase || waveTransition) { el.style.display = 'none'; return; }
+        const pct = Math.min(100, (waveKills / waveKillTarget) * 100);
+        const sectorNum = wavePhase === 1 ? 1 : wavePhase === 3 ? 2 : wavePhase === 5 ? 3 : 4;
+        el.style.display = 'block';
+        el.innerHTML = `SECTOR ${sectorNum}: <span style="color:${pct>=100?'#00ff00':'var(--primary)'}">${waveKills}/${waveKillTarget}</span>
+            <div style="width:100%;height:4px;background:#333;border-radius:2px;margin-top:3px;">
+              <div style="width:${pct}%;height:4px;background:${pct>=100?'#00ff00':'var(--primary)'};border-radius:2px;transition:width 0.1s;"></div>
+            </div>`;
     }
 
     function update() {
@@ -1017,6 +1129,12 @@
                     setTimeout(() => { if(e) e.dodgeCooldown = false; }, 1200);
                 }
             }
+            // Suicidal: wave 4 special/common charge the player
+            if(e.suicidal) {
+                const ang = Math.atan2(nave.y - e.y, nave.x - e.x);
+                e.vx += Math.cos(ang) * 0.25; e.vy += Math.sin(ang) * 0.25;
+                const spd = Math.hypot(e.vx, e.vy); if(spd > 6) { e.vx=(e.vx/spd)*6; e.vy=(e.vy/spd)*6; }
+            }
             if(e.type === 'elite' && frameCount % 70 === 0) { const angle = Math.atan2(nave.y - e.y, nave.x - e.x); enemyBullets.push({x: e.x, y: e.y, vx: Math.cos(angle)*6, vy: Math.sin(angle)*6, color: '#00ffcc'}); }
             if(Math.hypot(e.x - nave.x, e.y - nave.y) < 20) { playerHit(); enemies.splice(i, 1); }
             if(e.y > canvas.height) enemies.splice(i, 1);
@@ -1041,7 +1159,52 @@
                 if(b.bombs > 0 && (b.hp < b.maxHp*0.3 || Math.hypot(b.x-nave.x, b.y-nave.y) < 100)) { triggerBomb(false, b); b.bombs--; }
             }
 
-            if(b.type !== 'doppel') {
+            if(b.type === 'hunter') {
+                const enraged = b.hp < b.maxHp * 0.3;
+                if(!b.enraged && enraged) { b.enraged = true; screenShake = 8; floatingTexts.push({x: b.x, y: b.y - 60, text: '⚠ PÁNICO ⚠', life: 2.0, color: '#ff0000'}); }
+                // Movement: chase player with smooth acceleration
+                const spd = enraged ? 4.5 : 3;
+                b.vx = b.vx || 0; b.vy = b.vy || 0;
+                b.vx += (nave.x - b.x) * 0.018; b.vy += (nave.y - 200 - b.y) * 0.018;
+                const curSpd = Math.hypot(b.vx, b.vy); if(curSpd > spd) { b.vx=(b.vx/curSpd)*spd; b.vy=(b.vy/curSpd)*spd; }
+                b.x += b.vx; b.y += b.vy;
+                b.x = Math.max(50, Math.min(canvas.width-50, b.x));
+                b.y = Math.max(40, Math.min(canvas.height*0.55, b.y));
+                // Dodge incoming bullets
+                if(!b.dodgeCooldown) {
+                    const threat = bullets.find(bul => {
+                        const dx = bul.x - b.x, dy = bul.y - b.y;
+                        const dist = Math.hypot(dx, dy);
+                        const proj = (dx*b.vx + dy*b.vy);
+                        return dist < 120 && proj < 0;
+                    });
+                    if(threat) {
+                        b.vx += (Math.random() > 0.5 ? 1 : -1) * 6;
+                        b.dodgeCooldown = true;
+                        setTimeout(() => { if(b) b.dodgeCooldown = false; }, 900);
+                    }
+                }
+                // Laser burst: aimed directly at player
+                const laserRate = enraged ? 600 : 1200;
+                if(!b.telegraphActive && (Date.now() - b.lastLaser) > (laserRate - 600)) {
+                    b.telegraphActive = true;
+                    setTimeout(() => { if(b) b.telegraphActive = false; }, 600);
+                }
+                if(Date.now() - b.lastLaser > laserRate) {
+                    const ang = Math.atan2(nave.y - b.y, nave.x - b.x);
+                    const shots = enraged ? 5 : 3;
+                    for(let j=0; j<shots; j++) {
+                        const spread = (j - Math.floor(shots/2)) * 0.15;
+                        enemyBullets.push({x: b.x, y: b.y, vx: Math.cos(ang+spread)*8, vy: Math.sin(ang+spread)*8, color: '#ff00ff', isLaser: true});
+                    }
+                    b.lastLaser = Date.now();
+                }
+                // Also fire spiral (weaker, enraged only)
+                if(enraged && Date.now() - b.lastShot > 300) {
+                    for(let j=0; j<6; j++) { const a=(frameCount/20)+(j*(Math.PI*2/6)); enemyBullets.push({x:b.x,y:b.y,vx:Math.cos(a)*3.5,vy:Math.sin(a)*3.5,color:'#ff6600'}); }
+                    b.lastShot = Date.now();
+                }
+            } else if(b.type !== 'doppel') {
                 const enraged = b.hp < b.maxHp * 0.3;
                 if(!b.enraged && enraged) { b.enraged = true; screenShake = 8; floatingTexts.push({x: b.x, y: b.y - 60, text: '⚠ PÁNICO ⚠', life: 2.0, color: '#ff0000'}); }
                 let fireRate = b.type === 'static' ? (enraged ? 150 : 300) : (enraged ? 200 : 400);
@@ -1080,6 +1243,8 @@
                             // DEBRIS on elite/special kill
                             if(e.type === 'elite' || e.type === 'special') spawnDebris(e.x, e.y, e.type === 'elite' ? '#00ffcc' : '#ffcc00');
                             enemies.splice(ei, 1);
+                            // WAVE KILL COUNT (only non-life enemies)
+                            if(e.type !== 'life' && gameMode === 'progressive') { waveKills++; updateWaveProgress(); }
                             // COMBO
                             comboCount++;
                             comboMultiplier = comboCount >= 10 ? 3 : comboCount >= 5 ? 2 : 1;
@@ -1233,6 +1398,26 @@
                     const angle = Math.atan2(nave.y - b.y, nave.x - b.x); ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(angle);
                     if(b.parryActive) { ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, 35, 0, Math.PI*2); ctx.stroke(); }
                     ctx.fillStyle = '#ff0044'; ctx.shadowBlur = 15; ctx.shadowColor = '#ff0044'; ctx.beginPath(); ctx.moveTo(20,0); ctx.lineTo(-15, -15); ctx.lineTo(-15, 15); ctx.fill(); ctx.restore();
+                } else if(b.type === 'hunter') {
+                    // Hunter: sleek purple diamond shape, rotates to face player
+                    const ang = Math.atan2(nave.y - b.y, nave.x - b.x);
+                    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(ang);
+                    ctx.shadowBlur = enraged ? 35 * enragePulse : 20;
+                    ctx.shadowColor = enraged ? '#ff00ff' : '#cc00ff';
+                    ctx.fillStyle = enraged ? '#ff00ff' : '#cc00ff';
+                    ctx.globalAlpha = enragePulse;
+                    ctx.beginPath(); ctx.moveTo(28, 0); ctx.lineTo(-10, -18); ctx.lineTo(-20, 0); ctx.lineTo(-10, 18); ctx.fill();
+                    // Engine glow
+                    ctx.fillStyle = enraged ? '#ffff00' : '#aa66ff';
+                    ctx.globalAlpha = 0.7;
+                    ctx.beginPath(); ctx.arc(-22, 0, 6 + Math.sin(frameCount*0.3)*2, 0, Math.PI*2); ctx.fill();
+                    // Enrage wing jets
+                    if(enraged) {
+                        ctx.fillStyle = '#ff6600'; ctx.globalAlpha = 0.8;
+                        ctx.beginPath(); ctx.arc(-12, -12, 4+Math.sin(frameCount*0.4)*2, 0, Math.PI*2); ctx.fill();
+                        ctx.beginPath(); ctx.arc(-12, 12, 4+Math.sin(frameCount*0.4+1)*2, 0, Math.PI*2); ctx.fill();
+                    }
+                    ctx.globalAlpha = 1; ctx.shadowBlur = 0; ctx.restore();
                 } else { 
                     ctx.shadowBlur = enraged ? 30 * enragePulse : 20; ctx.shadowColor = bossGlow; ctx.fillStyle = bossColor; 
                     ctx.globalAlpha = enragePulse;
@@ -1249,7 +1434,20 @@
                 }
             });
 
-            enemyBullets.forEach(eb => { ctx.fillStyle = eb.color; ctx.beginPath(); ctx.arc(eb.x, eb.y, 5, 0, Math.PI*2); ctx.fill(); });
+            enemyBullets.forEach(eb => {
+                if(eb.isLaser) {
+                    // Hunter laser: elongated magenta bolt
+                    const ang = Math.atan2(eb.vy, eb.vx);
+                    ctx.save(); ctx.translate(eb.x, eb.y); ctx.rotate(ang);
+                    ctx.shadowBlur = 10; ctx.shadowColor = '#ff00ff';
+                    ctx.fillStyle = '#ff00ff'; ctx.globalAlpha = 0.9;
+                    ctx.fillRect(-10, -3, 20, 6);
+                    ctx.fillStyle = '#fff'; ctx.fillRect(-6, -1, 12, 2);
+                    ctx.globalAlpha = 1; ctx.shadowBlur = 0; ctx.restore();
+                } else {
+                    ctx.fillStyle = eb.color; ctx.beginPath(); ctx.arc(eb.x, eb.y, 5, 0, Math.PI*2); ctx.fill();
+                }
+            });
             bullets.forEach(b => { ctx.fillStyle = b.color; ctx.fillRect(b.x-2, b.y-10, 4, 20); });
 
             // --- LASER BEAM ---
@@ -1329,6 +1527,33 @@
                 ctx.fillText(ft.text, ft.x - 25, ft.y - 15);
             });
             ctx.globalAlpha = 1;
+
+            // --- WAVE TRANSITION OVERLAY ---
+            if(waveTransition && waveTransitionMsg) {
+                const progress = 1 - (waveTransitionTimer / 150);
+                const alpha = progress < 0.2 ? progress/0.2 : progress > 0.8 ? (1-progress)/0.2 : 1;
+                ctx.globalAlpha = alpha * 0.85;
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.globalAlpha = alpha;
+                ctx.textAlign = 'center';
+                ctx.font = 'bold 14px Orbitron';
+                ctx.fillStyle = '#666';
+                ctx.fillText('— PREPARATE —', canvas.width/2, canvas.height/2 - 50);
+                ctx.font = 'bold 40px Orbitron';
+                const grad = ctx.createLinearGradient(canvas.width/2-200, 0, canvas.width/2+200, 0);
+                grad.addColorStop(0, '#ff3366'); grad.addColorStop(0.5, '#fff'); grad.addColorStop(1, '#1e90ff');
+                ctx.fillStyle = grad;
+                ctx.shadowBlur = 20; ctx.shadowColor = '#fff';
+                ctx.fillText(waveTransitionMsg, canvas.width/2, canvas.height/2 + 10);
+                ctx.shadowBlur = 0;
+                ctx.font = '13px Orbitron';
+                ctx.fillStyle = '#aaa';
+                const waveLabel = ['SECTOR 1','BOSS 1','SECTOR 2','BOSS 2','SECTOR 3','BOSS 3','SECTOR 4','JEFE FINAL','FIN'][wavePhase-1] || '';
+                ctx.fillText(`SIGUIENTE: ${waveLabel}`, canvas.width/2, canvas.height/2 + 55);
+                ctx.globalAlpha = 1; ctx.textAlign = 'left';
+                if(waveTransitionTimer > 0) waveTransitionTimer--;
+            }
 
             // --- VIGNETTE: red flash on damage during inmunidad ---
             if(nave.inmune && !dashActive) {
