@@ -819,6 +819,27 @@
             b.lastLaser = 0; b.laserCooldown = false;
             b.dodgeCooldown = false;
         }
+        // BERSERKER: Jefe 4 — cuerpo como arma, embestidas, fase final explosiva
+        if(type === 'berserker') {
+            b.x = canvas.width / 2; b.targetY = 130;
+            b.maxHp = 5500; b.hp = 5500;
+            b.vx = 0; b.vy = 0;
+            // Dash state machine: 'chase' | 'telegraph' | 'dashing' | 'exhausted'
+            b.dashState = 'chase';
+            b.dashTimer = 0;
+            b.dashInterval = 3500;   // ms between dash sequences
+            b.lastDashTime = Date.now();
+            b.dashVx = 0; b.dashVy = 0;
+            b.dashCount = 0;         // for phase 2 triple combo
+            b.maxDashes = 1;         // 1 in p1, 3 in p2
+            b.exhaustedTimer = 0;
+            // Last breath state
+            b.lastBreath = false;    // hp<=0 triggers this
+            b.lastBreathTimer = 0;
+            b.lastBreathCount = 3;   // countdown 3,2,1
+            b.lastBreathInterval = 0;
+            b.immune = false;
+        }
         bosses.push(b); renderBossUI();
     }
 
@@ -835,7 +856,8 @@
             else if(currentWave === 2) { createBoss('moving', 'B2'); currentWave++; }
             else if(currentWave === 3) { createBoss('static', 'B1'); createBoss('moving', 'B2'); currentWave++; }
             else if(currentWave === 4) { createBoss('hunter', 'B3'); currentWave++; }
-            else if(currentWave === 5) { createBoss('doppel', 'DOPPEL'); currentWave++; }
+            else if(currentWave === 5) { createBoss('berserker', 'B4'); currentWave++; }
+            else if(currentWave === 6) { createBoss('doppel', 'DOPPEL'); currentWave++; }
             else winGame(); return;
         }
         if(gameMode === 'progressive') {
@@ -1069,6 +1091,7 @@
             });
             bosses.forEach(b => {
                 if(b.type==='doppel'&&b.parryActive) return;
+                if(b.immune) return; // berserker last breath
                 const dx=b.x-nave.x, dy=b.y-nave.y;
                 const proj=dx*cos+dy*sin, perp=Math.abs(dx*sin-dy*cos);
                 if(proj>0 && perp<50) { b.hp-=5; updateBossHP(b); }
@@ -1204,6 +1227,146 @@
                     for(let j=0; j<6; j++) { const a=(frameCount/20)+(j*(Math.PI*2/6)); enemyBullets.push({x:b.x,y:b.y,vx:Math.cos(a)*3.5,vy:Math.sin(a)*3.5,color:'#ff6600'}); }
                     b.lastShot = Date.now();
                 }
+            } else if(b.type === 'berserker') {
+                const enraged = b.hp < b.maxHp * 0.3;
+                const now = Date.now();
+
+                // --- LAST BREATH: hp<=0, immune, travel to center, countdown, explode ---
+                if(b.lastBreath) {
+                    b.immune = true;
+                    // Move to canvas center
+                    const cx = canvas.width / 2, cy = canvas.height / 2;
+                    const dx = cx - b.x, dy = cy - b.y;
+                    const dist = Math.hypot(dx, dy);
+                    if(dist > 8) {
+                        b.x += (dx / dist) * 5;
+                        b.y += (dy / dist) * 5;
+                    } else {
+                        b.x = cx; b.y = cy;
+                        // Countdown explosion
+                        if(!b.lastBreathInterval) {
+                            b.lastBreathInterval = setInterval(() => {
+                                b.lastBreathCount--;
+                                screenShake = 6;
+                                if(b.lastBreathCount <= 0) {
+                                    clearInterval(b.lastBreathInterval);
+                                    // FINAL EXPLOSION: 24-bullet ring
+                                    hitStopFrames = 12;
+                                    screenShake = 35;
+                                    for(let j = 0; j < 24; j++) {
+                                        const a = (j / 24) * Math.PI * 2;
+                                        enemyBullets.push({ x: b.x, y: b.y, vx: Math.cos(a) * 16, vy: Math.sin(a) * 16, color: '#ff4400', isBerserkerSpike: true });
+                                    }
+                                    createExplosion(b.x, b.y, '#ff4400', 80);
+                                    spawnDebris(b.x, b.y, '#ff4400', 8);
+                                    score += 10000;
+                                    // Remove boss
+                                    const bi2 = bosses.indexOf(b);
+                                    if(bi2 !== -1) { bosses.splice(bi2, 1); renderBossUI(); }
+                                }
+                            }, 1000);
+                        }
+                    }
+                    return; // skip all other berserker logic
+                }
+
+                // --- ENRAGE TRANSITION ---
+                if(!b.enraged && enraged) {
+                    b.enraged = true;
+                    b.maxDashes = 3;
+                    b.dashInterval = 300; // fast triple telegraph
+                    b.dashState = 'chase';
+                    screenShake = 10;
+                    floatingTexts.push({ x: b.x, y: b.y - 70, text: '⚠ FRENESÍ ⚠', life: 2.0, color: '#ff4400' });
+                }
+
+                // --- ENTER LAST BREATH ---
+                if(b.hp <= 0 && !b.lastBreath) {
+                    b.lastBreath = true;
+                    b.vx = 0; b.vy = 0;
+                    b.dashState = 'chase';
+                    floatingTexts.push({ x: b.x, y: b.y - 60, text: '¡ÚLTIMO ALIENTO!', life: 2.5, color: '#ff0000' });
+                    screenShake = 15;
+                    return;
+                }
+
+                // --- PHASE STATE MACHINE ---
+                if(b.dashState === 'chase') {
+                    // Elastic follow — moderate max speed
+                    const maxSpd = enraged ? 3.8 : 2.8;
+                    b.vx += (nave.x - b.x) * 0.015;
+                    b.vy += (nave.y - b.y) * 0.015;
+                    const spd = Math.hypot(b.vx, b.vy);
+                    if(spd > maxSpd) { b.vx = (b.vx/spd)*maxSpd; b.vy = (b.vy/spd)*maxSpd; }
+                    b.x += b.vx; b.y += b.vy;
+                    b.x = Math.max(30, Math.min(canvas.width-30, b.x));
+                    b.y = Math.max(30, Math.min(canvas.height*0.75, b.y));
+
+                    // Time to initiate dash sequence
+                    const interval = enraged ? 2000 : 3500;
+                    if(now - b.lastDashTime > interval) {
+                        b.vx = 0; b.vy = 0;
+                        b.dashCount = 0;
+                        b.dashState = 'telegraph';
+                        b.dashTimer = now;
+                    }
+                }
+                else if(b.dashState === 'telegraph') {
+                    // Freeze in place, show telegraph line 0.5s (p1) or 0.3s (p2)
+                    const telegraphDuration = enraged ? 300 : 500;
+                    if(now - b.dashTimer > telegraphDuration) {
+                        // Launch dash toward player's current position
+                        const ang = Math.atan2(nave.y - b.y, nave.x - b.x);
+                        const spd = enraged ? 22 : 18;
+                        b.dashVx = Math.cos(ang) * spd;
+                        b.dashVy = Math.sin(ang) * spd;
+                        b.dashState = 'dashing';
+                        b.dashTimer = now;
+                    }
+                }
+                else if(b.dashState === 'dashing') {
+                    b.x += b.dashVx; b.y += b.dashVy;
+                    // Bounce off walls
+                    if(b.x < 20) { b.x = 20; b.dashVx = Math.abs(b.dashVx) * 0.5; }
+                    if(b.x > canvas.width-20) { b.x = canvas.width-20; b.dashVx = -Math.abs(b.dashVx) * 0.5; }
+                    if(b.y < 20) { b.y = 20; b.dashVy = Math.abs(b.dashVy) * 0.5; }
+                    if(b.y > canvas.height-20) { b.y = canvas.height-20; b.dashVy = -Math.abs(b.dashVy) * 0.5; }
+                    // Stop when slow enough or out of canvas diagonal
+                    const curSpd = Math.hypot(b.dashVx, b.dashVy);
+                    b.dashVx *= 0.92; b.dashVy *= 0.92;
+                    if(curSpd < 1.5 || now - b.dashTimer > 1200) {
+                        b.vx = 0; b.vy = 0; b.dashVx = 0; b.dashVy = 0;
+                        b.dashCount++;
+                        if(!enraged || b.dashCount >= b.maxDashes) {
+                            // After all dashes: exhausted
+                            b.dashState = 'exhausted';
+                            b.dashTimer = now;
+                            b.lastDashTime = now;
+                            if(enraged) floatingTexts.push({ x: b.x, y: b.y - 50, text: 'AGOTADO...', life: 1.5, color: '#aaa' });
+                        } else {
+                            // Phase 2: telegraph next dash immediately
+                            b.dashState = 'telegraph';
+                            b.dashTimer = now;
+                        }
+                    }
+                }
+                else if(b.dashState === 'exhausted') {
+                    // Drift very slowly toward player, 2.5s window
+                    b.vx += (nave.x - b.x) * 0.002;
+                    b.vy += (nave.y - b.y) * 0.002;
+                    b.x += b.vx * 0.3; b.y += b.vy * 0.3;
+                    if(now - b.dashTimer > 2500) {
+                        b.vx = 0; b.vy = 0;
+                        b.dashState = 'chase';
+                        b.lastDashTime = now;
+                    }
+                }
+
+                // --- CONTACT DAMAGE ---
+                if(Math.hypot(b.x - nave.x, b.y - nave.y) < 38) {
+                    playerHit(b.dashState === 'dashing');
+                }
+
             } else if(b.type !== 'doppel') {
                 const enraged = b.hp < b.maxHp * 0.3;
                 if(!b.enraged && enraged) { b.enraged = true; screenShake = 8; floatingTexts.push({x: b.x, y: b.y - 60, text: '⚠ PÁNICO ⚠', life: 2.0, color: '#ff0000'}); }
@@ -1220,7 +1383,7 @@
                     b.lastShot = Date.now();
                 }
             }
-            if(b.hp <= 0) { 
+            if(b.hp <= 0 && b.type !== 'berserker') { 
                 createExplosion(b.x, b.y, '#fff', 50); 
                 spawnDebris(b.x, b.y, '#ff3366', 5);
                 hitStopFrames = 8;
@@ -1272,8 +1435,12 @@
                 } 
             });
             bosses.forEach(b => { 
-                if(!hit && Math.hypot(bul.x - b.x, bul.y - b.y) < (b.type === 'doppel' ? 30 : 45)) { 
-                    if(b.type === 'doppel' && b.parryActive) { createExplosion(bul.x, bul.y, '#00ffcc', 5); hit = true; } 
+                const bRadius = b.type === 'doppel' ? 30 : (b.type === 'berserker' ? 32 : 45);
+                if(!hit && Math.hypot(bul.x - b.x, bul.y - b.y) < bRadius) { 
+                    if(b.immune) { 
+                        // Berserker last breath: bullets bounce off
+                        createExplosion(bul.x, bul.y, '#ff4400', 3); hit = true;
+                    } else if(b.type === 'doppel' && b.parryActive) { createExplosion(bul.x, bul.y, '#00ffcc', 5); hit = true; } 
                     else { 
                         hit = true; b.hp -= bul.dmg; updateBossHP(b);
                         // DAMAGE NUMBERS on bosses
@@ -1398,6 +1565,82 @@
                     const angle = Math.atan2(nave.y - b.y, nave.x - b.x); ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(angle);
                     if(b.parryActive) { ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, 35, 0, Math.PI*2); ctx.stroke(); }
                     ctx.fillStyle = '#ff0044'; ctx.shadowBlur = 15; ctx.shadowColor = '#ff0044'; ctx.beginPath(); ctx.moveTo(20,0); ctx.lineTo(-15, -15); ctx.lineTo(-15, 15); ctx.fill(); ctx.restore();
+                } else if(b.type === 'berserker') {
+                    const enraged = b.hp < b.maxHp * 0.3;
+                    const isLastBreath = b.lastBreath;
+                    const isExhausted = b.dashState === 'exhausted';
+                    const isDashing = b.dashState === 'dashing';
+                    const isTelegraph = b.dashState === 'telegraph';
+
+                    // Telegraph line: thin red line to player
+                    if(isTelegraph) {
+                        ctx.save();
+                        ctx.globalAlpha = 0.4 + Math.sin(Date.now()/40)*0.3;
+                        ctx.strokeStyle = '#ff0000'; ctx.lineWidth = 1.5;
+                        ctx.setLineDash([6, 4]);
+                        ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(nave.x, nave.y); ctx.stroke();
+                        ctx.setLineDash([]);
+                        ctx.restore();
+                    }
+
+                    // Last breath: pulsing red/white
+                    const lbPulse = isLastBreath ? (frameCount % 6 < 3 ? '#ffffff' : '#ff0000') : null;
+                    // Color
+                    const baseColor = isLastBreath ? lbPulse :
+                                      enraged ? `hsl(${10 + Math.sin(frameCount*0.2)*10}, 100%, ${50 + Math.sin(frameCount*0.3)*10}%)` :
+                                      isExhausted ? '#888' :
+                                      isDashing ? '#ffffff' : '#cc3300';
+                    const glowColor = isLastBreath ? '#ff0000' : enraged ? '#ff4400' : isDashing ? '#fff' : '#cc3300';
+                    const glowBlur = isDashing ? 30 : enraged ? 25 : 15;
+
+                    ctx.save();
+                    ctx.translate(b.x, b.y);
+                    // Rotate based on movement direction
+                    const rotAng = Math.hypot(b.vx||b.dashVx, b.vy||b.dashVy) > 0.5
+                        ? Math.atan2(b.dashVy||b.vy, b.dashVx||b.vx)
+                        : Math.atan2(nave.y - b.y, nave.x - b.x);
+                    ctx.rotate(rotAng);
+                    ctx.shadowBlur = glowBlur; ctx.shadowColor = glowColor;
+                    ctx.fillStyle = baseColor;
+
+                    // Spike count: 6 normal, 8 enraged (longer)
+                    const spikeCount = enraged ? 8 : 6;
+                    const outerR = enraged ? 34 : 28;
+                    const innerR = enraged ? 12 : 14;
+                    ctx.beginPath();
+                    for(let s = 0; s < spikeCount * 2; s++) {
+                        const a = (s / (spikeCount * 2)) * Math.PI * 2;
+                        const r = s % 2 === 0 ? outerR : innerR;
+                        s === 0 ? ctx.moveTo(Math.cos(a)*r, Math.sin(a)*r) : ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r);
+                    }
+                    ctx.closePath(); ctx.fill();
+
+                    // Core circle
+                    ctx.shadowBlur = 8;
+                    ctx.fillStyle = isLastBreath ? lbPulse : (enraged ? '#ff8800' : '#ff5500');
+                    ctx.beginPath(); ctx.arc(0, 0, innerR * 0.7, 0, Math.PI*2); ctx.fill();
+
+                    // Exhausted: dim aura
+                    if(isExhausted) {
+                        ctx.globalAlpha = 0.25;
+                        ctx.fillStyle = '#aaaaaa';
+                        ctx.beginPath(); ctx.arc(0, 0, outerR + 10, 0, Math.PI*2); ctx.fill();
+                    }
+
+                    ctx.globalAlpha = 1; ctx.shadowBlur = 0; ctx.restore();
+
+                    // Countdown text during last breath (at center)
+                    if(isLastBreath && b.lastBreathCount > 0) {
+                        const pulse = 0.5 + Math.abs(Math.sin(frameCount*0.3)) * 0.5;
+                        ctx.globalAlpha = pulse;
+                        ctx.textAlign = 'center';
+                        ctx.font = `bold ${40 + pulse*10}px Orbitron`;
+                        ctx.fillStyle = '#ff0000';
+                        ctx.shadowBlur = 20; ctx.shadowColor = '#ff0000';
+                        ctx.fillText(`${b.lastBreathCount}...`, b.x, b.y - 55);
+                        ctx.shadowBlur = 0; ctx.globalAlpha = 1; ctx.textAlign = 'left';
+                    }
+
                 } else if(b.type === 'hunter') {
                     // Hunter: sleek purple diamond shape, rotates to face player
                     const ang = Math.atan2(nave.y - b.y, nave.x - b.x);
@@ -1444,6 +1687,16 @@
                     ctx.fillRect(-10, -3, 20, 6);
                     ctx.fillStyle = '#fff'; ctx.fillRect(-6, -1, 12, 2);
                     ctx.globalAlpha = 1; ctx.shadowBlur = 0; ctx.restore();
+                } else if(eb.isBerserkerSpike) {
+                    // Berserker spike: diamond shape, orange-red
+                    const ang = Math.atan2(eb.vy, eb.vx);
+                    ctx.save(); ctx.translate(eb.x, eb.y); ctx.rotate(ang);
+                    ctx.shadowBlur = 12; ctx.shadowColor = '#ff4400';
+                    ctx.fillStyle = '#ff4400';
+                    ctx.beginPath(); ctx.moveTo(10,0); ctx.lineTo(0,-5); ctx.lineTo(-10,0); ctx.lineTo(0,5); ctx.closePath(); ctx.fill();
+                    ctx.fillStyle = '#ffaa00';
+                    ctx.beginPath(); ctx.moveTo(6,0); ctx.lineTo(0,-3); ctx.lineTo(-6,0); ctx.lineTo(0,3); ctx.closePath(); ctx.fill();
+                    ctx.shadowBlur = 0; ctx.restore();
                 } else {
                     ctx.fillStyle = eb.color; ctx.beginPath(); ctx.arc(eb.x, eb.y, 5, 0, Math.PI*2); ctx.fill();
                 }
