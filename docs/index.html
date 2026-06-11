@@ -882,8 +882,6 @@
                 startWaveTransition('JEFE FINAL — DOPPEL', 8, () => { currentWave = 4; createBoss('doppel', 'DOPPEL'); });
             }
             else if(wavePhase === 9 && bosses.length === 0) winGame();
-            // Win if both doppel clones are dead
-            if(bosses.length === 0 && ['solo_boss','progressive'].includes(gameMode) && wavePhase >= 8 && !bosses.some(b=>b.type==='doppel')) { winGame(); }
             // Boss killed -> start next wave transition
             if(wavePhase === 2 && bosses.length === 0 && !waveTransition && frameCount > 10) {
                 startWaveTransition('SECTOR 2', 3, () => { currentWave = 2; waveKills = 0; });
@@ -894,8 +892,14 @@
             else if(wavePhase === 6 && bosses.length === 0 && !waveTransition && frameCount > 10) {
                 startWaveTransition('SECTOR 4', 7, () => { currentWave = 4; waveKills = 0; });
             }
-            else if(wavePhase === 8 && bosses.length === 0 && !waveTransition && frameCount > 10) {
-                wavePhase = 9;
+            else if(wavePhase === 8 && !waveTransition && frameCount > 10) {
+                // Only win when ALL doppel entities (original + clones) are gone
+                // The doppel transforms by removing itself and spawning clones via setTimeout,
+                // so bosses.length can be 0 temporarily — guard against that race condition.
+                const doppelAllDead = !bosses.some(b =>
+                    b.type === 'doppel' || b.type === 'doppel_y' || b.type === 'doppel_o'
+                );
+                if(doppelAllDead && bosses.length === 0) wavePhase = 9;
             }
         }
     }
@@ -1136,13 +1140,27 @@
                     }
                 }
             });
-            bosses.forEach(b => {
+            bosses.forEach((b, bLIdx) => {
                 if(b.type==='doppel'&&b.parryActive) return;
                 if(b.immune) return;
-                if(b.type==='doppel_y'&&b.dodging) return; // yellow doppel dodge
+                if(b.type==='doppel_y'&&b.dodging) return;
                 const dx=b.x-nave.x, dy=b.y-nave.y;
                 const proj=dx*cos+dy*sin, perp=Math.abs(dx*sin-dy*cos);
-                if(proj>0 && perp<50) { b.hp-=100; updateBossHP(b); }  // 100 dmg/tick vs bosses
+                const lRadius = (b.type==='doppel_y'||b.type==='doppel_o') ? 30 : 50;
+                if(proj>0 && perp<lRadius) {
+                    b.hp -= 100; updateBossHP(b);
+                    // Clone death via laser
+                    if(b.hp <= 0 && (b.type==='doppel_y'||b.type==='doppel_o')) {
+                        const col = b.type==='doppel_y' ? '#ffff00' : '#ff6600';
+                        createExplosion(b.x, b.y, col, 50);
+                        spawnDebris(b.x, b.y, col, 6);
+                        hitStopFrames = 8; screenShake = 20; score += 8000;
+                        floatingTexts.push({x:b.x, y:b.y-50,
+                            text: b.type==='doppel_y'?'★ DOPPEL AMARILLO DESTRUIDO ★':'★ DOPPEL NARANJA DESTRUIDO ★',
+                            life:2.0, color:col});
+                        bosses.splice(bLIdx, 1); renderBossUI();
+                    }
+                }
             });
         }
         
@@ -1722,24 +1740,32 @@
                     }
                 }
             }
-            bosses.forEach(b => { 
+            bosses.forEach((b, bIdx) => { 
                 const bRadius = b.type === 'doppel' ? 30 : (b.type === 'berserker' ? 44 : (b.type === 'doppel_y' || b.type === 'doppel_o' ? 28 : 45));
                 if(!hit && Math.hypot(bul.x - b.x, bul.y - b.y) < bRadius) { 
                     if(b.immune) { 
-                        createExplosion(bul.x, bul.y, '#ff4400', 3); hit = true;
+                        // Immune: berserker last breath or doppel transforming — bullets bounce
+                        createExplosion(bul.x, bul.y, b.type === 'berserker' ? '#ff4400' : '#ffff00', 3);
+                        hit = true;
                     } else if(b.type === 'doppel_y' && b.dodging) {
-                        // Yellow doppel dodging: bullet misses
+                        // Yellow doppel mid-dodge: bullet passes through
                         createExplosion(bul.x, bul.y, '#ffff00', 2); hit = true;
-                    } else if(b.type === 'doppel' && b.parryActive) { createExplosion(bul.x, bul.y, '#00ffcc', 5); hit = true; } 
-                    else { 
+                    } else if(b.type === 'doppel' && b.parryActive) {
+                        createExplosion(bul.x, bul.y, '#00ffcc', 5); hit = true;
+                    } else { 
                         hit = true; b.hp -= bul.dmg; updateBossHP(b);
                         floatingTexts.push({x: b.x + (Math.random()-0.5)*40, y: b.y - 20 + (Math.random()-0.5)*20, text: `-${bul.dmg}`, life: 1.0, color: '#ff3366'});
-                        // Check if clone dies: award points, trigger sibling enrage
+                        // Clone death: remove from array, trigger sibling enrage
                         if(b.hp <= 0 && (b.type === 'doppel_y' || b.type === 'doppel_o')) {
-                            createExplosion(b.x, b.y, '#fff', 50); hitStopFrames = 8; screenShake = 20;
-                            spawnDebris(b.x, b.y, b.type==='doppel_y'?'#ffff00':'#ff6600', 6);
-                            score += 8000;
-                            const bi2 = bosses.indexOf(b); if(bi2!==-1) { bosses.splice(bi2,1); renderBossUI(); }
+                            const col = b.type === 'doppel_y' ? '#ffff00' : '#ff6600';
+                            createExplosion(b.x, b.y, col, 50);
+                            spawnDebris(b.x, b.y, col, 6);
+                            hitStopFrames = 8; screenShake = 20; score += 8000;
+                            floatingTexts.push({x: b.x, y: b.y - 50,
+                                text: b.type === 'doppel_y' ? '★ DOPPEL AMARILLO DESTRUIDO ★' : '★ DOPPEL NARANJA DESTRUIDO ★',
+                                life: 2.0, color: col});
+                            bosses.splice(bIdx, 1);
+                            renderBossUI();
                         }
                     } 
                 } 
