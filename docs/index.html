@@ -1342,14 +1342,21 @@
                     b.vy += Math.cos(frameCount/40) * 0.15;
                 }
                 const spd = Math.hypot(b.vx, b.vy); if(spd > 3.5) { b.vx=(b.vx/spd)*3.5; b.vy=(b.vy/spd)*3.5; }
-                // Dodge bullets
+                // Dodge bullets — only react to bullets actually heading toward the boss
                 if(!b.dodgeCooldown) {
-                    const threat = bullets.find(bul => Math.hypot(bul.x - b.x, bul.y - b.y) < 130);
+                    const threat = bullets.find(bul => {
+                        const dist = Math.hypot(bul.x - b.x, bul.y - b.y);
+                        if(dist > 65) return false; // tight radius — must be very close
+                        // Check bullet is moving toward boss (dot product of velocity vs direction to boss)
+                        const toBossX = b.x - bul.x, toBossY = b.y - bul.y;
+                        const dot = bul.vx * toBossX + bul.vy * toBossY;
+                        return dot > 0; // only dodge if bullet is actually coming this way
+                    });
                     if(threat) {
                         b.vx += (Math.random() > 0.5 ? 1 : -1) * 7;
                         b.dodging = true;
                         b.dodgeCooldown = true;
-                        setTimeout(() => { if(b) { b.dodgeCooldown = false; b.dodging = false; } }, 800);
+                        setTimeout(() => { if(b) { b.dodgeCooldown = false; b.dodging = false; } }, 600);
                     }
                 }
                 b.x += b.vx; b.y += b.vy;
