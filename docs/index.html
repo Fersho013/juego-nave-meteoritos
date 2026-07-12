@@ -92,7 +92,7 @@
         <button id="btn-volume" class="volume-btn" onclick="toggleVolume()">🔊</button>
 
         <div id="hud">
-            <div class="stat-box">SCORE: <span id="val-score">0</span><br>BOMBS: <span id="val-bombs">3</span> [LB/SPACE]<br>ARMA: <span id="val-weapon" style="color:var(--primary)">NORMAL</span></div>
+            <div class="stat-box">SCORE: <span id="val-score">0</span><br>BOMBS: <span id="val-bombs">3</span> [LB/SPACE]<br>ARMA: <span id="val-weapon" style="color:var(--primary)">NORMAL</span><br><span id="val-revive" style="display:none; color:#ffee88;">✨ 2ª OPORTUNIDAD LISTA</span></div>
             <div id="level-tag" style="color: var(--warning);">READY</div>
             <div style="text-align:center; pointer-events:none;">
                 <div id="combo-display" style="display:none; font-size:1.1rem; font-family:'Orbitron',sans-serif; color:var(--warning); text-shadow:0 0 10px var(--warning); font-weight:bold;"></div>
@@ -408,6 +408,7 @@
     let gameState = 'MENU';
     let gameMode = 'progressive';
     let score = 0, health = 100, maxHealth = 100, damagePerHit = 20, bombs = 3, frameCount = 0;
+    let hasRevive = false; // "Segunda Oportunidad" — stored revive charge dropped by defeated bosses
 
     // --- PROGRESSIVE WAVE SYSTEM ---
     let waveKills = 0;          // kills in current wave
@@ -734,7 +735,7 @@
         gameMode = mode; gameState = 'PLAYING';
         score = 0; currentWave = 1; wavePhase = 1;
         damagePerHit = parseInt(document.getElementById('opt-damage').value) || 20;
-        health = 100;
+        health = 100; hasRevive = false;
         bombs = 3; screenShake = 0; parryTimer = 0; parryCooldown = false;
         waveKills = 0; waveTransition = false; waveTransitionTimer = 0;
         waveKillTarget = parseInt(document.getElementById('opt-kills').value) || 50;
@@ -815,17 +816,18 @@
         if(bosses.length > 0) return;
         const baseX = canvas.width / 2, baseY = -30;
         let positions = [];
-        if(formType === 'v') {
+        if(formType === 'triangle') {
             for(let i=-2; i<=2; i++) positions.push({x: baseX + i*60, y: baseY - Math.abs(i)*40});
+        } else if(formType === 'square') {
+            for(let row=0; row<3; row++) { for(let col=0; col<3; col++) { positions.push({x: baseX + (col-1)*70, y: baseY - row*60}); } }
         } else if(formType === 'circle') {
             for(let i=0; i<6; i++) { const a = (i/6)*Math.PI*2; positions.push({x: baseX + Math.cos(a)*80, y: baseY + Math.sin(a)*40 - 20}); }
-        } else if(formType === 'line') {
-            for(let i=0; i<5; i++) positions.push({x: (canvas.width/(5+1))*(i+1), y: baseY});
         }
-        const type = currentWave >= 3 ? (Math.random() > 0.5 ? 'elite' : 'special') : 'common';
-        const enemyHp = type === 'elite' ? 120 : (type === 'special' ? 60 : 30);
+        // Only common enemies and shielded specials appear in formation — always charging the player
+        const type = Math.random() > 0.5 ? 'special' : 'common';
+        const enemyHp = type === 'special' ? 60 : 30;
         positions.forEach(p => {
-            enemies.push({ x: p.x, y: p.y, type: type, hp: enemyHp, vx: formType === 'v' ? 0 : (Math.random()-0.5)*1.5, vy: 2, shield: type === 'special', lastShot: 0, zigzag: formType === 'circle', zigzagPhase: Math.random()*Math.PI*2 });
+            enemies.push({ x: p.x, y: p.y, type: type, hp: enemyHp, vx: 0, vy: 1.5, shield: type === 'special', lastShot: 0, suicidal: true, formation: formType });
         });
     }
 
@@ -994,12 +996,35 @@
         updateHUD();
     }
 
+    // "Segunda Oportunidad" (Revive) — dropped by defeated bosses. Only 1 can be stored;
+    // if the player already has one, the boss drops a bomb instead.
+    function dropRevivePickup(x, y) {
+        if(hasRevive) {
+            pickUps.push({x, y, type: 'bomb'});
+        } else {
+            pickUps.push({x, y, type: 'revive'});
+        }
+    }
+    function triggerRevive() {
+        hasRevive = false;
+        health = 100;
+        screenShake = 50; hitStopFrames = 14;
+        particles.push({x: nave.x, y: nave.y, vx:0, vy:0, life:1, type:'bomb_ring', color:'#ffee88'});
+        enemyBullets = [];
+        enemies.forEach(e => createExplosion(e.x, e.y, '#fff', 10));
+        enemies = [];
+        bosses.forEach(b => { if(!b.immune) { b.hp -= b.maxHp * 0.15; updateBossHP(b); } });
+        nave.inmune = true; setTimeout(() => nave.inmune = false, 3000);
+        floatingTexts.push({x: nave.x, y: nave.y - 60, text: '✨ ¡SEGUNDA OPORTUNIDAD! ✨', life: 2.5, color: '#ffee88'});
+        updateHUD();
+    }
+
     function playerHit(heavy = false) {
         if(nave.inmune) return;
         sfx.hit(); 
         hitStopFrames = heavy ? 7 : 4;
         health -= heavy ? damagePerHit * 2 : damagePerHit; health = Math.max(0, health); screenShake = heavy ? 30 : 15; nave.inmune = true; createExplosion(nave.x, nave.y, '#ff0000', heavy ? 40 : 25); updateHUD();
-        setTimeout(() => nave.inmune = false, 2000); if(health <= 0) promptContinue();
+        setTimeout(() => nave.inmune = false, 2000); if(health <= 0) { if(hasRevive) { triggerRevive(); } else { promptContinue(); } }
     }
 
     function updateBossHP(b) { const hpBar = document.getElementById(`hp-${b.id}`); if(hpBar) hpBar.style.width = Math.max(0, (b.hp/b.maxHp)*100) + '%'; }
@@ -1022,6 +1047,8 @@
             wEl.innerText = currentWeapon === 'spread' ? 'SPREAD ★' : currentWeapon === 'laser' ? 'LASER ★' : 'NORMAL';
             wEl.style.color = currentWeapon !== 'normal' ? '#ff9900' : 'var(--primary)';
         }
+        const rEl = document.getElementById('val-revive');
+        if(rEl) rEl.style.display = hasRevive ? 'inline' : 'none';
     }
     function updateComboDisplay() {
         const el = document.getElementById('combo-display');
@@ -1136,9 +1163,17 @@
             }
         }
 
-        // --- DEBRIS ---
+        // --- DEBRIS (interactive: pushable by the ship's hull) ---
         for(let di = debrisChunks.length - 1; di >= 0; di--) {
             const d = debrisChunks[di];
+            const distToNave = Math.hypot(d.x - nave.x, d.y - nave.y);
+            if(distToNave < 26) {
+                const pushAng = Math.atan2(d.y - nave.y, d.x - nave.x);
+                const pushForce = (26 - distToNave) * (dashActive ? 1.1 : 0.5);
+                d.vx += Math.cos(pushAng) * pushForce;
+                d.vy += Math.sin(pushAng) * pushForce;
+                d.rotSpeed += (Math.random()-0.5) * 0.05;
+            }
             d.x += d.vx; d.y += d.vy; d.rot += d.rotSpeed;
             d.vx *= 0.98; d.vy *= 0.98;
             d.life -= 0.008;
@@ -1210,8 +1245,8 @@
                                 weaponPowerUps.push({x: e.x, y: e.y, letter: wt, vy: 1.5, life: 600});
                             }
                         } else {
-                            health = Math.min(100, health + 20); updateHUD();
-                            floatingTexts.push({x: e.x, y: e.y, text: '+20% VIDA', life:1.0, color:'#ff66cc'});
+                            health = Math.min(100, health + damagePerHit); updateHUD();
+                            floatingTexts.push({x: e.x, y: e.y, text: `+${damagePerHit}% VIDA`, life:1.0, color:'#ff66cc'});
                         }
                     }
                 }
@@ -1233,7 +1268,7 @@
                         floatingTexts.push({x:b.x, y:b.y-50,
                             text: b.type==='doppel_y'?'★ DOPPEL AMARILLO DESTRUIDO ★':'★ DOPPEL NARANJA DESTRUIDO ★',
                             life:2.0, color:col});
-                        bosses.splice(bLIdx, 1); renderBossUI();
+                        bosses.splice(bLIdx, 1); renderBossUI(); dropRevivePickup(b.x, b.y);
                     }
                 }
             });
@@ -1267,7 +1302,7 @@
         if(Math.random() < 0.02 + (currentWave*0.005) && bosses.length === 0) spawnEnemy();
         // Formation waves: trigger periodically
         if(bosses.length === 0 && frameCount % 420 === 0 && gameMode !== 'custom') {
-            const forms = ['v','circle','line'];
+            const forms = ['triangle','square','circle'];
             spawnFormation(forms[Math.floor(Math.random()*forms.length)]);
         }
 
@@ -1693,7 +1728,7 @@
                                     score += 10000;
                                     // Remove boss
                                     const bi2 = bosses.indexOf(b);
-                                    if(bi2 !== -1) { bosses.splice(bi2, 1); renderBossUI(); }
+                                    if(bi2 !== -1) { bosses.splice(bi2, 1); renderBossUI(); dropRevivePickup(b.x, b.y); }
                                 }
                             }, 1000);
                         }
@@ -1818,7 +1853,7 @@
                 createExplosion(b.x, b.y, '#fff', 50); 
                 spawnDebris(b.x, b.y, '#ff3366', 5);
                 hitStopFrames = 8;
-                if(Math.random() > 0.3) pickUps.push({x: b.x, y: b.y, type: 'bomb'}); bosses.splice(i, 1); score += 10000; renderBossUI(); 
+                dropRevivePickup(b.x, b.y); bosses.splice(i, 1); score += 10000; renderBossUI(); 
             }
         });
 
@@ -1861,9 +1896,9 @@
                             updateComboDisplay();
 
                             if(e.type === 'life') {
-                                health = Math.min(100, health + 20);
+                                health = Math.min(100, health + damagePerHit);
                                 updateHUD();
-                                floatingTexts.push({x: e.x, y: e.y - 20, text: "+20% VIDA", life: 1.0, color: '#ff66cc'});
+                                floatingTexts.push({x: e.x, y: e.y - 20, text: `+${damagePerHit}% VIDA`, life: 1.0, color: '#ff66cc'});
                             }
                             // WEAPON POWERUP drop from elite
                             if(e.type === 'elite' && Math.random() > 0.4) {
@@ -1911,6 +1946,7 @@
                                 life: 2.0, color: col});
                             bosses.splice(bIdx, 1);
                             renderBossUI();
+                            dropRevivePickup(b.x, b.y);
                         }
                     } 
                 } 
@@ -1949,7 +1985,18 @@
             }
         }
 
-        pickUps.forEach((p, i) => { p.y += 2; if(Math.hypot(p.x - nave.x, p.y - nave.y) < 30) { if(p.type === 'bomb') bombs++; updateHUD(); pickUps.splice(i, 1); } });
+        pickUps.forEach((p, i) => { 
+            p.y += 2; 
+            if(Math.hypot(p.x - nave.x, p.y - nave.y) < 30) { 
+                if(p.type === 'bomb') { bombs++; } 
+                else if(p.type === 'revive') { 
+                    hasRevive = true; 
+                    sfx.powerup();
+                    floatingTexts.push({x: p.x, y: p.y - 20, text: '✨ 2ª OPORTUNIDAD LISTA', life: 1.4, color: '#ffee88'}); 
+                }
+                updateHUD(); pickUps.splice(i, 1); 
+            } 
+        });
         
         floatingTexts.forEach((ft, i) => {
             ft.y -= 1; 
@@ -2000,7 +2047,20 @@
         stars.forEach(s => { ctx.fillStyle = `rgba(255, 255, 255, ${s.alpha})`; ctx.fillRect(s.x, s.y, s.size, s.size); if(gameState === 'PLAYING') s.y += s.speed; if(s.y > canvas.height) { s.y = 0; s.x = Math.random() * canvas.width; } });
 
         if(gameState === 'PLAYING' || gameState === 'PAUSED' || gameState === 'CONTINUE' || gameState === 'WIN') {
-            pickUps.forEach(p => { ctx.fillStyle = '#ffcc00'; ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = '#000'; ctx.fillText('B', p.x-4, p.y+4); });
+            pickUps.forEach(p => {
+                if(p.type === 'revive') {
+                    const pulse = 0.75 + Math.sin(frameCount*0.15)*0.25;
+                    ctx.save();
+                    ctx.globalAlpha = pulse;
+                    ctx.shadowBlur = 16; ctx.shadowColor = '#ffee88';
+                    ctx.fillStyle = '#ffee88'; ctx.beginPath(); ctx.arc(p.x, p.y, 12, 0, Math.PI*2); ctx.fill();
+                    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+                    ctx.fillStyle = '#000'; ctx.font = 'bold 13px Orbitron'; ctx.fillText('✨', p.x-7, p.y+5);
+                    ctx.restore();
+                } else {
+                    ctx.fillStyle = '#ffcc00'; ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = '#000'; ctx.fillText('B', p.x-4, p.y+4);
+                }
+            });
             
             enemies.forEach(e => { 
                 ctx.fillStyle = e.type === 'elite' ? '#00ffcc' : (e.shield ? '#ffcc00' : (e.type === 'life' ? '#ff66cc' : (e.type === 'kamikaze' ? '#ff6600' : '#ff3366'))); 
