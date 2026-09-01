@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SPACE MISSION: ECHELON (ULTRA)</title>
+    <link rel="stylesheet" href="./css/styles.css">
+</head>
+<body>
+    <div id="game-container">
+        <button id="btn-volume" class="volume-btn" onclick="window.toggleVolume()">🔊</button>
+
+        <div id="hud">
+            <div class="stat-box">SCORE: <span id="val-score">0</span><br>BOMBS: <span id="val-bombs">3</span> [LB/SPACE]<br>ARMA: <span id="val-weapon" style="color:var(--primary)">NORMAL</span><br><span id="val-revive" style="display:none; color:#ffee88;">✨ 2ª OPORTUNIDAD LISTA</span></div>
+            <div id="level-tag" style="color: var(--warning);">READY</div>
+            <div style="text-align:center; pointer-events:none;">
+                <div id="combo-display" style="display:none; font-size:1.1rem; font-family:'Orbitron',sans-serif; color:var(--warning); text-shadow:0 0 10px var(--warning); font-weight:bold;"></div>
+            <div id="wave-progress" style="display:none; font-size:0.72rem; font-family:'Orbitron',sans-serif; color:#aaa; margin-top:4px; min-width:140px;"></div>
+            <div id="bomb-alert" style="display:none; font-size:0.85rem; font-family:'Orbitron',sans-serif; font-weight:bold; margin-top:6px; padding:4px 8px; border:2px solid var(--warning); background:rgba(0,0,0,0.7);"></div>
+            </div>
+            <div class="stat-box">
+                VIDA: <span id="val-health-pct">100%</span>
+                <div id="health-bar-track" style="width:90px; height:9px; background:rgba(255,255,255,0.12); border:1px solid #555; border-radius:2px; margin:3px 0; overflow:hidden;">
+                    <div id="health-bar-fill" style="width:100%; height:100%; background:#33ff66; transition: width 0.2s linear, background 0.2s linear;"></div>
+                </div>
+                PARRY: <span id="val-parry">READY</span><br>DASH: <span id="val-dash">READY</span>
+            </div>
+        </div>
+        <div id="boss-container"></div>
+
+        <div id="mobile-ui">
+            <button id="btn-pause-m" onclick="window.togglePause()">⏸</button>
+            <div id="joy-base-l" class="touch-zone"><div id="joy-stick-l" class="joy-stick-inner"></div></div>
+            <div id="joy-base-r" class="touch-zone"><div id="joy-stick-r" class="joy-stick-inner"></div></div>
+            <div id="btn-triple" class="t-btn">🔱</div>
+            <div id="btn-parry" class="t-btn">🛡️</div>
+            <div id="btn-bomb" class="t-btn">💣</div>
+            <div id="btn-dash" class="t-btn">⚡</div>
+        </div>
+
+        <div id="menu-main" class="ui-screen active">
+            <div class="menu-card">
+                <h1>SPACE MISSION</h1>
+                <div class="btn-group">
+                    <button onclick="window.showScreen('menu-play')">Jugar</button>
+                    <button onclick="window.showScreen('menu-customize')" style="border-color: #9933ff; color: #9933ff;">Personalizar Nave</button>
+                    <button id="btn-device-toggle" onclick="window.toggleDeviceMode()" style="border-color: var(--success); color: var(--success);">Cambiar a Modo Móvil</button>
+                    <button onclick="window.showScreen('menu-custom')">Juego Personalizado</button>
+                    <button onclick="window.showScreen('menu-controls')">Controles</button>
+                    <button onclick="window.showScreen('menu-options')">Configuración</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="menu-customize" class="ui-screen">
+            <div class="menu-card">
+                <button class="btn-back" onclick="window.showScreen('menu-main')">←</button>
+                <h1>PERSONALIZAR NAVE</h1>
+                <canvas id="previewCanvas" width="150" height="150" style="margin: 0 auto 20px; display: block; border: 2px solid #333; background: #0a0a0a; border-radius: 10px;"></canvas>
+                <p style="font-size: 0.85rem; color: #aaa; margin-bottom: 15px;">Selecciona el color primario de tu nave:</p>
+                <div class="options-grid" style="grid-template-columns: repeat(3, 1fr); gap: 10px;">
+                    <button style="color: #ff3366; border-color: #ff3366;" onclick="window.changeNaveColor('#ff3366')">ROJO</button>
+                    <button style="color: #1e90ff; border-color: #1e90ff;" onclick="window.changeNaveColor('#1e90ff')">AZUL</button>
+                    <button style="color: #ffffff; border-color: #ffffff;" onclick="window.changeNaveColor('#ffffff')">BLANCO</button>
+                    <button style="color: #ffcc00; border-color: #ffcc00;" onclick="window.changeNaveColor('#ffcc00')">AMARILLO</button>
+                    <button style="color: #00ffcc; border-color: #00ffcc;" onclick="window.changeNaveColor('#00ffcc')">VERDE</button>
+                    <button style="color: #9933ff; border-color: #9933ff;" onclick="window.changeNaveColor('#9933ff')">MORADO</button>
+                    <button style="color: #ff66cc; border-color: #ff66cc; grid-column: span 3;" onclick="window.changeNaveColor('#ff66cc')">ROSA</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="menu-play" class="ui-screen">
+            <div class="menu-card">
+                <button class="btn-back" onclick="window.showScreen('menu-main')">←</button>
+                <h1>SELECCIONAR MODO</h1>
+                <div class="btn-group">
+                    <button onclick="window.startMission('progressive')">Juego Progresivo</button>
+                    <button onclick="window.startMission('solo_boss')">Solo Boss (Rush)</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="menu-custom" class="ui-screen">
+            <div class="menu-card">
+                <button class="btn-back" onclick="window.showScreen('menu-main')">←</button>
+                <h1>MODO PERSONALIZADO</h1>
+                <div class="custom-list" id="custom-checkboxes">
+                    <label><input type="checkbox" value="common" checked> Enemigo Común (Rojo)</label>
+                    <label><input type="checkbox" value="special"> Enemigo Especial (Escudo)</label>
+                    <label><input type="checkbox" value="elite"> Enemigo Élite (Francotirador)</label>
+                    <label><input type="checkbox" value="kamikaze"> Enemigo Kamikaze (Acelerado)</label>
+                    <hr style="border-color:#333;">
+                    <label><input type="checkbox" value="b1"> Jefe 1 — Estático</label>
+                    <label><input type="checkbox" value="b2"> Jefe 2 — Móvil</label>
+                    <label><input type="checkbox" value="b3"> Jefe 3 — Gemelos B1+B2</label>
+                    <label><input type="checkbox" value="b_hunter"> Jefe Hunter (Perseguidor)</label>
+                    <label><input type="checkbox" value="b_berserker"> Jefe Berserker (Melee)</label>
+                    <label><input type="checkbox" value="b4"> Jefe Final — Doppel</label>
+                </div>
+                <div class="btn-group">
+                    <button onclick="window.startCustom()">Iniciar Simulador</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="menu-controls" class="ui-screen">
+            <div class="menu-card">
+                <button class="btn-back" onclick="window.showScreen('menu-main')">←</button>
+                <h1>MANUAL DE VUELO</h1>
+                <div class="options-grid" style="grid-template-columns: 1fr; gap: 10px; margin-bottom: 20px;">
+                    <div>
+                        <div style="color:var(--primary); font-family:'Orbitron', sans-serif; font-weight:bold; margin-bottom: 5px;">[TECLADO Y RATÓN]</div>
+                        <div>• WASD: Mover | Ratón: Apuntar</div>
+                        <div>• Clic Izq: Disparo | Clic Der: Disparo Triple</div>
+                        <div>• Espacio: Bomba | E: Parry | Shift: Dash | P: Pausa</div>
+                    </div>
+                    <hr style="border-color:#333; width: 100%; margin: 5px 0;">
+                    <div>
+                        <div style="color:var(--success); font-family:'Orbitron', sans-serif; font-weight:bold; margin-bottom: 5px;">[MÓVIL / PANTALLA TÁCTIL]</div>
+                        <div>• Pad Izq: Movimiento | Pad Der: Apuntar y Disparar</div>
+                        <div>• Iconos: 🔱 Triple | 🛡️ Parry | 💣 Bomba | ⚡ Dash</div>
+                        <div>• Caja naranja 🟧: Recoger para cambiar arma (S=Spread, L=Laser)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="menu-options" class="ui-screen">
+            <div class="menu-card">
+                <button class="btn-back" onclick="window.showScreen('menu-main')">←</button>
+                <h1>CONFIGURACIÓN</h1>
+                <div class="options-grid">
+                    <div class="option-item">
+                        <label>Resolución Área</label>
+                        <select id="opt-size">
+                            <option value="auto">Auto / Pantalla Completa (Móvil)</option>
+                            <option value="800x600" selected>800 x 600 (PC Estandard)</option>
+                            <option value="1000x700">1000 x 700 (PC Ampliada)</option>
+                            <option value="1200x800">1200 x 800 (PC Máxima)</option>
+                        </select>
+                    </div>
+                    <div class="option-item">
+                        <label>Daño por Impacto (Dificultad)</label>
+                        <select id="opt-damage">
+                            <option value="20" selected>20% por golpe — Normal (5 golpes)</option>
+                            <option value="10">10% por golpe — Fácil (10 golpes)</option>
+                            <option value="5">5% por golpe — Muy Fácil (20 golpes)</option>
+                            <option value="1">1% por golpe — Extra Fácil (100 golpes)</option>
+                        </select>
+                    </div>
+                    <div class="option-item">
+                        <label>Controles Móviles</label>
+                        <select id="opt-touch">
+                            <option value="auto">Automático</option>
+                            <option value="force">Forzar Activación</option>
+                            <option value="hide">Ocultar</option>
+                        </select>
+                    </div>
+                    <div class="option-item" style="grid-column: span 2;">
+                        <label>Kills por Oleada (Modo Progresivo) &mdash; <span id="kills-display">50</span></label>
+                        <input type="range" id="opt-kills" min="50" max="200" step="10" value="50" oninput="document.getElementById('kills-display').innerText=this.value" style="width:100%; accent-color:var(--primary);">
+                        <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:#666; margin-top:3px;"><span>50 (Rapido)</span><span>125 (Normal)</span><span>200 (Epico)</span></div>
+                    </div>
+                </div>
+                <button onclick="window.applyOptions()">Aplicar Cambios</button>
+            </div>
+        </div>
+
+        <div id="menu-pause" class="ui-screen">
+            <button class="btn-gamepad" onclick="window.toggleTouchUI()" title="Ocultar/Mostrar Controles Táctiles">🎮</button>
+            <div class="menu-card">
+                <h1>PAUSA</h1>
+                <div class="btn-group">
+                    <button onclick="window.togglePause()">Reanudar</button>
+                    <button onclick="window.startMission(window.__getGameMode ? window.__getGameMode() : 'progressive')" style="border-color:var(--warning); color:var(--warning);">Reiniciar Misión</button>
+                    <button onclick="window.exitToMenu()" class="btn-danger">Abortar y Salir</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="menu-continue" class="ui-screen">
+            <div class="menu-card">
+                <h1 class="title-danger">MISIÓN FALLIDA</h1>
+                <p style="margin-bottom: 20px;">Señal vital perdida. ¿Deseas usar un intento de recuperación?</p>
+                <div class="btn-group">
+                    <button onclick="window.acceptContinue()" class="btn-success">SÍ, CONTINUAR (RESTABLECER VIDA)</button>
+                    <button onclick="window.exitToMenu()" class="btn-danger">NO, REGRESAR AL MENÚ</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="menu-win" class="ui-screen">
+            <div class="menu-card">
+                <h1 class="title-success">¡ENHORABUENA!</h1>
+                <p style="margin-bottom: 20px;">Has purgado el sistema y destruido a tu copia. Misión Cumplida.</p>
+                <div class="btn-group">
+                    <button onclick="window.exitToMenu()">Volver al Menú Principal</button>
+                    <button onclick="window.showScreen('menu-play')" style="border-color:var(--success); color:var(--success);">Jugar Otra Vez</button>
+                </div>
+            </div>
+        </div>
+
+        <canvas id="gameCanvas"></canvas>
+    </div>
+
+    <script type="module" src="./js/Main.js"></script>
+</body>
+</html>

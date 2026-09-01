@@ -1,0 +1,10 @@
+{
+  "meta": {
+    "name": "Jogo Atlas",
+    "description": "Futuro espacio para los assets y Atlas — sprites, texturas y audio",
+    "version": "0.1.0"
+  },
+  "textures": [],
+  "sprites": [],
+  "audio": []
+}

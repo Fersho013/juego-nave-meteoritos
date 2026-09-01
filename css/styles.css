@@ -1,0 +1,75 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=JetBrains+Mono:wght@300;500&display=swap');
+
+:root { --primary: #1e90ff; --danger: #ff3366; --warning: #ffcc00; --success: #00ffcc; --bg: #050505; }
+
+* { user-select: none; -webkit-user-select: none; box-sizing: border-box; }
+
+body { margin: 0; background: var(--bg); overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: 'Orbitron', sans-serif; color: white; touch-action: none; }
+
+#game-container { position: relative; border: 2px solid #222; background: #000; overflow: hidden; }
+canvas { display: block; }
+
+/* --- UI SCREENS --- */
+.ui-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; flex-direction: column; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.9); z-index: 100; text-align: center; }
+.ui-screen.active { display: flex; }
+
+.menu-card { position: relative; padding: 30px; border: 1px solid var(--primary); background: rgba(10, 10, 10, 0.95); border-radius: 10px; min-width: 400px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+.menu-card::-webkit-scrollbar { width: 5px; } .menu-card::-webkit-scrollbar-thumb { background: var(--primary); }
+
+h1 { font-size: 2rem; color: var(--primary); text-shadow: 0 0 15px rgba(30, 144, 255, 0.5); margin-bottom: 20px; text-transform: uppercase; }
+.title-danger { color: var(--danger); text-shadow: 0 0 15px rgba(255, 51, 102, 0.5); border-color: var(--danger); }
+.title-success { color: var(--success); text-shadow: 0 0 15px rgba(0, 255, 204, 0.5); border-color: var(--success); }
+
+.btn-group { display: flex; flex-direction: column; gap: 10px; }
+button { padding: 12px; font-family: 'Orbitron', sans-serif; background: rgba(0,0,0,0.5); color: var(--primary); border: 1px solid var(--primary); cursor: pointer; transition: 0.2s; text-transform: uppercase; font-weight: bold; }
+button:hover { background: var(--primary); color: white; box-shadow: 0 0 15px var(--primary); }
+.btn-danger { color: var(--danger); border-color: var(--danger); }
+.btn-danger:hover { background: var(--danger); box-shadow: 0 0 15px var(--danger); }
+.btn-success { color: var(--success); border-color: var(--success); }
+.btn-success:hover { background: var(--success); box-shadow: 0 0 15px var(--success); }
+
+.btn-back { position: absolute; top: 15px; left: 15px; background: transparent; border: none; color: #fff; font-size: 2rem; cursor: pointer; padding: 0; line-height: 1; transition: 0.2s; box-shadow: none !important; }
+.btn-back:hover { color: var(--primary); transform: scale(1.1); background: transparent; }
+
+.options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; text-align: left; margin-bottom: 20px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; }
+@media (max-width: 600px) { .options-grid { grid-template-columns: 1fr; } }
+.option-item label { display: block; margin-bottom: 4px; color: #aaa; }
+select, input { width: 100%; background: #111; border: 1px solid #444; color: white; padding: 6px; font-family: inherit; }
+
+.custom-list { text-align: left; font-size: 0.9rem; margin-bottom: 15px; border: 1px solid #333; padding: 10px; height: 150px; overflow-y: scroll; background: #0a0a0a; }
+.custom-list label { display: block; margin-bottom: 5px; cursor: pointer; color: #ccc; }
+.custom-list input { width: auto; margin-right: 10px; }
+
+/* --- HUD --- */
+#hud { position: absolute; top: 0; left: 0; width: 100%; padding: 15px 25px; display: none; justify-content: space-between; pointer-events: none; z-index: 50; }
+.stat-box { font-size: 0.9rem; background: rgba(0,0,0,0.5); padding: 5px 10px; border-left: 3px solid var(--primary); }
+
+.volume-btn { position: absolute; top: 15px; left: 15px; width: 45px; height: 45px; border-radius: 50%; background: rgba(10, 10, 10, 0.8); border: 2px solid var(--primary); color: white; display: flex; justify-content: center; align-items: center; font-size: 1.2rem; cursor: pointer; z-index: 200; transition: transform 0.2s; pointer-events: auto; }
+.volume-btn:active { transform: scale(0.9); }
+
+#boss-container { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); width: 70%; display: none; z-index: 50; }
+.boss-hp-row { margin-bottom: 8px; }
+.hp-bar-bg { width: 100%; height: 8px; background: #222; border: 1px solid #444; margin-top: 4px; }
+.hp-fill { width: 100%; height: 100%; background: var(--danger); transition: width 0.1s; }
+
+/* --- MOBILE CONTROLS --- */
+#mobile-ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; pointer-events: none; z-index: 60; }
+.touch-zone { position: absolute; border-radius: 50%; background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.2); pointer-events: auto; touch-action: none;}
+.joy-stick-inner { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 45px; height: 45px; border-radius: 50%; pointer-events: none; }
+
+#joy-base-l { left: 30px; bottom: 30px; width: 120px; height: 120px; }
+#joy-stick-l { background: rgba(30, 144, 255, 0.6); border: 2px solid var(--primary); }
+#joy-base-r { right: 30px; bottom: 30px; width: 120px; height: 120px; }
+#joy-stick-r { background: rgba(255, 51, 102, 0.6); border: 2px solid var(--danger); }
+
+.t-btn { position: absolute; width: 55px; height: 55px; border-radius: 50%; background: rgba(10, 10, 10, 0.7); border: 2px solid; color: white; display: flex; justify-content: center; align-items: center; font-size: 1.6rem; pointer-events: auto; touch-action: none; transition: transform 0.1s; z-index: 65;}
+
+#btn-triple { right: 150px; bottom: 120px; border-color: var(--warning); text-shadow: 0 0 5px var(--warning); }
+#btn-parry { right: 70px; bottom: 170px; border-color: var(--success); text-shadow: 0 0 5px var(--success); }
+#btn-bomb { left: 170px; bottom: 40px; border-color: var(--danger); text-shadow: 0 0 5px var(--danger); }
+#btn-dash { left: 170px; bottom: 110px; border-color: #a0c4ff; text-shadow: 0 0 5px #a0c4ff; }
+
+#btn-pause-m { position: absolute; top: 15px; right: 15px; width: 45px; height: 45px; background: rgba(10, 10, 10, 0.8); border: 2px solid #fff; color: #fff; pointer-events: auto; border-radius: 5px; font-size: 1.5rem; display: flex; justify-content: center; align-items: center; cursor: pointer; }
+
+.btn-gamepad { position: absolute; bottom: 20px; left: 20px; width: 55px; height: 55px; border-radius: 50%; background: rgba(10, 10, 10, 0.9); border: 2px solid var(--primary); color: white; display: flex; justify-content: center; align-items: center; font-size: 1.8rem; cursor: pointer; transition: transform 0.2s; pointer-events: auto; }
+.btn-gamepad:active { transform: scale(0.9); }
