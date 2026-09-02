@@ -14,6 +14,7 @@ import { hudState, updateHUD as hudUpdate, updateComboDisplay, updateWaveProgres
 import { showScreen, updateVolumeVisibility, initPreview } from './ui/Menu.js';
 import { stars, nebulas, planets, initParallax, drawParallax } from './world/Parallax.js';
 import { DASH } from './Data/Constants.js';
+import { initLayoutEditor, enterEditMode, exitEditMode, isEditorActive } from './ui/LayoutEditor.js';
 
 // --- Canvas ---
 const canvas = document.getElementById('gameCanvas');
@@ -47,6 +48,13 @@ window.startMission = startMission;
 window.startCustom = startCustom;
 window.acceptContinue = acceptContinue;
 window.exitToMenu = exitToMenu;
+window.openLayoutEditor = () => {
+    // Cierra el menú de pausa visualmente pero mantiene estado PAUSED
+    document.querySelectorAll('.ui-screen').forEach(s => s.classList.remove('active'));
+    updateVolumeVisibility();
+    enterEditMode();
+};
+window.closeLayoutEditor = (save) => exitEditMode(save);
 
 const input = { moveX: 0, moveY: 0, aimX: 400, aimY: 300, shoot: false, triple: false, bomb: false, parry: false, pause: false, dash: false };
 const keys = {};
@@ -84,6 +92,7 @@ bindResize(config, canvas, nave, () => gameState);
 
 function showScreenWrapper(id) { showScreen(id); }
 function togglePause() {
+    if (isEditorActive()) { exitEditMode(true); showScreen('menu-pause'); updateVolumeVisibility(); return; }
     if (gameState === 'PLAYING') { gameState = 'PAUSED'; showScreen('menu-pause'); }
     else if (gameState === 'PAUSED') { gameState = 'PLAYING'; showScreen('none'); }
     updateVolumeVisibility();
@@ -114,11 +123,14 @@ function winGame() {
     showScreen('menu-win');
 }
 
+// --- Init layout editor (HUD / controles editables) ---
+initLayoutEditor();
+
 // --- Input listeners ---
-window.addEventListener('keydown', e => { keys[e.code] = true; if (e.code === 'KeyP') { togglePause(); keys[e.code] = false; } });
+window.addEventListener('keydown', e => { if (e.code === 'Escape' && isEditorActive()) { exitEditMode(true); showScreen('menu-pause'); updateVolumeVisibility(); return; } keys[e.code] = true; if (e.code === 'KeyP') { togglePause(); keys[e.code] = false; } });
 window.addEventListener('keyup', e => keys[e.code] = false);
-canvas.addEventListener('mousemove', e => { const rect = canvas.getBoundingClientRect(); input.aimX = e.clientX - rect.left; input.aimY = e.clientY - rect.top; setUsingGamepad(false); });
-canvas.addEventListener('mousedown', e => { initAudio(); if (e.button === 0) input.shoot = true; if (e.button === 2) input.triple = true; });
+canvas.addEventListener('mousemove', e => { if (isEditorActive()) return; const rect = canvas.getBoundingClientRect(); input.aimX = e.clientX - rect.left; input.aimY = e.clientY - rect.top; setUsingGamepad(false); });
+canvas.addEventListener('mousedown', e => { if (isEditorActive()) return; initAudio(); if (e.button === 0) input.shoot = true; if (e.button === 2) input.triple = true; });
 canvas.addEventListener('mouseup', e => { if (e.button === 0) input.shoot = false; if (e.button === 2) input.triple = false; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 
@@ -128,6 +140,7 @@ function setupJoystick(baseId, stickId, type) {
     let touchId = null;
     let center = { x: 0, y: 0 };
     base.addEventListener('touchstart', e => {
+        if (isEditorActive()) return;
         initAudio(); e.preventDefault(); e.stopPropagation();
         if (touchId !== null) return;
         const touch = e.changedTouches[0]; touchId = touch.identifier;
@@ -167,13 +180,14 @@ setupJoystick('joy-base-l', 'joy-stick-l', 'left');
 setupJoystick('joy-base-r', 'joy-stick-r', 'right');
 const bindTouchBtn = (id, action) => {
     const el = document.getElementById(id); if (!el) return;
-    el.addEventListener('touchstart', e => { initAudio(); e.preventDefault(); e.stopPropagation(); input[action]=true; el.style.transform='scale(0.85)'; el.style.backgroundColor='rgba(255,255,255,0.2)'; }, {passive:false});
+    el.addEventListener('touchstart', e => { if (isEditorActive()) return; initAudio(); e.preventDefault(); e.stopPropagation(); input[action]=true; el.style.transform='scale(0.85)'; el.style.backgroundColor='rgba(255,255,255,0.2)'; }, {passive:false});
     const endBtn = e => { e.preventDefault(); e.stopPropagation(); input[action]=false; el.style.transform='scale(1)'; el.style.backgroundColor='rgba(10,10,10,0.7)'; };
     el.addEventListener('touchend', endBtn, {passive:false}); el.addEventListener('touchcancel', endBtn, {passive:false});
 };
 bindTouchBtn('btn-triple','triple'); bindTouchBtn('btn-parry','parry'); bindTouchBtn('btn-bomb','bomb'); bindTouchBtn('btn-dash','dash');
 
 function pollInput() {
+    if (isEditorActive()) return;
     if (gameState === 'MENU' || gameState === 'CONTINUE' || gameState === 'WIN') return;
     input.moveX = platform.touchMoveX; input.moveY = platform.touchMoveY;
     if (keys['KeyW']) input.moveY = -1; if (keys['KeyS']) input.moveY = 1;
