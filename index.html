@@ -10,22 +10,10 @@
     <div id="game-container">
         <button id="btn-volume" class="volume-btn" onclick="window.toggleVolume()">🔊</button>
 
-        <div id="hud">
-            <div class="stat-box">SCORE: <span id="val-score">0</span><br>BOMBS: <span id="val-bombs">3</span> [LB/SPACE]<br>ARMA: <span id="val-weapon" style="color:var(--primary)">NORMAL</span><br><span id="val-revive" style="display:none; color:#ffee88;">✨ 2ª OPORTUNIDAD LISTA</span></div>
-            <div id="level-tag" style="color: var(--warning);">READY</div>
-            <div style="text-align:center; pointer-events:none;">
-                <div id="combo-display" style="display:none; font-size:1.1rem; font-family:'Orbitron',sans-serif; color:var(--warning); text-shadow:0 0 10px var(--warning); font-weight:bold;"></div>
-            <div id="wave-progress" style="display:none; font-size:0.72rem; font-family:'Orbitron',sans-serif; color:#aaa; margin-top:4px; min-width:140px;"></div>
-            <div id="bomb-alert" style="display:none; font-size:0.85rem; font-family:'Orbitron',sans-serif; font-weight:bold; margin-top:6px; padding:4px 8px; border:2px solid var(--warning); background:rgba(0,0,0,0.7);"></div>
-            </div>
-            <div class="stat-box">
-                VIDA: <span id="val-health-pct">100%</span>
-                <div id="health-bar-track" style="width:90px; height:9px; background:rgba(255,255,255,0.12); border:1px solid #555; border-radius:2px; margin:3px 0; overflow:hidden;">
-                    <div id="health-bar-fill" style="width:100%; height:100%; background:#33ff66; transition: width 0.2s linear, background 0.2s linear;"></div>
-                </div>
-                PARRY: <span id="val-parry">READY</span><br>DASH: <span id="val-dash">READY</span>
-            </div>
-        </div>
+        <!-- HUD: 3 bloques independientes (Score | Sector/Kills | Vida) posicionables libres -->
+        <div id="hud-block-score" class="hud-block"><div class="stat-box">SCORE: <span id="val-score">0</span><br>BOMBS: <span id="val-bombs">3</span> [LB/SPACE]<br>ARMA: <span id="val-weapon" style="color:var(--primary)">NORMAL</span><br><span id="val-revive" style="display:none; color:#ffee88;">✨ 2ª OPORTUNIDAD LISTA</span></div></div>
+        <div id="hud-block-sector" class="hud-block" style="text-align:center; pointer-events:none;"><div id="level-tag" style="color: var(--warning);">READY</div><div id="combo-display" style="display:none; font-size:1.1rem; font-family:'Orbitron',sans-serif; color:var(--warning); text-shadow:0 0 10px var(--warning); font-weight:bold;"></div><div id="wave-progress" style="display:none; font-size:0.72rem; font-family:'Orbitron',sans-serif; color:#aaa; margin-top:4px; min-width:140px;"></div><div id="bomb-alert" style="display:none; font-size:0.85rem; font-family:'Orbitron',sans-serif; font-weight:bold; margin-top:6px; padding:4px 8px; border:2px solid var(--warning); background:rgba(0,0,0,0.7);"></div></div>
+        <div id="hud-block-vida" class="hud-block"><div class="stat-box">VIDA: <span id="val-health-pct">100%</span><div id="health-bar-track" style="width:90px; height:9px; background:rgba(255,255,255,0.12); border:1px solid #555; border-radius:2px; margin:3px 0; overflow:hidden;"><div id="health-bar-fill" style="width:100%; height:100%; background:#33ff66; transition: width 0.2s linear, background 0.2s linear;"></div></div>PARRY: <span id="val-parry">READY</span><br>DASH: <span id="val-dash">READY</span></div></div>
         <div id="boss-container"></div>
 
         <div id="mobile-ui">
