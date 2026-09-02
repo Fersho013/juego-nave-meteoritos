@@ -97,28 +97,37 @@ function togglePause() {
     else if (gameState === 'PAUSED') { gameState = 'PLAYING'; showScreen('none'); }
     updateVolumeVisibility();
 }
+function setHudVisible(v) {
+    ['hud-block-score','hud-block-sector','hud-block-vida'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.style.display = v ? 'block' : 'none';
+    });
+    // boss-container se maneja por renderBossUI, no forzar aquí
+    if (!v) { const bc=document.getElementById('boss-container'); if(bc) bc.style.display='none'; }
+}
 function exitToMenu() {
     gameState = 'MENU';
-    const hud = document.getElementById('hud'); if (hud) hud.style.display = 'none';
+    setHudVisible(false);
     const mu = document.getElementById('mobile-ui'); if (mu) mu.style.display = 'none';
     bosses.length = 0; renderBossUI();
     showScreen('menu-main');
 }
 function promptContinue() {
     gameState = 'CONTINUE';
-    const hud = document.getElementById('hud'); if (hud) hud.style.display = 'none';
+    setHudVisible(false);
     const mu = document.getElementById('mobile-ui'); if (mu) mu.style.display = 'none';
     showScreen('menu-continue');
 }
 function acceptContinue() {
     initAudio(); combatState.health = 100; gameState = 'PLAYING'; showScreen('none');
-    const hud = document.getElementById('hud'); if (hud) hud.style.display = 'flex';
+    setHudVisible(true);
     if (platform.isMobile && !platform.isTouchUIHidden) { const mu = document.getElementById('mobile-ui'); if (mu) mu.style.display = 'block'; }
     enemyBullets.length = 0; nave.inmune = true; setTimeout(() => nave.inmune = false, 3000); syncHud();
 }
 function winGame() {
     gameState = 'WIN';
-    const hud = document.getElementById('hud'); if (hud) hud.style.display = 'none';
+    setHudVisible(false);
     const mu = document.getElementById('mobile-ui'); if (mu) mu.style.display = 'none';
     showScreen('menu-win');
 }
@@ -234,7 +243,7 @@ function startMission(mode){
     bullets.length=0; enemyBullets.length=0; enemies.length=0; bosses.length=0; pickUps.length=0; particles.length=0; floatingTexts.length=0;
     nave.x=canvas.width/2; nave.y=canvas.height-100; nave.vx=0; nave.vy=0;
     showScreen('none');
-    const hud=document.getElementById('hud'); if(hud) hud.style.display='flex';
+    setHudVisible(true);
     const mu=document.getElementById('mobile-ui'); if(mu) mu.style.display=(platform.isMobile && !platform.isTouchUIHidden)?'block':'none';
     if(mode==='custom'){
         customSelection.forEach(val=>{
