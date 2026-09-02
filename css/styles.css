@@ -40,9 +40,16 @@ select, input { width: 100%; background: #111; border: 1px solid #444; color: wh
 .custom-list label { display: block; margin-bottom: 5px; cursor: pointer; color: #ccc; }
 .custom-list input { width: auto; margin-right: 10px; }
 
-/* --- HUD --- */
-#hud { position: absolute; top: 0; left: 0; width: 100%; padding: 15px 25px; display: none; justify-content: space-between; pointer-events: none; z-index: 50; }
+/* --- HUD (3 bloques independientes, libres) --- */
+.hud-block { position: absolute; z-index: 50; pointer-events: none; display: none; }
+#hud-block-score { top: 15px; left: 25px; }
+#hud-block-sector { top: 15px; left: 50%; transform: translateX(-50%); text-align: center; }
+#hud-block-vida { top: 15px; right: 25px; text-align: right; }
+.hud-block .stat-box { pointer-events: auto; }
+#hud-block-sector { pointer-events: auto; }
 .stat-box { font-size: 0.9rem; background: rgba(0,0,0,0.5); padding: 5px 10px; border-left: 3px solid var(--primary); }
+/* compat: viejo #hud oculto (migrado) */
+#hud { display: none !important; }
 
 .volume-btn { position: absolute; top: 15px; left: 15px; width: 45px; height: 45px; border-radius: 50%; background: rgba(10, 10, 10, 0.8); border: 2px solid var(--primary); color: white; display: flex; justify-content: center; align-items: center; font-size: 1.2rem; cursor: pointer; z-index: 200; transition: transform 0.2s; pointer-events: auto; }
 .volume-btn:active { transform: scale(0.9); }
