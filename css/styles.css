@@ -73,3 +73,21 @@ select, input { width: 100%; background: #111; border: 1px solid #444; color: wh
 
 .btn-gamepad { position: absolute; bottom: 20px; left: 20px; width: 55px; height: 55px; border-radius: 50%; background: rgba(10, 10, 10, 0.9); border: 2px solid var(--primary); color: white; display: flex; justify-content: center; align-items: center; font-size: 1.8rem; cursor: pointer; transition: transform 0.2s; pointer-events: auto; }
 .btn-gamepad:active { transform: scale(0.9); }
+
+/* --- LAYOUT EDITOR --- */
+#game-container.editing-layout { outline: 2px dashed rgba(30,144,255,0.5); outline-offset: -2px; }
+.editable { outline: 1.5px dashed rgba(30,144,255,0.9) !important; outline-offset: 2px; cursor: move !important; box-shadow: 0 0 10px rgba(30,144,255,0.4) !important; pointer-events: auto !important; }
+.editable-selected { outline: 2px solid var(--warning) !important; box-shadow: 0 0 14px rgba(255,204,0,0.7) !important; z-index: 120 !important; }
+.editable::after { content: '⇄'; position: absolute; top: -10px; right: -10px; width: 18px; height: 18px; background: var(--primary); color: #fff; font-size: 10px; display: flex; align-items: center; justify-content: center; border-radius: 50%; pointer-events: none; opacity: 0; }
+.editing-layout .editable::after { opacity: 1; }
+
+#layout-editor-panel { position: absolute; width: 310px; max-width: 92%; background: rgba(12,12,18,0.97); border: 1.5px solid var(--primary); border-radius: 10px; z-index: 250; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.7), 0 0 18px rgba(30,144,255,0.25); pointer-events: auto; touch-action: none; }
+#layout-editor-header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: linear-gradient(90deg, rgba(30,144,255,0.25), transparent); border-bottom: 1px solid rgba(30,144,255,0.3); cursor: move; user-select: none; touch-action: none; }
+#layout-editor-header span:first-child { flex: 1; }
+#layout-editor-header button { width: 28px; height: 28px; padding: 0; font-size: 0.9rem; background: rgba(255,255,255,0.06); border: 1px solid #333; color: #fff; cursor: pointer; }
+#layout-editor-header button:hover { background: var(--primary); }
+#layout-editor-body { padding: 12px; max-height: 62vh; overflow-y: auto; }
+#layout-editor-body::-webkit-scrollbar { width: 5px; } #layout-editor-body::-webkit-scrollbar-thumb { background: var(--primary); }
+.btn-editor { flex: 1; padding: 8px; font-size: 0.75rem; }
+.btn-editor.small { font-size: 0.68rem; padding: 6px; }
+#editor-scale { touch-action: none; }
