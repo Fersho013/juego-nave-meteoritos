@@ -306,7 +306,8 @@ function triggerBomb(isPlayer, origin){
         const canSpawnPortal = bosses.length===0 && !superBossState.active && !superBossState.arena && gameState==='PLAYING';
         // En custom, solo si el usuario habilitó super boss
         const customAllows = gameMode!=='custom' || customSelection.includes('superboss_portal');
-        if (canSpawnPortal && customAllows && Math.random() < 0.01) {
+        const portalProb = parseInt(document.getElementById('opt-portal')?.value) || 1;
+        if (canSpawnPortal && customAllows && Math.random() < portalProb / 100) {
             const px = Math.random()*(canvas.width-100)+50; const py = Math.random()*(canvas.height*0.5)+40;
             spawnPortal(px, py);
             floatingTexts.push({x:px, y:py-30, text:'¡PORTAL AZUL!', life:1.6, color:'#6ec8ff'});
