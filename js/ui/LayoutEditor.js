@@ -3,7 +3,7 @@
 // La ventana emergente se arrastra SOLO por su header (handle dedicado) para evitar colisión con joysticks.
 import { platform } from '../State.js';
 
-const STORAGE_KEY = 'jogo_layout_v1';
+const STORAGE_KEY = 'jogo_layout_v2';
 const PANEL_STORAGE_KEY = 'jogo_panel_pos_v1';
 
 // 3 bloques HUD independientes (vida/parry/dash | score/bombas/arma | sector/kills)
@@ -51,6 +51,8 @@ function captureDefaults() {
         const el = getEl(id);
         if (!el) return;
         const rect = el.getBoundingClientRect();
+        // Solo capturar si el elemento es visible (evita defaults 0,0 que causan salto a esquina)
+        if (rect.width === 0 || rect.height === 0) return;
         defaults[id] = {
             leftPct: pct(rect.left - cRect.left, cRect.width),
             topPct: pct(rect.top - cRect.top, cRect.height),
@@ -59,9 +61,13 @@ function captureDefaults() {
             heightPx: rect.height
         };
     });
-    // Guardar transform base especial para hud-block-sector (translateX)
     const sector = getEl('hud-block-sector');
     if (sector) sector.dataset.baseTransform = 'translateX(-50%)';
+    // Fallbacks estáticos si algún bloque nunca fue visible
+    if (!defaults['hud-block-score']) defaults['hud-block-score'] = { leftPct: 2, topPct: 2, scale:1, widthPx: 170, heightPx: 60 };
+    if (!defaults['hud-block-sector']) defaults['hud-block-sector'] = { leftPct: 50, topPct: 2, scale:1, widthPx: 200, heightPx: 40 };
+    if (!defaults['hud-block-vida']) defaults['hud-block-vida'] = { leftPct: 75, topPct: 2, scale:1, widthPx: 120, heightPx: 60 };
+    if (!defaults['boss-container']) defaults['boss-container'] = { leftPct: 15, topPct: 10, scale:1, widthPx: 400, heightPx: 20 };
 }
 
 function loadLayout() {
@@ -169,8 +175,45 @@ function applyPanelPos() {
 
 function ensureLayoutEntry(id) {
     if (!layout[id]) {
-        const d = defaults[id];
-        layout[id] = { leftPct: d ? d.leftPct : 5, topPct: d ? d.topPct : 5, scale: 1 };
+        const el = getEl(id);
+        const container = getContainer();
+        if (el && container) {
+            const cRect = container.getBoundingClientRect();
+            const rect = el.getBoundingClientRect();
+            // Si el elemento está visible, usar su posición real actual (evita salto a 0,0)
+            // Si está oculto (rect 0), caer a defaults o a posición centrada
+            const hasValidRect = rect.width > 0 && rect.height > 0;
+            const liveLeft = hasValidRect ? pct(rect.left - cRect.left, cRect.width) : null;
+            const liveTop = hasValidRect ? pct(rect.top - cRect.top, cRect.height) : null;
+            const d = defaults[id];
+            // Para hud-block-sector el CSS es left:50% + translateX(-50%), no usar rect.left
+            let left = liveLeft;
+            let top = liveTop;
+            if (id === 'hud-block-sector' && hasValidRect) {
+                // La posición visual centrada debe mapearse a left 50% para no romper el anclaje
+                // Si no hay layout previo, forzar 50% y mantener top actual
+                left = 50 - (rect.width / cRect.width * 50); // aprox centro
+                // Simplificar: usar 43% que corresponde a left 50% - width/2 (fallback estático)
+                left = 50; // el transform se encarga del centrado
+            }
+            if (left === null) left = d ? d.leftPct : 5;
+            if (top === null) top = d ? d.topPct : 5;
+            // Clamp y evitar 0,0 masivo si defaults era 0
+            if (left < 1 && top < 1 && d && (d.widthPx===0 || d.leftPct===0)) {
+                // Defaults capturados ocultos -> usar CSS por defecto
+                if (id === 'hud-block-score') { left = 2; top = 2; }
+                else if (id === 'hud-block-sector') { left = 50; top = 2; }
+                else if (id === 'hud-block-vida') { left = 75; top = 2; }
+                else if (id === 'boss-container') { left = 15; top = 10; }
+                else if (id.includes('joy-base-l')) { left = 3; top = 75; }
+                else if (id.includes('joy-base-r')) { left = 78; top = 75; }
+                else { left = 5; top = 5; }
+            }
+            layout[id] = { leftPct: left, topPct: top, scale: 1 };
+        } else {
+            const d = defaults[id];
+            layout[id] = { leftPct: d ? d.leftPct : 5, topPct: d ? d.topPct : 5, scale: 1 };
+        }
     }
 }
 
