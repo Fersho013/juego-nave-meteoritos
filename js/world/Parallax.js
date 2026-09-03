@@ -3,6 +3,7 @@
 export const stars = [];
 export const nebulas = [];
 export const planets = [];
+export const superAsteroids = [];
 
 export function initParallax(canvas) {
     // 3 capas de estrellas
@@ -14,6 +15,43 @@ export function initParallax(canvas) {
     for (let i = 0; i < 8; i++) nebulas.push({ x: Math.random()*3000, y: Math.random()*3000, r: 80+Math.random()*120, color: nebulaColors[Math.floor(Math.random()*nebulaColors.length)], alpha: 0.06+Math.random()*0.07, speed: 0.3+Math.random()*0.4 });
     const planetColors = ['rgba(100,60,30,1)','rgba(60,80,180,1)','rgba(40,120,80,1)','rgba(160,160,80,1)'];
     for (let i = 0; i < 3; i++) planets.push({ x: Math.random()*3000, y: Math.random()*3000, r: 30+Math.random()*60, color: planetColors[Math.floor(Math.random()*planetColors.length)], speed: 0.08+Math.random()*0.12 });
+    // Arena Super Boss: asteroides azules
+    for (let i = 0; i < 16; i++) superAsteroids.push({ x: Math.random()*3000, y: Math.random()*3000, r: 18+Math.random()*26, rot: Math.random()*Math.PI*2, rotSpeed: (Math.random()-0.5)*0.04, speed: 0.9+Math.random()*1.1 });
+}
+
+export function drawSuperArena(ctx, canvas, gameState) {
+    // Fondo rojizo + asteroides azules
+    const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    grad.addColorStop(0, '#2a0a0a');
+    grad.addColorStop(0.45, '#4a1018');
+    grad.addColorStop(1, '#0a0a1a');
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Nebulosa rojiza suave
+    ctx.globalAlpha = 0.22;
+    const ng = ctx.createRadialGradient(canvas.width * 0.5, canvas.height * 0.35, 0, canvas.width * 0.5, canvas.height * 0.35, canvas.width * 0.7);
+    ng.addColorStop(0, 'rgba(255,60,40,0.55)'); ng.addColorStop(1, 'transparent');
+    ctx.fillStyle = ng; ctx.beginPath(); ctx.arc(canvas.width * 0.5, canvas.height * 0.35, canvas.width * 0.7, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+    superAsteroids.forEach(a => {
+        ctx.save();
+        ctx.translate(a.x, a.y); ctx.rotate(a.rot);
+        ctx.globalAlpha = 0.95;
+        ctx.fillStyle = '#3a6ea5'; ctx.strokeStyle = '#6ec8ff'; ctx.lineWidth = 1.2;
+        // forma asteroide irregular
+        ctx.beginPath();
+        for (let k = 0; k < 7; k++) {
+            const ang = (k / 7) * Math.PI * 2;
+            const rr = a.r * (0.82 + Math.random() * 0.22);
+            const px = Math.cos(ang) * rr, py = Math.sin(ang) * rr;
+            if (k === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        // brillo azul
+        ctx.fillStyle = 'rgba(110,200,255,0.35)';
+        ctx.beginPath(); ctx.arc(-a.r * 0.25, -a.r * 0.25, a.r * 0.28, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        if (gameState === 'PLAYING') { a.y += a.speed; a.rot += a.rotSpeed; if (a.y - a.r > canvas.height) { a.y = -a.r; a.x = Math.random() * canvas.width; } }
+    });
 }
 
 export function drawParallax(ctx, canvas, gameState) {
