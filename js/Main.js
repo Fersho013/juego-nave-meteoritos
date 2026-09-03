@@ -12,9 +12,11 @@ import { combatState, dropRevivePickup, playerHit as combatPlayerHit, triggerBom
 import { progression, checkProgression } from './system/Progression.js';
 import { hudState, updateHUD as hudUpdate, updateComboDisplay, updateWaveProgress } from './ui/Hud.js';
 import { showScreen, updateVolumeVisibility, initPreview } from './ui/Menu.js';
-import { stars, nebulas, planets, initParallax, drawParallax } from './world/Parallax.js';
+import { stars, nebulas, planets, superAsteroids, initParallax, drawParallax, drawSuperArena } from './world/Parallax.js';
 import { DASH } from './Data/Constants.js';
 import { initLayoutEditor, enterEditMode, exitEditMode, isEditorActive } from './ui/LayoutEditor.js';
+import { portals, spawnPortal, clearPortals, updatePortals, drawPortals } from './entities/Portal.js';
+import { superBossState, spawnSuperBoss, clearSuperBoss, updateSuperBoss, drawSuperBoss, canDamageSuperBoss, damageSuperBoss, damageCannon, damageGate, hasSuperModifierActive, grantSuperModifier, clearSuperModifier } from './entities/SuperBoss.js';
 
 // --- Canvas ---
 const canvas = document.getElementById('gameCanvas');
@@ -103,7 +105,6 @@ function setHudVisible(v) {
         if (!el) return;
         el.style.display = v ? 'block' : 'none';
     });
-    // boss-container se maneja por renderBossUI, no forzar aquí
     if (!v) { const bc=document.getElementById('boss-container'); if(bc) bc.style.display='none'; }
 }
 function exitToMenu() {
@@ -111,6 +112,8 @@ function exitToMenu() {
     setHudVisible(false);
     const mu = document.getElementById('mobile-ui'); if (mu) mu.style.display = 'none';
     bosses.length = 0; renderBossUI();
+    clearPortals(); clearSuperBoss(); clearSuperModifier();
+    // restaurar fondo normal al salir
     showScreen('menu-main');
 }
 function promptContinue() {
@@ -241,6 +244,7 @@ function startMission(mode){
     weaponState.current='normal'; weaponState.timer=0; weaponPowerUps.length=0; debrisChunks.length=0; fxState.hitStopFrames=0;
     homingState.active=false; homingState.timer=0; droneState.drones.length=0; droneState.timer=0; shipTrail.length=0;
     bullets.length=0; enemyBullets.length=0; enemies.length=0; bosses.length=0; pickUps.length=0; particles.length=0; floatingTexts.length=0;
+    clearPortals(); clearSuperBoss(); clearSuperModifier();
     nave.x=canvas.width/2; nave.y=canvas.height-100; nave.vx=0; nave.vy=0;
     showScreen('none');
     setHudVisible(true);
@@ -253,30 +257,61 @@ function startMission(mode){
             if(val==='b_hunter') createBoss({canvas, type:'hunter', id:'B_HUNTER'});
             if(val==='b_berserker') createBoss({canvas, type:'berserker', id:'B_BERSERK'});
             if(val==='b4') createBoss({canvas, type:'doppel', id:'DOPPEL'});
+            if(val==='superboss_direct') { spawnSuperBoss(canvas); floatingTexts.push({x: canvas.width/2, y: canvas.height/2 - 40, text: '★ NODRIZA SUPER BOSS ★', life: 1.8, color: '#6ec8ff'}); }
         });
+        if(customSelection.includes('superboss_portal')) {
+            floatingTexts.push({x: canvas.width/2, y: 80, text: 'Portal azul habilitado (usa bomba)', life: 2.5, color: '#6ec8ff'});
+        }
     }
     syncHud();
 }
 
-function syncHud(){ hudUpdate({ combatState, weaponState, progression, gameMode: { value: gameMode }}); }
+function syncHud(){
+    hudUpdate({ combatState, weaponState, progression, gameMode: { value: gameMode }});
+    if (hasSuperModifierActive()) {
+        const wEl = document.getElementById('val-weapon');
+        if (wEl) { wEl.innerText = 'TRIPLE VERDE ★'; wEl.style.color = '#00ff66'; }
+    }
+}
 
 // --- Helpers for update loop ---
 function spawnBullets(isTriple){
     const baseAngle = Math.atan2(input.aimY - nave.y, input.aimX - nave.x);
+    const hasGreen = hasSuperModifierActive();
     if(weaponState.current==='laser'){ sfx.laser(); return; }
     sfx.shoot();
+    // Modifier verde permanente: disparo individual se vuelve triple verde
+    if (hasGreen && !isTriple && weaponState.current==='normal') isTriple = true;
     if(weaponState.current==='spread'){
         for(let i=0;i<5;i++){ const a=baseAngle+(i-2)*0.25; bullets.push({x:nave.x,y:nave.y,vx:Math.cos(a)*13,vy:Math.sin(a)*13,color:'#ff9900',dmg:15}); }
         fxState.screenShake=2;
-    } else if(isTriple){ for(let i=-1;i<=1;i++){const a=baseAngle+(i*0.2); bullets.push({x:nave.x,y:nave.y,vx:Math.cos(a)*12,vy:Math.sin(a)*12,color:'#ffcc00',dmg:25});} fxState.screenShake=3; }
+    } else if(isTriple){
+        const col = hasGreen && weaponState.current==='normal' ? '#00ff66' : '#ffcc00';
+        const dmg = hasGreen ? 18 : 25;
+        for(let i=-1;i<=1;i++){const a=baseAngle+(i*0.2); bullets.push({x:nave.x,y:nave.y,vx:Math.cos(a)*12,vy:Math.sin(a)*12,color:col,dmg, isSuperGreen: hasGreen});}
+        fxState.screenShake=3;
+    }
     else { bullets.push({x:nave.x,y:nave.y,vx:Math.cos(baseAngle)*15,vy:Math.sin(baseAngle)*15,color:'#1e90ff',dmg:20}); }
     droneState.drones.forEach(d=>{ bullets.push({x:d.x,y:d.y,vx:Math.cos(baseAngle)*13,vy:Math.sin(baseAngle)*13,color:'#ffffff',dmg:8,isDrone:true}); });
+    // Si tiene modifier, el dron también dispara verde triple al combinar
+    if (hasGreen && !isTriple) { /* ya convertido arriba */ }
 }
 
 function triggerBomb(isPlayer, origin){
     if(isPlayer){ if(combatState.bombs<=0) return; combatState.bombs--; input.bomb=false; sfx.bomb(); }
     fxState.screenShake=40; particles.push({x:origin.x,y:origin.y,vx:0,vy:0,life:1,type:'bomb_ring',color:isPlayer?'#fff':'#ff0044'});
-    if(isPlayer){ enemyBullets.length=0; enemies.forEach(e=>createExplosion(e.x,e.y,'#fff',10)); enemies.length=0; bosses.forEach(b=>{ b.hp -= b.maxHp*0.1; updateBossHP(b); }); } else { bullets.length=0; if(!parryActive) doPlayerHit(true); }
+    if(isPlayer){
+        enemyBullets.length=0; enemies.forEach(e=>createExplosion(e.x,e.y,'#fff',10)); enemies.length=0; bosses.forEach(b=>{ b.hp -= b.maxHp*0.1; updateBossHP(b); });
+        // 1% portal azul solo si no hay boss activo ni super boss, en combate normal
+        const canSpawnPortal = bosses.length===0 && !superBossState.active && !superBossState.arena && gameState==='PLAYING';
+        // En custom, solo si el usuario habilitó super boss
+        const customAllows = gameMode!=='custom' || customSelection.includes('superboss_portal');
+        if (canSpawnPortal && customAllows && Math.random() < 0.01) {
+            const px = Math.random()*(canvas.width-100)+50; const py = Math.random()*(canvas.height*0.5)+40;
+            spawnPortal(px, py);
+            floatingTexts.push({x:px, y:py-30, text:'¡PORTAL AZUL!', life:1.6, color:'#6ec8ff'});
+        }
+    } else { bullets.length=0; if(!parryActive) doPlayerHit(true); }
     syncHud();
 }
 function doPlayerHit(heavy=false){
@@ -292,7 +327,32 @@ function update(){
     pollInput();
     if(gameState!=='PLAYING') return;
     if(fxState.hitStopFrames>0){ fxState.hitStopFrames--; return; }
-    fxState.frameCount++; checkProgression({ gameMode:{value:gameMode}, currentWaveRef:{canvas}, customSelection, frameCount: fxState.frameCount, winGame }); if(gameMode==='progressive') updateWaveProgress({gameMode:{value:gameMode}, progression, bosses});
+    fxState.frameCount++; 
+    // Portal azul: actualizar y detectar entrada a arena Super Boss
+    updatePortals({ nave, onEnter: () => {
+        // Teleport a arena azul/roja con nodriza
+        enemies.length = 0; enemyBullets.length = 0; portals.length = 0;
+        // Pausar oleadas normales mientras dure arena
+        spawnSuperBoss(canvas);
+        floatingTexts.push({ x: canvas.width/2, y: canvas.height/2 - 40, text: '¡ENTRANDO A ZONA NODRIZA!', life: 1.8, color: '#6ec8ff' });
+        fxState.screenShake = 18;
+        nave.y = canvas.height - 90;
+        // Mensaje de fases
+        setTimeout(()=> floatingTexts.push({ x: nave.x, y: nave.y - 60, text: 'FASE 1: DESTRUYE LOS CAÑONES', life: 2.0, color: '#ff5555' }), 900);
+    }});
+    // Super Boss update tiene prioridad y pausa progresión normal en arena
+    if (superBossState.active) {
+        updateSuperBoss({ canvas, nave, bullets, enemyBullets, enemies, particles, floatingTexts, fxState, createExplosion, spawnDebris, hudState, combatState, frameCount: fxState.frameCount });
+        // Si está activo, no procesar oleadas normales
+        if (superBossState.arena) { /* saltar checkProgression */ } else { checkProgression({ gameMode:{value:gameMode}, currentWaveRef:{canvas}, customSelection, frameCount: fxState.frameCount, winGame }); if(gameMode==='progressive') updateWaveProgress({gameMode:{value:gameMode}, progression, bosses}); }
+    } else {
+        checkProgression({ gameMode:{value:gameMode}, currentWaveRef:{canvas}, customSelection, frameCount: fxState.frameCount, winGame }); if(gameMode==='progressive') updateWaveProgress({gameMode:{value:gameMode}, progression, bosses});
+    }
+    if (superBossState.active && superBossState.arena) {
+        // En arena, no spawnear enemigos normales del loop clásico
+    } else {
+        // El resto del update continúa normal abajo; spawn se maneja más abajo con guarda
+    }
 
     if(weaponState.current!=='normal'){ weaponState.timer--; if(weaponState.timer<=0){ weaponState.current='normal'; weaponState.timer=0; } }
     if(homingState.active){
@@ -337,12 +397,26 @@ function update(){
     }
     if(input.parry && !parryCooldown){ sfx.parry(); parryActive=true; parryCooldown=true; input.parry=false; parryTimer=2000; const el=document.getElementById('val-parry'); if(el){el.innerText="ACTIVE"; el.style.color="var(--success)";} setTimeout(()=>{parryActive=false; const e2=document.getElementById('val-parry'); if(e2){e2.innerText="RECHARGING"; e2.style.color="var(--danger)";}},200); setTimeout(()=>{parryCooldown=false; const e3=document.getElementById('val-parry'); if(e3){e3.innerText="READY"; e3.style.color="var(--success)";}},2000); }
     if(input.dash && !dashCooldown && !dashActive){ input.dash=false; sfx.dash(); dashActive=true; dashCooldown=true; nave.inmune=true; dashHitSet.clear(); const dx=input.moveX||0,dy=input.moveY||0; const len=Math.hypot(dx,dy)||1; nave.vx=(dx/len)*DASH.SPEED; nave.vy=(dy/len)*DASH.SPEED; const el=document.getElementById('val-dash'); if(el){el.innerText="ACTIVE"; el.style.color="#a0c4ff";} for(let i=0;i<12;i++) particles.push({x:nave.x,y:nave.y,vx:(Math.random()-0.5)*4,vy:(Math.random()-0.5)*4,life:0.9,color:'#a0c4ff',type:'spark'}); setTimeout(()=>{dashActive=false; nave.inmune=false; const e2=document.getElementById('val-dash'); if(e2){e2.innerText="RECHARGING"; e2.style.color="var(--danger)";}},DASH.DURATION); setTimeout(()=>{dashCooldown=false; const e3=document.getElementById('val-dash'); if(e3){e3.innerText="READY"; e3.style.color="var(--success)";}},DASH.COOLDOWN); }
-    if(Math.random()<0.02+(progression.currentWave*0.005) && bosses.length===0) spawnEnemy({canvas,bosses,gameMode:{value:gameMode},currentWave:{value:progression.currentWave},waveTransition:{value:progression.waveTransition},customSelection});
-    if(bosses.length===0 && fxState.frameCount%420===0 && gameMode!=='custom'){ const forms=['triangle','square','circle']; spawnFormation({canvas,bosses,formType:forms[Math.floor(Math.random()*forms.length)]}); }
+    if(!superBossState.arena) {
+        if(Math.random()<0.02+(progression.currentWave*0.005) && bosses.length===0) spawnEnemy({canvas,bosses,gameMode:{value:gameMode},currentWave:{value:progression.currentWave},waveTransition:{value:progression.waveTransition},customSelection});
+        if(bosses.length===0 && fxState.frameCount%420===0 && gameMode!=='custom'){ const forms=['triangle','square','circle']; spawnFormation({canvas,bosses,formType:forms[Math.floor(Math.random()*forms.length)]}); }
+    }
     enemies.forEach((e,i)=>{
         if(e.zigzag){ e.zigzagPhase=(e.zigzagPhase||0)+0.05; e.vx=Math.sin(e.zigzagPhase)*3; }
         e.x+=e.vx; e.y+=e.vy;
         if(e.type==='kamikaze'){ const ang=Math.atan2(nave.y-e.y,nave.x-e.x); e.vx+=Math.cos(ang)*0.4; e.vy+=Math.sin(ang)*0.4; const spd=Math.hypot(e.vx,e.vy); if(spd>9){e.vx=(e.vx/spd)*9; e.vy=(e.vy/spd)*9; } }
+        if(e.type==='kamikaze_bomb'){ const ang=Math.atan2(nave.y-e.y,nave.x-e.x); e.vx+=Math.cos(ang)*0.32; e.vy+=Math.sin(ang)*0.32; const spd=Math.hypot(e.vx,e.vy); if(spd>7.5){e.vx=(e.vx/spd)*7.5; e.vy=(e.vy/spd)*7.5; } // explota cerca
+            if(Math.hypot(e.x-nave.x, e.y-nave.y) < (e.bombRadius||42)) {
+                createExplosion(e.x, e.y, '#ff6600', 22); spawnDebris(e.x,e.y,'#ff6600',3);
+                fxState.screenShake = 16; fxState.hitStopFrames = 6;
+                // Daño en área
+                if(Math.hypot(e.x-nave.x, e.y-nave.y) < 52) doPlayerHit(true);
+                // limpiar balas cercanas
+                enemyBullets.length = Math.max(0, enemyBullets.length - 4);
+                enemies.splice(i,1);
+                return;
+            }
+        }
         if(e.type==='elite' && !(e.dodgeCooldown)){ const aimAngle=Math.atan2(input.aimY-nave.y,input.aimX-nave.x); const toEnemy=Math.atan2(e.y-nave.y,e.x-nave.x); const angleDiff=Math.abs(((aimAngle-toEnemy)+Math.PI)%(Math.PI*2)-Math.PI); const dist=Math.hypot(e.x-nave.x,e.y-nave.y); if(angleDiff<0.12 && dist<350 && input.shoot){ e.vx+=(Math.random()>0.5?1:-1)*8; e.dodgeCooldown=true; setTimeout(()=>{if(e) e.dodgeCooldown=false;},1200); } }
         if(e.suicidal){ const ang=Math.atan2(nave.y-e.y,nave.x-e.x); e.vx+=Math.cos(ang)*0.25; e.vy+=Math.sin(ang)*0.25; const spd=Math.hypot(e.vx,e.vy); if(spd>6){e.vx=(e.vx/spd)*6; e.vy=(e.vy/spd)*6; } }
         if(e.type==='elite' && fxState.frameCount%70===0){ const angle=Math.atan2(nave.y-e.y,nave.x-e.x); enemyBullets.push({x:e.x,y:e.y,vx:Math.cos(angle)*6,vy:Math.sin(angle)*6,color:'#00ffcc'}); }
@@ -412,6 +486,40 @@ function update(){
         if(bul.isHoming){ bul.life=(bul.life!==undefined?bul.life:240)-1; let target=null,bestDist=Infinity; enemies.forEach(e=>{const d=Math.hypot(e.x-bul.x,e.y-bul.y); if(d<bestDist){bestDist=d; target=e;}}); bosses.forEach(bx=>{ if(!bx.immune){const d=Math.hypot(bx.x-bul.x,bx.y-bul.y); if(d<bestDist){bestDist=d; target=bx;}}}); if(target){const hAng=Math.atan2(target.y-bul.y,target.x-bul.x); bul.vx+=Math.cos(hAng)*0.7; bul.vy+=Math.sin(hAng)*0.7;} const hs=Math.hypot(bul.vx,bul.vy); if(hs>9){bul.vx=(bul.vx/hs)*9; bul.vy=(bul.vy/hs)*9;}}
         bul.x+=bul.vx; bul.y+=bul.vy; let hit=bul.isHoming && bul.life<=0;
         enemies.forEach((e,ei)=>{ if(!hit && Math.hypot(bul.x-e.x,bul.y-e.y)<25){ hit=true; if(e.shield){e.shield=false; e.vy*=1.5;} else { e.hp-=bul.dmg; if(e.hp<=0){ createExplosion(e.x,e.y); if(e.type==='elite') fxState.hitStopFrames=5; if(e.type==='elite'||e.type==='special') spawnDebris(e.x,e.y,e.type==='elite'?'#00ffcc':'#ffcc00'); enemies.splice(ei,1); if(e.type!=='life' && gameMode==='progressive'){progression.waveKills++; updateWaveProgress({gameMode:{value:gameMode},progression,bosses});} hudState.comboCount++; hudState.comboMultiplier=hudState.comboCount>=10?3:hudState.comboCount>=5?2:1; if(hudState.comboResetTimer) clearTimeout(hudState.comboResetTimer); hudState.comboResetTimer=setTimeout(()=>{hudState.comboCount=0;hudState.comboMultiplier=1;updateComboDisplay();},2500); const pts=150*hudState.comboMultiplier; hudState.score+=pts; floatingTexts.push({x:e.x,y:e.y,text:hudState.comboMultiplier>1?`+${pts} x${hudState.comboMultiplier}!`:`+${pts}`,life:1.0,color:hudState.comboMultiplier>=3?'#ff3366':hudState.comboMultiplier===2?'#ffcc00':'#fff'}); updateComboDisplay(); if(e.type==='life'){ combatState.health=Math.min(100, combatState.health+combatState.damagePerHit); syncHud(); floatingTexts.push({x:e.x,y:e.y-20,text:`+${combatState.damagePerHit}% VIDA`,life:1.0,color:'#ff66cc'}); } if(e.type==='elite'&&Math.random()>0.4){ const letters=['S','L','R','D']; const wt=letters[Math.floor(Math.random()*4)]; weaponPowerUps.push({x:e.x,y:e.y,letter:wt,vy:1.5,life:600}); } if(Math.random()>0.95 && e.type!=='life') pickUps.push({x:e.x,y:e.y,type:'bomb'}); } } } });
+        // --- Super Boss colisiones ---
+        if(!hit && superBossState.active && !superBossState.destroyed) {
+            if(superBossState.phase===1) {
+                for(let ci=0; ci<superBossState.cannons.length; ci++){
+                    const c = superBossState.cannons[ci];
+                    if(!c.alive) continue;
+                    if(Math.hypot(bul.x - c.x, bul.y - c.y) < 22){
+                        hit=true; const killed = damageCannon(ci, bul.dmg);
+                        createExplosion(bul.x, bul.y, '#ff5555', 4);
+                        floatingTexts.push({x:c.x, y:c.y-18, text:`-${bul.dmg}`, life:0.7, color:'#ffaaaa'});
+                        if(killed) { createExplosion(c.x,c.y,'#ff6600',18); spawnDebris(c.x,c.y,'#ff6600',4); fxState.screenShake=8; floatingTexts.push({x:c.x,y:c.y-24, text:'¡CAÑÓN DESTRUIDO!', life:1.2, color:'#ff9900'}); }
+                        break;
+                    }
+                }
+                // Escudo del boss principal bloquea todo si intentas pegarle directo
+                if(!hit && Math.hypot(bul.x - superBossState.x, bul.y - superBossState.y) < 42) {
+                    // choca contra escudo
+                    createExplosion(bul.x, bul.y, '#1e90ff', 3); hit=true;
+                }
+            } else if(superBossState.phase===2 && superBossState.gate) {
+                const g = superBossState.gate;
+                if(Math.abs(bul.x - g.x) < g.w/2 + 6 && Math.abs(bul.y - g.y) < g.h/2 + 8) {
+                    hit=true; damageGate(bul.dmg); createExplosion(bul.x, bul.y, '#ff9900', 4);
+                    floatingTexts.push({x:g.x, y:g.y-10, text:`-${bul.dmg}`, life:0.6, color:'#ffcc00'});
+                }
+            } else if(superBossState.phase===3) {
+                if(canDamageSuperBoss() && Math.abs(bul.x - superBossState.x) < superBossState.w/2 && Math.abs(bul.y - superBossState.y) < superBossState.h/2 + 10) {
+                    hit=true; damageSuperBoss(bul.dmg); createExplosion(bul.x, bul.y, '#00ff66', 4);
+                    floatingTexts.push({x: superBossState.x + (Math.random()-0.5)*40, y: superBossState.y, text:`-${bul.dmg}`, life:0.7, color:'#00ff66'});
+                } else if(!canDamageSuperBoss() && Math.abs(bul.x - superBossState.x) < superBossState.w/2 + 8 && Math.abs(bul.y - superBossState.y) < 30) {
+                    createExplosion(bul.x, bul.y, '#1e90ff', 2); hit=true;
+                }
+            }
+        }
         if(!hit){ for(let mi=enemyBullets.length-1; mi>=0; mi--){ const mb=enemyBullets[mi]; if(mb.isMissile && Math.hypot(bul.x-mb.x,bul.y-mb.y)<18){ createExplosion(mb.x,mb.y,'#ffff00',8); floatingTexts.push({x:mb.x,y:mb.y,text:'MISIL ✓',life:0.8,color:'#ffff00'}); enemyBullets.splice(mi,1); hit=true; break; } } }
         bosses.forEach((b,bIdx)=>{ const bRadius=b.type==='doppel'?30:(b.type==='berserker'?44:(b.type==='doppel_y'||b.type==='doppel_o'?28:45)); if(!hit && Math.hypot(bul.x-b.x,bul.y-b.y)<bRadius){ if(b.immune){ createExplosion(bul.x,bul.y,b.type==='berserker'?'#ff4400':'#ffff00',3); hit=true; } else if(b.type==='doppel'&&b.parryActive){ createExplosion(bul.x,bul.y,'#00ffcc',5); hit=true; } else { hit=true; b.hp-=bul.dmg; updateBossHP(b); floatingTexts.push({x:b.x+(Math.random()-0.5)*40,y:b.y-20+(Math.random()-0.5)*20,text:`-${bul.dmg}`,life:1.0,color:'#ff3366'}); if(b.hp<=0 && (b.type==='doppel_y'||b.type==='doppel_o')){ const col=b.type==='doppel_y'?'#ffff00':'#ff6600'; createExplosion(b.x,b.y,col,50); spawnDebris(b.x,b.y,col,6); fxState.hitStopFrames=8; fxState.screenShake=20; hudState.score+=8000; floatingTexts.push({x:b.x,y:b.y-50,text:b.type==='doppel_y'?'★ DOPPEL AMARILLO DESTRUIDO ★':'★ DOPPEL NARANJA DESTRUIDO ★',life:2.0,color:col}); bosses.splice(bIdx,1); renderBossUI(); dropRevivePickup(b.x,b.y); } } } });
         if(hit || bul.y<0 || bul.y>canvas.height || bul.x<0 || bul.x>canvas.width) bullets.splice(bi,1);
@@ -439,19 +547,28 @@ function draw(currentTime){
     lastDrawTime=currentTime-(deltaTime%fpsInterval);
     ctx.save();
     if(fxState.screenShake>0){ ctx.translate((Math.random()-0.5)*fxState.screenShake,(Math.random()-0.5)*fxState.screenShake); fxState.screenShake*=0.9; if(fxState.screenShake<0.5) fxState.screenShake=0; }
-    ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
-    drawParallax(ctx, canvas, gameState);
+    if (superBossState.arena) {
+        drawSuperArena(ctx, canvas, gameState);
+    } else {
+        ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
+        drawParallax(ctx, canvas, gameState);
+    }
+    // Portal azul siempre visible si existe
+    drawPortals(ctx);
     if(gameState==='PLAYING'||gameState==='PAUSED'||gameState==='CONTINUE'||gameState==='WIN'){
         pickUps.forEach(p=>{
             if(p.type==='revive'){ const pulse=0.75+Math.sin(fxState.frameCount*0.15)*0.25; ctx.save(); ctx.globalAlpha=pulse; ctx.shadowBlur=16; ctx.shadowColor='#ffee88'; ctx.fillStyle='#ffee88'; ctx.beginPath(); ctx.arc(p.x,p.y,12,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1; ctx.shadowBlur=0; ctx.fillStyle='#000'; ctx.font='bold 13px Orbitron'; ctx.fillText('✨',p.x-7,p.y+5); ctx.restore(); }
             else { ctx.fillStyle='#ffcc00'; ctx.beginPath(); ctx.arc(p.x,p.y,10,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#000'; ctx.fillText('B',p.x-4,p.y+4); }
         });
         enemies.forEach(e=>{
-            ctx.fillStyle=e.type==='elite'?'#00ffcc':(e.shield?'#ffcc00':(e.type==='life'?'#ff66cc':(e.type==='kamikaze'?'#ff6600':'#ff3366')));
+            if(e.type==='kamikaze_bomb'){ ctx.fillStyle='#ff4400'; } else ctx.fillStyle=e.type==='elite'?'#00ffcc':(e.shield?'#ffcc00':(e.type==='life'?'#ff66cc':(e.type==='kamikaze'?'#ff6600':'#ff3366')));
             if(e.type==='elite'){ ctx.beginPath(); ctx.moveTo(e.x,e.y+15); ctx.lineTo(e.x-15,e.y-10); ctx.lineTo(e.x+15,e.y-10); ctx.fill(); }
             else if(e.type==='kamikaze'){ const ang=Math.atan2(e.vy,e.vx); ctx.save(); ctx.translate(e.x,e.y); ctx.rotate(ang); ctx.shadowBlur=10; ctx.shadowColor='#ff6600'; ctx.beginPath(); ctx.moveTo(16,0); ctx.lineTo(-10,-10); ctx.lineTo(-5,0); ctx.lineTo(-10,10); ctx.fill(); ctx.shadowBlur=0; ctx.restore(); }
+            else if(e.type==='kamikaze_bomb'){ const ang=Math.atan2(e.vy,e.vx); ctx.save(); ctx.translate(e.x,e.y); ctx.rotate(ang); ctx.shadowBlur=12; ctx.shadowColor='#ff4400'; ctx.fillStyle='#ff4400'; ctx.beginPath(); ctx.moveTo(14,0); ctx.lineTo(-10,-11); ctx.lineTo(-6,0); ctx.lineTo(-10,11); ctx.fill(); ctx.fillStyle='#ffcc00'; ctx.font='10px Orbitron'; ctx.fillText('💣', -5, 4); ctx.shadowBlur=0; ctx.restore(); }
             else { ctx.fillRect(e.x-12,e.y-12,24,24); if(e.shield){ctx.strokeStyle='#fff'; ctx.strokeRect(e.x-15,e.y-15,30,30);} }
         });
+        // Super Boss nodriza
+        drawSuperBoss(ctx, fxState.frameCount);
         bosses.forEach(b=>{
             const enraged=b.type==='doppel_y'||b.type==='doppel_o'?b.enraged:(b.hp<b.maxHp*0.3);
             const bossColor=enraged?'#ff6600':'#ff3366'; const bossGlow=enraged?'#ff6600':'#ff3366'; const enragePulse=enraged?(0.8+Math.sin(fxState.frameCount*0.25)*0.2):1;
