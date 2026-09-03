@@ -11,15 +11,17 @@ export function spawnEnemy({ canvas, bosses, gameMode, currentWave, waveTransiti
     else if (gameMode.value === 'progressive') {
         type = pickWaveType(currentWave.value);
     } else if (gameMode.value === 'custom') {
-        const avail = customSelection.filter(v => ['common','special','elite','kamikaze'].includes(v));
+        const avail = customSelection.filter(v => ['common','special','elite','kamikaze','kamikaze_bomb'].includes(v));
         if (avail.length > 0) type = avail[Math.floor(Math.random()*avail.length)]; else return;
     }
 
-    let enemyHp = type === 'elite' ? 120 : (type === 'special' ? 60 : (type === 'life' ? 40 : (type === 'kamikaze' ? 25 : 30)));
-    let enemyVy = type === 'special' ? 3.5 : (type === 'life' ? 1 : (type === 'kamikaze' ? 1.5 : 2));
-    const suicidal = (gameMode.value === 'progressive' && currentWave.value >= 4 && (type === 'special' || type === 'common'));
+    if (type === 'kamikaze_bomb') { /* nuevo enemigo Fase 2 Super Boss */ }
+    let enemyHp = type === 'elite' ? 120 : (type === 'special' ? 60 : (type === 'life' ? 40 : (type === 'kamikaze' ? 25 : (type === 'kamikaze_bomb' ? 35 : 30))));
+    let enemyVy = type === 'special' ? 3.5 : (type === 'life' ? 1 : (type === 'kamikaze' ? 1.5 : (type === 'kamikaze_bomb' ? 2.8 : 2)));
+    const suicidal = (gameMode.value === 'progressive' && currentWave.value >= 4 && (type === 'special' || type === 'common')) || type === 'kamikaze_bomb';
 
-    enemies.push({ x: Math.random() * (canvas.width - 40) + 20, y: -30, type, hp: enemyHp, vx: (Math.random() - 0.5) * 2, vy: enemyVy, shield: type === 'special', lastShot: 0, suicidal });
+    const isBombKamikaze = type === 'kamikaze_bomb';
+    enemies.push({ x: Math.random() * (canvas.width - 40) + 20, y: -30, type, hp: enemyHp, vx: (Math.random() - 0.5) * 2, vy: enemyVy, shield: type === 'special', lastShot: 0, suicidal, isBombKamikaze, bombRadius: 42 });
 }
 
 function pickWaveType(currentWave) {
