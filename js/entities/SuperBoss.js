@@ -30,10 +30,10 @@ export function spawnSuperBoss(canvas) {
     superBossState.explosionTimer = 0;
     superBossState.x = canvas.width / 2;
     superBossState.y = 62;
-    superBossState.w = Math.min(canvas.width - 24, 720);
+    superBossState.w = canvas.width - 12; // triple de largo: abarca toda la pantalla (antes 720 cap)
     superBossState.h = 56;
-    superBossState.hp = 8000;
-    superBossState.maxHp = 8000;
+    superBossState.hp = 40000; // x5 (8000*5)
+    superBossState.maxHp = 40000;
     superBossState.shield = true;
     superBossState.lasersActive = false;
     superBossState.laserTimer = 0;
@@ -46,8 +46,8 @@ export function spawnSuperBoss(canvas) {
         superBossState.cannons.push({
             x: superBossState.x - spacing * 1.2 + i * spacing * 1.2,
             y: superBossState.y + 38,
-            hp: 650,
-            maxHp: 650,
+            hp: 3250, // x5 (650*5)
+            maxHp: 3250,
             lastShot: 0,
             alive: true
         });
@@ -125,9 +125,9 @@ export function updateSuperBoss({ canvas, nave, bullets, enemyBullets, enemies, 
         superBossState.cannons.forEach(c => {
             if (!c.alive) return;
             aliveCount++;
-            // disparo alta cadencia
+            // disparo doble cadencia (antes 260 -> 130)
             const now = Date.now();
-            if (now - c.lastShot > 260) {
+            if (now - c.lastShot > 130) {
                 const ang = Math.atan2(nave.y - c.y, nave.x - c.x);
                 // 1 bala por cañón alta cadencia
                 enemyBullets.push({ x: c.x, y: c.y, vx: Math.cos(ang) * 5.8, vy: Math.sin(ang) * 5.8, color: '#ff5555' });
@@ -138,12 +138,12 @@ export function updateSuperBoss({ canvas, nave, bullets, enemyBullets, enemies, 
         if (aliveCount === 0) {
             // Transición a fase 2
             superBossState.phase = 2;
-            // Crear compuerta
+            // Crear compuerta x5 HP
             superBossState.gate = {
                 x: superBossState.x,
                 y: superBossState.y + 26,
                 w: 120, h: 22,
-                hp: 1200, maxHp: 1200,
+                hp: 6000, maxHp: 6000, // 1200*5
                 open: true,
                 lastSpawn: Date.now()
             };
@@ -193,8 +193,8 @@ export function updateSuperBoss({ canvas, nave, bullets, enemyBullets, enemies, 
         const now = Date.now();
         if (superBossState.lasersActive) {
             superBossState.shield = false;
-            // disparo láser: 2 emisores laterales
-            if (now - superBossState.laserTimer > 140) {
+            // disparo láser triple cadencia (antes 140 -> 46)
+            if (now - superBossState.laserTimer > 46) {
                 superBossState.laserTimer = now;
                 const leftX = superBossState.x - superBossState.w * 0.42;
                 const rightX = superBossState.x + superBossState.w * 0.42;
