@@ -153,6 +153,11 @@
                         <input type="range" id="opt-kills" min="50" max="200" step="10" value="50" oninput="document.getElementById('kills-display').innerText=this.value" style="width:100%; accent-color:var(--primary);">
                         <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:#666; margin-top:3px;"><span>50 (Rapido)</span><span>125 (Normal)</span><span>200 (Epico)</span></div>
                     </div>
+                    <div class="option-item" style="grid-column: span 2;">
+                        <label>Probabilidad Portal Azul — <span id="portal-display">1</span>%</label>
+                        <input type="range" id="opt-portal" min="1" max="100" step="1" value="1" oninput="document.getElementById('portal-display').innerText=this.value" style="width:100%; accent-color:#6ec8ff;">
+                        <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:#666; margin-top:3px;"><span>1% (Raro)</span><span>50%</span><span>100% (Siempre)</span></div>
+                    </div>
                 </div>
                 <button onclick="window.applyOptions()">Aplicar Cambios</button>
             </div>
