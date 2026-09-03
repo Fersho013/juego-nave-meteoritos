@@ -302,6 +302,18 @@ function triggerBomb(isPlayer, origin){
     fxState.screenShake=40; particles.push({x:origin.x,y:origin.y,vx:0,vy:0,life:1,type:'bomb_ring',color:isPlayer?'#fff':'#ff0044'});
     if(isPlayer){
         enemyBullets.length=0; enemies.forEach(e=>createExplosion(e.x,e.y,'#fff',10)); enemies.length=0; bosses.forEach(b=>{ b.hp -= b.maxHp*0.1; updateBossHP(b); });
+        // Bombas dañan al Super Boss (atraviesan escudo)
+        if (superBossState.active && !superBossState.destroyed) {
+            const sb = superBossState;
+            // Cañones
+            sb.cannons.forEach(c=>{ if(c.alive){ c.hp -= Math.round(c.maxHp*0.22); if(c.hp<=0){c.hp=0; c.alive=false; createExplosion(c.x,c.y,'#00ff66',14); spawnDebris(c.x,c.y,'#ff5555',3);} }});
+            // Compuerta
+            if(sb.gate){ sb.gate.hp -= Math.round(sb.gate.maxHp*0.22); if(sb.gate.hp<0) sb.gate.hp=0; createExplosion(sb.gate.x, sb.gate.y, '#ff9900', 10); }
+            // Nodriza directo (bomba atraviesa)
+            sb.hp -= 1500; if(sb.hp<0) sb.hp=0;
+            createExplosion(sb.x, sb.y, '#00ff66', 16);
+            fxState.hitStopFrames = 6;
+        }
         // 1% portal azul solo si no hay boss activo ni super boss, en combate normal
         const canSpawnPortal = bosses.length===0 && !superBossState.active && !superBossState.arena && gameState==='PLAYING';
         // En custom, solo si el usuario habilitó super boss
@@ -393,6 +405,27 @@ function update(){
     if(input.bomb) triggerBomb(true,nave);
     if(weaponState.current==='laser' && input.shoot && fxState.frameCount%3===0){
         sfx.laser(); const ang=Math.atan2(input.aimY-nave.y,input.aimX-nave.x); const cos=Math.cos(ang),sin=Math.sin(ang);
+        // Laser daña a Super Boss incluso con escudo (atraviesa) y a todo lo que conlleva
+        if (superBossState.active && !superBossState.destroyed) {
+            const sb = superBossState;
+            // Cañones
+            sb.cannons.forEach((c, idx)=>{
+                if(!c.alive) return;
+                const dx=c.x-nave.x, dy=c.y-nave.y;
+                const proj=dx*cos+dy*sin; const perp=Math.abs(dx*sin - dy*cos);
+                if(proj>0 && perp<20){ c.hp -= 90; if(c.hp<=0){c.hp=0; c.alive=false; createExplosion(c.x,c.y,'#00ff66',12); spawnDebris(c.x,c.y,'#ff5555',2);} createExplosion(c.x,c.y,'#00ccff',2); }
+            });
+            // Compuerta
+            if(sb.gate){
+                const g=sb.gate; const dx=g.x-nave.x, dy=g.y-nave.y; const proj=dx*cos+dy*sin; const perp=Math.abs(dx*sin - dy*cos);
+                if(proj>0 && perp < 24 && Math.abs(g.x - (nave.x + cos*proj)) < g.w/2) { g.hp -= 90; if(g.hp<0) g.hp=0; createExplosion(g.x,g.y,'#ff9900',3); }
+            }
+            // Nodriza directo (atraviesa escudo)
+            {
+                const dx=sb.x-nave.x, dy=sb.y-nave.y; const proj=dx*cos+dy*sin; const perp=Math.abs(dx*sin - dy*cos);
+                if(proj>0 && perp < sb.h/2 + 12 && Math.abs(sb.x - (nave.x + cos*proj)) < sb.w/2) { sb.hp -= 90; if(sb.hp<0) sb.hp=0; createExplosion(sb.x + (Math.random()-0.5)*sb.w*0.6, sb.y, '#00ff66', 3); }
+            }
+        }
         enemies.forEach((e,ei)=>{ const dx=e.x-nave.x,dy=e.y-nave.y; const proj=dx*cos+dy*sin; const perpDist=Math.abs(dx*sin-dy*cos); if(proj>0 && perpDist<18){ if(e.shield){e.shield=false;} else { createExplosion(e.x,e.y); if(e.type==='elite'||e.type==='special') spawnDebris(e.x,e.y,'#00ccff'); enemies.splice(ei,1); if(e.type!=='life'){ hudState.comboCount++; hudState.comboMultiplier=hudState.comboCount>=10?3:hudState.comboCount>=5?2:1; if(hudState.comboResetTimer) clearTimeout(hudState.comboResetTimer); hudState.comboResetTimer=setTimeout(()=>{hudState.comboCount=0;hudState.comboMultiplier=1;updateComboDisplay();},2500); const pts=150*hudState.comboMultiplier; hudState.score+=pts; floatingTexts.push({x:e.x,y:e.y,text:hudState.comboMultiplier>1?`+${pts} x${hudState.comboMultiplier}!`:`+${pts}`,life:1.0,color:hudState.comboMultiplier>=3?'#ff3366':hudState.comboMultiplier===2?'#ffcc00':'#00ccff'}); updateComboDisplay(); if(gameMode==='progressive'){progression.waveKills++; updateWaveProgress({gameMode:{value:gameMode},progression,bosses});} if(e.type==='elite'&&Math.random()>0.4){ const letters=['S','L','R','D']; const wt=letters[Math.floor(Math.random()*4)]; weaponPowerUps.push({x:e.x,y:e.y,letter:wt,vy:1.5,life:600}); } } else { combatState.health=Math.min(100, combatState.health+combatState.damagePerHit); syncHud(); floatingTexts.push({x:e.x,y:e.y,text:`+${combatState.damagePerHit}% VIDA`,life:1.0,color:'#ff66cc'}); } } } });
         bosses.forEach((b,bLIdx)=>{ if(b.type==='doppel'&&b.parryActive) return; if(b.immune) return; const dx=b.x-nave.x,dy=b.y-nave.y; const proj=dx*cos+dy*sin,perp=Math.abs(dx*sin-dy*cos); const lRadius=(b.type==='doppel_y'||b.type==='doppel_o')?30:50; if(proj>0 && perp<lRadius){ b.hp-=100; updateBossHP(b); if(b.hp<=0 && (b.type==='doppel_y'||b.type==='doppel_o')){ const col=b.type==='doppel_y'?'#ffff00':'#ff6600'; createExplosion(b.x,b.y,col,50); spawnDebris(b.x,b.y,col,6); fxState.hitStopFrames=8; fxState.screenShake=20; hudState.score+=8000; floatingTexts.push({x:b.x,y:b.y-50,text:b.type==='doppel_y'?'★ DOPPEL AMARILLO DESTRUIDO ★':'★ DOPPEL NARANJA DESTRUIDO ★',life:2.0,color:col}); bosses.splice(bLIdx,1); renderBossUI(); dropRevivePickup(b.x,b.y); } } });
     }
