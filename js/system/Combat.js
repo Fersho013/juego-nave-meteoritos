@@ -6,6 +6,7 @@ import { bosses, updateBossHP } from '../entities/Boss.js';
 import { enemies } from '../entities/Enemy.js';
 import { enemyBullets, pickUps } from '../entities/Projectile.js';
 import { particles, debrisChunks, floatingTexts, fxState, createExplosion } from './Effects.js';
+import { registerComboHits } from '../ui/Hud.js';
 
 export const combatState = { health: 100, maxHealth: 100, damagePerHit: 20, bombs: 3, hasRevive: false };
 
@@ -14,14 +15,19 @@ export function dropRevivePickup(x, y) {
     else pickUps.push({ x, y, type: 'revive' });
 }
 
-export function triggerBomb(isPlayer, origin, { inputRef }) {
+export function triggerBomb(isPlayer, origin, { inputRef } = {}) {
     if (isPlayer) { if (combatState.bombs <= 0) return; combatState.bombs--; if (inputRef) inputRef.bomb = false; sfx.bomb(); }
     fxState.screenShake = 40;
     particles.push({ x: origin.x, y: origin.y, vx: 0, vy: 0, life: 1, type: 'bomb_ring', color: isPlayer ? '#fff' : '#ff0044' });
     if (isPlayer) {
         enemyBullets.length = 0;
-        enemies.forEach(e => createExplosion(e.x, e.y, '#fff', 10));
+        let bombKills = 0;
+        enemies.forEach(e => { createExplosion(e.x, e.y, '#fff', 10); if (e.type !== 'life') bombKills++; });
         enemies.length = 0;
+        if (bombKills > 0) {
+            const { pts } = registerComboHits(bombKills);
+            floatingTexts.push({ x: origin.x, y: origin.y - 60, text: `+${pts} BOMBA x${bombKills}`, life: 1.5, color: '#ffcc00' });
+        }
         bosses.forEach(b => { b.hp -= b.maxHp * 0.1; updateBossHP(b); });
     } else {
         // enemy bomb
