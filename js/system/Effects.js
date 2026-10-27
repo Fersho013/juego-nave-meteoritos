@@ -7,12 +7,19 @@ export const shipTrail = [];
 
 export const fxState = { screenShake: 0, hitStopFrames: 0, frameCount: 0 };
 
+const MAX_PARTICLES = 400;
+const MAX_DEBRIS = 200;
+
 export function createExplosion(x, y, color, count = 12) {
-    for (let i = 0; i < count; i++) particles.push({ x, y, vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8, life: 1.0, color: color || '#ff5500', type: 'spark' });
+    if (particles.length >= MAX_PARTICLES) return;
+    const n = Math.min(count, MAX_PARTICLES - particles.length);
+    for (let i = 0; i < n; i++) particles.push({ x, y, vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8, life: 1.0, color: color || '#ff5500', type: 'spark' });
 }
 
 export function spawnDebris(x, y, color, count = 3) {
-    for (let i = 0; i < count; i++) {
+    if (debrisChunks.length >= MAX_DEBRIS) return;
+    const n = Math.min(count, MAX_DEBRIS - debrisChunks.length);
+    for (let i = 0; i < n; i++) {
         const pts = [];
         const sides = 3 + Math.floor(Math.random() * 3);
         for (let j = 0; j < sides; j++) {
