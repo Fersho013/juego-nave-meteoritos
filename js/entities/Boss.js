@@ -28,6 +28,7 @@ export function createBoss({ canvas, type, id }) {
         b.lastBreath = false;
         b.lastBreathTimer = 0;
         b.lastBreathCount = 3;
+        b.lastBreathFrames = 0;
         b.lastBreathInterval = 0;
         b.immune = false;
     }
