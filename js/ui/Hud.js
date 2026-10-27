@@ -28,6 +28,45 @@ export function updateHUD({ combatState, weaponState, progression, gameMode }) {
     if (rEl) rEl.style.display = combatState.hasRevive ? 'inline' : 'none';
 }
 
+// Resetea el combo y cancela cualquier temporizador pendiente.
+export function resetCombo() {
+    if (hudState.comboResetTimer) {
+        clearTimeout(hudState.comboResetTimer);
+        hudState.comboResetTimer = null;
+    }
+    hudState.comboCount = 0;
+    hudState.comboMultiplier = 1;
+    updateComboDisplay();
+}
+
+function scheduleComboReset() {
+    if (hudState.comboResetTimer) clearTimeout(hudState.comboResetTimer);
+    hudState.comboResetTimer = setTimeout(() => {
+        hudState.comboResetTimer = null;
+        resetCombo();
+    }, 2500);
+}
+
+// Registra N bajas de una sola vez (útil para bombas) y devuelve el puntaje total.
+export function registerComboHits(count = 1, basePoints = 150) {
+    if (count <= 0) return { pts: 0, multiplier: hudState.comboMultiplier };
+    let total = 0;
+    for (let i = 0; i < count; i++) {
+        hudState.comboCount++;
+        hudState.comboMultiplier = hudState.comboCount >= 10 ? 3 : hudState.comboCount >= 5 ? 2 : 1;
+        total += basePoints * hudState.comboMultiplier;
+    }
+    hudState.score += total;
+    scheduleComboReset();
+    updateComboDisplay();
+    return { pts: total, multiplier: hudState.comboMultiplier };
+}
+
+// Registra una baja individual.
+export function registerComboHit(basePoints = 150) {
+    return registerComboHits(1, basePoints);
+}
+
 export function updateComboDisplay() {
     const el = document.getElementById('combo-display');
     if (!el) return;
