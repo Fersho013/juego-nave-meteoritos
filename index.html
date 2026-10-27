@@ -198,9 +198,20 @@
             </div>
         </div>
 
-        <canvas id="gameCanvas"></canvas>
+        <div id="station-panel" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(10,10,18,0.95); border:2px solid #00ffcc; border-radius:12px; padding:20px; z-index:200; min-width:280px; text-align:center; font-family:Orbitron,sans-serif;">
+  <h2 id="station-title" style="color:#00ffcc; margin:0 0 12px;">ESTACIÓN</h2>
+  <div id="station-info" style="margin-bottom:12px; color:#aaa; font-size:0.85rem;"></div>
+  <div class="btn-group">
+    <button onclick="window.stationHeal()">Curar (50¢)</button>
+    <button onclick="window.stationBombs()">+1 Bomba (30¢)</button>
+    <button onclick="window.stationDamage()">Daño +5% (80¢)</button>
+    <button onclick="window.stationColor()">Cambiar Color</button>
+    <button onclick="window.closeStation()" style="border-color:#ff3366;color:#ff3366;">Cerrar</button>
+  </div>
+</div>
     </div>
 
+<canvas id="gameCanvas"></canvas>
     <script type="module" src="./js/Main.js"></script>
 </body>
 </html>

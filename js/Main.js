@@ -8,8 +8,9 @@ import { enemies, spawnEnemy, spawnFormation } from './entities/Enemy.js';
 import { bosses, createBoss, renderBossUI, updateBossHP } from './entities/Boss.js';
 import { bullets, enemyBullets, pickUps, weaponPowerUps, weaponState, homingState, droneState } from './entities/Projectile.js';
 import { particles, debrisChunks, floatingTexts, shipTrail, fxState, createExplosion, spawnDebris } from './system/Effects.js';
-import { combatState, dropRevivePickup, playerHit as combatPlayerHit, triggerBomb as combatTriggerBomb, triggerRevive } from './system/Combat.js';
+import { combatState, dropRevivePickup, playerHit as combatPlayerHit, triggerBomb as combatTriggerBomb, triggerRevive, addCredits, spendCredits } from './system/Combat.js';
 import { progression, checkProgression } from './system/Progression.js';
+import { hubState, initHub, updateHub, drawHub, damageHubDebris } from './system/Hub.js';
 import { hudState, updateHUD as hudUpdate, updateWaveProgress, resetCombo, registerComboHit, registerComboHits } from './ui/Hud.js';
 import { showScreen, updateVolumeVisibility, initPreview } from './ui/Menu.js';
 import { stars, nebulas, planets, superAsteroids, initParallax, drawParallax, drawSuperArena } from './world/Parallax.js';
@@ -23,7 +24,7 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
 // Exponer para ui/Menu que consulta estado global
-let gameState = 'MENU';
+let gameState = 'HUB';
 let gameMode = 'progressive';
 let customSelection = [];
 window.__getGameState = () => gameState;
@@ -118,17 +119,40 @@ function cleanupBossTimers(b) {
 function cleanupAllBossTimers() { bosses.forEach(cleanupBossTimers); }
 
 function exitToMenu() {
-    gameState = 'MENU';
+    gameState = 'HUB';
     setHudVisible(false);
     const mu = document.getElementById('mobile-ui'); if (mu) mu.style.display = 'none';
     cleanupAllBossTimers();
     resetCombo();
     bosses.length = 0; renderBossUI();
     clearPortals(); clearSuperBoss(); clearSuperModifier();
-    // restaurar fondo normal al salir
+    bullets.length = 0; enemyBullets.length = 0; enemies.length = 0; particles.length = 0; floatingTexts.length = 0;
+    nave.x = canvas.width / 2; nave.y = canvas.height / 2; nave.vx = 0; nave.vy = 0;
     showScreen('menu-main');
+    initHub(canvas);
 }
-function promptContinue() {
+function openStation(st) {
+    const panel = document.getElementById('station-panel');
+    const title = document.getElementById('station-title');
+    const info = document.getElementById('station-info');
+    if (!panel) return;
+    title.innerText = st.label;
+    title.style.color = st.color;
+    panel.style.borderColor = st.color;
+    info.innerText = `Créditos: ${combatState.credits}  |  Vida: ${combatState.health}%`;
+    panel.style.display = 'block';
+}
+function closeStation() { const panel = document.getElementById('station-panel'); if (panel) panel.style.display = 'none'; }
+function stationHeal() { if (spendCredits(50)) { combatState.health = 100; syncHud(); openStation(hubState.nearStation); } }
+function stationBombs() { if (spendCredits(30)) { combatState.bombs++; syncHud(); openStation(hubState.nearStation); } }
+function stationDamage() { if (spendCredits(80)) { combatState.damagePerHit = Math.round(combatState.damagePerHit * 1.05); syncHud(); openStation(hubState.nearStation); } }
+function stationColor() { const colors = ['#ffffff','#1e90ff','#00ffcc','#ff3366','#ffcc00','#9933ff']; const idx = colors.indexOf(nave.color); nave.color = colors[(idx + 1) % colors.length]; changeNaveColor(nave.color); openStation(hubState.nearStation); }
+window.closeStation = closeStation;
+window.stationHeal = stationHeal;
+window.stationBombs = stationBombs;
+window.stationDamage = stationDamage;
+window.stationColor = stationColor;
+window.openStation = openStation;
     gameState = 'CONTINUE';
     setHudVisible(false);
     const mu = document.getElementById('mobile-ui'); if (mu) mu.style.display = 'none';
@@ -151,7 +175,7 @@ function winGame() {
 initLayoutEditor();
 
 // --- Input listeners ---
-window.addEventListener('keydown', e => { if (e.code === 'Escape' && isEditorActive()) { exitEditMode(true); showScreen('menu-pause'); updateVolumeVisibility(); return; } keys[e.code] = true; if (e.code === 'KeyP') { togglePause(); keys[e.code] = false; } });
+window.addEventListener('keydown', e => { if (e.code === 'Escape' && isEditorActive()) { exitEditMode(true); showScreen('menu-pause'); updateVolumeVisibility(); return; } keys[e.code] = true; if (e.code === 'KeyP') { togglePause(); keys[e.code] = false; } if (e.code === 'KeyE' && gameState === 'HUB' && hubState.nearStation) { openStation(hubState.nearStation); keys[e.code] = false; } });
 window.addEventListener('keyup', e => keys[e.code] = false);
 canvas.addEventListener('mousemove', e => { if (isEditorActive()) return; const rect = canvas.getBoundingClientRect(); input.aimX = e.clientX - rect.left; input.aimY = e.clientY - rect.top; setUsingGamepad(false); });
 canvas.addEventListener('mousedown', e => { if (isEditorActive()) return; initAudio(); if (e.button === 0) input.shoot = true; if (e.button === 2) input.triple = true; });
@@ -380,6 +404,30 @@ function findHomingTarget(fromX, fromY) {
 // --- UPDATE ---
 function update(){
     pollInput();
+    // --- HUB: navegación libre, estaciones, cinturón de combate ---
+    if (gameState === 'HUB') {
+        // movimiento de nave (reutiliza lógica básica)
+        let mx = 0, my = 0;
+        if (keys['KeyW'] || keys['ArrowUp']) my -= 1;
+        if (keys['KeyS'] || keys['ArrowDown']) my += 1;
+        if (keys['KeyA'] || keys['ArrowLeft']) mx -= 1;
+        if (keys['KeyD'] || keys['ArrowRight']) mx += 1;
+        if (platform.touchMoveX || platform.touchMoveY) { mx += platform.touchMoveX; my += platform.touchMoveY; }
+        const sp = 6;
+        nave.vx += mx * nave.accel; nave.vy += my * nave.accel;
+        nave.vx *= nave.fric; nave.vy *= nave.fric;
+        nave.x = Math.max(20, Math.min(canvas.width - 20, nave.x + nave.vx));
+        nave.y = Math.max(20, Math.min(canvas.height - 20, nave.y + nave.vy));
+        // disparo al vacío / escombros
+        if (input.shoot) { if (!nave._shootCd || nave._shootCd <= 0) { const baseAngle = Math.atan2(input.aimY - nave.y, input.aimX - nave.x); bullets.push({ x: nave.x, y: nave.y, vx: Math.cos(baseAngle) * 15, vy: Math.sin(baseAngle) * 15, color: nave.color, dmg: 20 }); nave._shootCd = 8; } else nave._shootCd--; }
+        else nave._shootCd = 0;
+        // bullets update
+        for (let bi = bullets.length - 1; bi >= 0; bi--) { const b = bullets[bi]; b.x += b.vx; b.y += b.vy; if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) bullets.splice(bi, 1); }
+        damageHubDebris(bullets);
+        const res = updateHub(canvas);
+        if (res === 'WARP') { startMission('progressive'); }
+        return;
+    }
     if(gameState!=='PLAYING') return;
     if(fxState.hitStopFrames>0){ fxState.hitStopFrames--; return; }
     fxState.frameCount++; 
@@ -562,7 +610,7 @@ function update(){
     bullets.forEach((bul,bi)=>{
         if(bul.isHoming){ bul.life=(bul.life!==undefined?bul.life:240)-1; const target=findHomingTarget(bul.x,bul.y); if(target){const hAng=Math.atan2(target.y-bul.y,target.x-bul.x); bul.vx+=Math.cos(hAng)*0.7; bul.vy+=Math.sin(hAng)*0.7;} const hs=Math.hypot(bul.vx,bul.vy); if(hs>9){bul.vx=(bul.vx/hs)*9; bul.vy=(bul.vy/hs)*9;}}
         bul.x+=bul.vx; bul.y+=bul.vy; let hit=bul.isHoming && bul.life<=0;
-        enemies.forEach((e,ei)=>{ if(!hit && Math.hypot(bul.x-e.x,bul.y-e.y)<25){ hit=true; if(e.shield){e.shield=false; e.vy*=1.5;} else { e.hp-=bul.dmg; if(e.hp<=0){ createExplosion(e.x,e.y); if(e.type==='elite') fxState.hitStopFrames=5; if(e.type==='elite'||e.type==='special') spawnDebris(e.x,e.y,e.type==='elite'?'#00ffcc':'#ffcc00'); enemies.splice(ei,1); if(e.type!=='life' && gameMode==='progressive'){progression.waveKills++; updateWaveProgress({gameMode:{value:gameMode},progression,bosses});} const combo=registerComboHit(); const pts=combo.pts; floatingTexts.push({x:e.x,y:e.y,text:combo.multiplier>1?`+${pts} x${combo.multiplier}!`:`+${pts}`,life:1.0,color:combo.multiplier>=3?'#ff3366':combo.multiplier===2?'#ffcc00':'#fff'}); if(e.type==='life'){ combatState.health=Math.min(100, combatState.health+combatState.damagePerHit); syncHud(); floatingTexts.push({x:e.x,y:e.y-20,text:`+${combatState.damagePerHit}% VIDA`,life:1.0,color:'#ff66cc'}); } if(e.type==='elite'&&Math.random()>0.4){ const letters=['S','L','R','D']; const wt=letters[Math.floor(Math.random()*4)]; weaponPowerUps.push({x:e.x,y:e.y,letter:wt,vy:1.5,life:600}); } if(Math.random()>0.95 && e.type!=='life') pickUps.push({x:e.x,y:e.y,type:'bomb'}); } } } });
+        enemies.forEach((e,ei)=>{ if(!hit && Math.hypot(bul.x-e.x,bul.y-e.y)<25){ hit=true; if(e.shield){e.shield=false; e.vy*=1.5;} else { e.hp-=bul.dmg; if(e.hp<=0){ createExplosion(e.x,e.y); if(e.type==='elite') fxState.hitStopFrames=5; if(e.type==='elite'||e.type==='special') spawnDebris(e.x,e.y,e.type==='elite'?'#00ffcc':'#ffcc00'); enemies.splice(ei,1); if(e.type!=='life' && gameMode==='progressive'){progression.waveKills++; updateWaveProgress({gameMode:{value:gameMode},progression,bosses});} const combo=registerComboHit(); const pts=combo.pts; floatingTexts.push({x:e.x,y:e.y,text:combo.multiplier>1?`+${pts} x${combo.multiplier}!`:`+${pts}`,life:1.0,color:combo.multiplier>=3?'#ff3366':combo.multiplier===2?'#ffcc00':'#fff'}); if(e.type!=='life') addCredits(5); if(e.type==='life'){ combatState.health=Math.min(100, combatState.health+combatState.damagePerHit); syncHud(); floatingTexts.push({x:e.x,y:e.y-20,text:`+${combatState.damagePerHit}% VIDA`,life:1.0,color:'#ff66cc'}); } if(e.type==='elite'&&Math.random()>0.4){ const letters=['S','L','R','D']; const wt=letters[Math.floor(Math.random()*4)]; weaponPowerUps.push({x:e.x,y:e.y,letter:wt,vy:1.5,life:600}); } if(Math.random()>0.95 && e.type!=='life') pickUps.push({x:e.x,y:e.y,type:'bomb'}); } } } });
         // --- Super Boss colisiones ---
         if(!hit && superBossState.active && !superBossState.destroyed) {
             if(superBossState.phase===1) {
@@ -632,6 +680,22 @@ function draw(currentTime){
     }
     // Portal azul siempre visible si existe
     drawPortals(ctx);
+    if (gameState === 'HUB') {
+        drawHub(ctx, canvas);
+        // bullets
+        bullets.forEach(b => { ctx.fillStyle = b.color; ctx.fillRect(b.x-2, b.y-2, 4, 4); });
+        // nave
+        const angle = Math.atan2(input.aimY - nave.y, input.aimX - nave.x);
+        ctx.save(); ctx.translate(nave.x, nave.y); ctx.rotate(angle); ctx.shadowBlur = 15; ctx.shadowColor = nave.color; ctx.fillStyle = nave.color; ctx.beginPath(); ctx.moveTo(20,0); ctx.lineTo(-15,-15); ctx.lineTo(-15,15); ctx.fill(); ctx.restore();
+        // créditos
+        ctx.fillStyle = '#ffcc00'; ctx.font = 'bold 14px Orbitron'; ctx.textAlign = 'left';
+        ctx.fillText(`¢ ${combatState.credits}`, 12, canvas.height - 12);
+        // estación cercana hint
+        if (hubState.nearStation) {
+            ctx.fillStyle = hubState.nearStation.color; ctx.font = 'bold 12px Orbitron'; ctx.textAlign = 'center';
+            ctx.fillText(`[E] ${hubState.nearStation.label}`, hubState.nearStation.x, hubState.nearStation.y - hubState.nearStation.r - 14);
+        }
+    }
     if(gameState==='PLAYING'||gameState==='PAUSED'||gameState==='CONTINUE'||gameState==='WIN'){
         pickUps.forEach(p=>{
             if(p.type==='revive'){ const pulse=0.75+Math.sin(fxState.frameCount*0.15)*0.25; ctx.save(); ctx.globalAlpha=pulse; ctx.shadowBlur=16; ctx.shadowColor='#ffee88'; ctx.fillStyle='#ffee88'; ctx.beginPath(); ctx.arc(p.x,p.y,12,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1; ctx.shadowBlur=0; ctx.fillStyle='#000'; ctx.font='bold 13px Orbitron'; ctx.fillText('✨',p.x-7,p.y+5); ctx.restore(); }
@@ -692,4 +756,5 @@ function draw(currentTime){
 
 initParallax(canvas);
 applyOptions(); updateVolumeVisibility();
+initHub(canvas);
 requestAnimationFrame(draw);
