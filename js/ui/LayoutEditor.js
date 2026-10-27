@@ -63,11 +63,13 @@ function captureDefaults() {
     });
     const sector = getEl('hud-block-sector');
     if (sector) sector.dataset.baseTransform = 'translateX(-50%)';
+    const bossContainer = getEl('boss-container');
+    if (bossContainer) bossContainer.dataset.baseTransform = 'translateX(-50%)';
     // Fallbacks estáticos si algún bloque nunca fue visible
     if (!defaults['hud-block-score']) defaults['hud-block-score'] = { leftPct: 2, topPct: 2, scale:1, widthPx: 170, heightPx: 60 };
     if (!defaults['hud-block-sector']) defaults['hud-block-sector'] = { leftPct: 50, topPct: 2, scale:1, widthPx: 200, heightPx: 40 };
     if (!defaults['hud-block-vida']) defaults['hud-block-vida'] = { leftPct: 75, topPct: 2, scale:1, widthPx: 120, heightPx: 60 };
-    if (!defaults['boss-container']) defaults['boss-container'] = { leftPct: 15, topPct: 10, scale:1, widthPx: 400, heightPx: 20 };
+    if (!defaults['boss-container']) defaults['boss-container'] = { leftPct: 50, topPct: 10, scale:1, widthPx: 400, heightPx: 20 };
 }
 
 function loadLayout() {
@@ -99,7 +101,7 @@ function applyElement(id) {
         el.style.right = '';
         el.style.bottom = '';
         // Restaurar transform base
-        if (id === 'hud-block-sector') el.style.transform = 'translateX(-50%)';
+        if (id === 'hud-block-sector' || id === 'boss-container') el.style.transform = 'translateX(-50%)';
         else el.style.transform = el.dataset.baseTransform || '';
         if (id.startsWith('joy-base')) {
             const baseW = defaults[id]?.widthPx || 120;
@@ -114,7 +116,8 @@ function applyElement(id) {
     el.style.bottom = 'auto';
     el.style.left = data.leftPct + '%';
     el.style.top = data.topPct + '%';
-    const baseTransform = el.dataset.baseTransform || (id === 'hud-block-sector' ? 'translateX(-50%)' : '');
+    const isCenterAnchored = id === 'hud-block-sector' || id === 'boss-container';
+    const baseTransform = el.dataset.baseTransform || (isCenterAnchored ? 'translateX(-50%)' : '');
     // Para bloques HUD, el left/top % mueve el bloque; escala se aplica con transform
     if (data.scale && data.scale !== 1) {
         if (id.startsWith('joy-base')) {
@@ -131,7 +134,7 @@ function applyElement(id) {
             const base = baseTransform ? baseTransform + ' ' : '';
             el.style.transform = base + `scale(${data.scale})`;
             el.style.transformOrigin = 'top left';
-            if (id === 'hud-block-sector' && baseTransform.includes('translateX')) {
+            if (isCenterAnchored && baseTransform.includes('translateX')) {
                 el.style.transform = `translateX(-50%) scale(${data.scale})`;
                 el.style.transformOrigin = 'top center';
             }
@@ -144,8 +147,8 @@ function applyElement(id) {
         } else if (id.startsWith('btn-') && el.classList.contains('t-btn')) {
             el.style.width = ''; el.style.height = ''; el.style.fontSize = '';
         } else {
-            el.style.transform = baseTransform || (id === 'hud-block-sector' ? 'translateX(-50%)' : '');
-            if (id === 'hud-block-sector' && !el.style.transform) el.style.transform = 'translateX(-50%)';
+            el.style.transform = baseTransform || (isCenterAnchored ? 'translateX(-50%)' : '');
+            if (isCenterAnchored && !el.style.transform) el.style.transform = 'translateX(-50%)';
         }
     }
 }
@@ -189,12 +192,10 @@ function ensureLayoutEntry(id) {
             // Para hud-block-sector el CSS es left:50% + translateX(-50%), no usar rect.left
             let left = liveLeft;
             let top = liveTop;
-            if (id === 'hud-block-sector' && hasValidRect) {
+            if ((id === 'hud-block-sector' || id === 'boss-container') && hasValidRect) {
                 // La posición visual centrada debe mapearse a left 50% para no romper el anclaje
-                // Si no hay layout previo, forzar 50% y mantener top actual
-                left = 50 - (rect.width / cRect.width * 50); // aprox centro
-                // Simplificar: usar 43% que corresponde a left 50% - width/2 (fallback estático)
-                left = 50; // el transform se encarga del centrado
+                // con translateX(-50%) (el transform se encarga del centrado)
+                left = 50;
             }
             if (left === null) left = d ? d.leftPct : 5;
             if (top === null) top = d ? d.topPct : 5;
@@ -204,7 +205,7 @@ function ensureLayoutEntry(id) {
                 if (id === 'hud-block-score') { left = 2; top = 2; }
                 else if (id === 'hud-block-sector') { left = 50; top = 2; }
                 else if (id === 'hud-block-vida') { left = 75; top = 2; }
-                else if (id === 'boss-container') { left = 15; top = 10; }
+                else if (id === 'boss-container') { left = 50; top = 10; }
                 else if (id.includes('joy-base-l')) { left = 3; top = 75; }
                 else if (id.includes('joy-base-r')) { left = 78; top = 75; }
                 else { left = 5; top = 5; }
@@ -381,7 +382,7 @@ function attachEditableListeners() {
         if (!el) return;
         if (el.dataset.editorBound === '1') return;
         el.dataset.editorBound = '1';
-        el.dataset.baseTransform = el.style.transform || (id==='hud-block-sector' ? 'translateX(-50%)' : '');
+        el.dataset.baseTransform = el.style.transform || ((id==='hud-block-sector' || id==='boss-container') ? 'translateX(-50%)' : '');
         el.dataset.editId = id;
         el.addEventListener('pointerdown', onEditablePointerDown);
         el.addEventListener('pointermove', onPointerMove);
