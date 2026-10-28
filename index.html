@@ -201,58 +201,110 @@
         <canvas id="gameCanvas"></canvas>
     </div>
 
-    <!-- Diagnóstico de arranque: avisa si los módulos no se cargan (p. ej. al abrir con file://) -->
+    <!-- Diagnóstico de arranque: solo avisa si el juego de verdad no cargó,
+         y se oculta solo en cuanto el juego está listo (nunca tapa una partida). -->
     <script>
     (function () {
+        var fileMode = location.protocol === 'file:';
+
+        function isReady() {
+            return window.__gameBooted === true || typeof window.startMission === 'function';
+        }
+
+        var watchTimer = null;
+        function stopWatch() {
+            if (watchTimer) { clearInterval(watchTimer); watchTimer = null; }
+        }
+        function startWatch() {
+            if (watchTimer) return;
+            watchTimer = setInterval(function () {
+                if (isReady()) hideBootError();
+            }, 300);
+        }
+
+        function hideBootError() {
+            stopWatch();
+            var el = document.getElementById('boot-error');
+            if (el) el.style.display = 'none';
+        }
+
         function showBootError(msg) {
-            if (window.__gameBooted) return;
+            if (isReady()) { hideBootError(); return; }
             var el = document.getElementById('boot-error');
             if (!el) {
                 el = document.createElement('div');
                 el.id = 'boot-error';
                 el.setAttribute('role', 'alert');
-                el.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(5,8,16,.94);color:#e8f2ff;font-family:system-ui,Segoe UI,Arial,sans-serif;';
+                el.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;overflow:auto;background:rgba(5,8,16,.88);color:#e8f2ff;font-family:system-ui,Segoe UI,Arial,sans-serif;';
                 document.body.appendChild(el);
             }
             el.innerHTML = '';
             var box = document.createElement('div');
-            box.style.cssText = 'max-width:680px;border:1px solid #ff5555;border-radius:12px;padding:22px 26px;background:#120b14;box-shadow:0 0 40px rgba(255,60,60,.25);line-height:1.5;';
+            box.style.cssText = 'max-width:640px;width:100%;border:1px solid #ff5555;border-radius:12px;padding:22px 24px;background:#120b14;box-shadow:0 0 40px rgba(255,60,60,.25);line-height:1.5;';
+
             var h = document.createElement('h2');
-            h.textContent = 'No se pudo iniciar el juego';
-            h.style.cssText = 'margin:0 0 10px;color:#ff6666;font-size:1.15rem;';
+            h.textContent = 'El juego no ha arrancado';
+            h.style.cssText = 'margin:0 0 10px;color:#ff6666;font-size:1.1rem;';
+
             var p = document.createElement('p');
             p.textContent = msg;
-            p.style.cssText = 'margin:0 0 14px;white-space:pre-wrap;font-size:.92rem;';
-            var hint = document.createElement('p');
-            hint.innerHTML = 'Abre el juego con un servidor local:<br><code style="background:#000;padding:2px 6px;border-radius:4px;">python servidor.py 8765</code><br>y visita <a href="http://127.0.0.1:8765/index.html" style="color:#5ec8ff;">http://127.0.0.1:8765/index.html</a><br><br>En Windows puedes hacer doble clic en <b>INICIAR-JUEGO.bat</b>.';
-            hint.style.cssText = 'margin:0;font-size:.88rem;color:#b9c7d8;';
-            box.appendChild(h); box.appendChild(p); box.appendChild(hint);
+            p.style.cssText = 'margin:0 0 14px;white-space:pre-wrap;font-size:.92rem;word-break:break-word;';
+
+            var hint = document.createElement('div');
+            hint.style.cssText = 'margin:0 0 16px;font-size:.86rem;color:#b9c7d8;';
+            hint.innerHTML = fileMode
+                ? 'Estás abriendo el archivo directamente desde el disco (file://).<br>Usa un servidor local:<br><code style="background:#000;padding:2px 6px;border-radius:4px;">python servidor.py 8765</code><br>y entra en <b>http://127.0.0.1:8765/index.html</b><br><br>En Windows: doble clic en <b>INICIAR-JUEGO.bat</b>.'
+                : 'Prueba a recargar la página (Ctrl+F5 o mantén pulsado el botón de recargar).<br>Si sigue igual, abre la consola del navegador (F12) y mira la pestaña <b>Console</b>.';
+
+            var actions = document.createElement('div');
+            actions.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;';
+            var retry = document.createElement('button');
+            retry.textContent = 'Reintentar';
+            retry.style.cssText = 'cursor:pointer;padding:8px 16px;border-radius:8px;border:1px solid #5ec8ff;background:transparent;color:#5ec8ff;font-size:.9rem;';
+            retry.onclick = function () { location.reload(); };
+            var close = document.createElement('button');
+            close.textContent = 'Cerrar este aviso';
+            close.style.cssText = 'cursor:pointer;padding:8px 16px;border-radius:8px;border:1px solid #6b7785;background:transparent;color:#c7d3e0;font-size:.9rem;';
+            close.onclick = hideBootError;
+            actions.appendChild(retry); actions.appendChild(close);
+
+            box.appendChild(h); box.appendChild(p); box.appendChild(hint); box.appendChild(actions);
+            el.innerHTML = '';
             el.appendChild(box);
             el.style.display = 'flex';
+            // Mientras el aviso esté visible, vigilar si el juego termina de cargar.
+            startWatch();
         }
+
         window.__showBootError = showBootError;
-        var fileMode = location.protocol === 'file:';
+        window.__hideBootError = hideBootError;
+
         window.addEventListener('error', function (e) {
-            if (window.__gameBooted || fileMode) return;
+            if (fileMode || isReady()) return;
             var isScriptError = e.target && e.target.tagName === 'SCRIPT';
             if (!isScriptError && !e.message) return;
             var detail = e.message || 'No se pudo cargar un script del juego.';
             if (e.filename) detail += '\n' + e.filename + (e.lineno ? ':' + e.lineno : '');
             showBootError(detail);
         }, true);
+
         window.addEventListener('unhandledrejection', function (e) {
-            if (window.__gameBooted || fileMode) return;
+            if (fileMode || isReady()) return;
             showBootError('Error de inicio: ' + (e.reason && e.reason.message ? e.reason.message : String(e.reason)));
         });
+
         if (fileMode) {
-            showBootError('Estás abriendo index.html directamente desde el disco (file://). Los navegadores bloquean los módulos JavaScript del juego en ese modo, por eso solo se ve la página sin el juego.');
+            showBootError('Los navegadores bloquean los módulos JavaScript cuando la página se abre desde el disco.');
         } else {
+            // Margen amplio: en móvil o con red lenta el juego puede tardar.
             setTimeout(function () {
-                if (!window.__gameBooted) showBootError('El juego no terminó de arrancar. Abre la consola del navegador con F12 para ver el error.');
-            }, 4000);
+                if (!isReady()) {
+                    showBootError('El juego está tardando más de lo normal en cargar. Puede ser la caché del navegador.');
+                }
+            }, 12000);
         }
     })();
     </script>
-    <script type="module" src="./js/Main.js"></script>
+    <script type="module" src="./js/Main.js?v=20261028b"></script>
 </body>
 </html>

@@ -763,5 +763,4 @@ requestAnimationFrame(draw);
 
 // El juego arrancó correctamente: el diagnóstico de index.html ya no debe avisar.
 window.__gameBooted = true;
-const bootOverlay = document.getElementById('boot-error');
-if (bootOverlay) bootOverlay.style.display = 'none';
+if (window.__hideBootError) window.__hideBootError();
