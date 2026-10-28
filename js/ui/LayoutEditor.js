@@ -38,6 +38,9 @@ let isEditing = false;
 let selectedId = null;
 let dragState = null;
 let hasAppliedInitial = false;
+let onExitHandler = null; // Main registra aquí cómo restaurar la UI al cerrar el editor
+
+export function setEditorExitHandler(fn) { onExitHandler = fn; }
 
 function getContainer() { return document.getElementById('game-container'); }
 function getEl(id) { return document.getElementById(id); }
@@ -455,6 +458,7 @@ export function enterEditMode() {
 }
 
 export function exitEditMode(save = true) {
+    if (!isEditing) return;
     if (save) saveLayout();
     isEditing = false;
     document.body.classList.remove('editing-layout');
@@ -468,6 +472,9 @@ export function exitEditMode(save = true) {
         if (el && id.startsWith('hud-block')) el.style.opacity = '';
     });
     dragState = null;
+    // El editor se abre desde la pausa: al cerrarlo hay que volver a una
+    // pantalla válida o el juego queda en PAUSED sin UI (soft-lock).
+    if (onExitHandler) onExitHandler();
 }
 
 export function resetLayout() { layout = {}; saveLayout(); applyLayout(); }
