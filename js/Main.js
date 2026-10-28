@@ -43,7 +43,13 @@ import { drawGlow } from './system/Sprites.js';
 import { combatState, dropRevivePickup, playerHit as combatPlayerHit, triggerBomb as combatTriggerBomb, triggerRevive } from './system/Combat.js';
 import { progression, checkProgression, cancelWaveTransition } from './system/Progression.js';
 import { hudState, updateHUD as hudUpdate, updateWaveProgress, resetCombo, registerComboHit, registerComboHits } from './ui/Hud.js';
-import { showScreen, updateVolumeVisibility, initPreview } from './ui/Menu.js';
+// Namespace + fallback: si GitHub Pages sirve un Menu.js antiguo (sin
+// refreshPreview) el juego sigue arrancando igual.
+import * as MenuNS from './ui/Menu.js';
+const showScreen = MenuNS.showScreen;
+const updateVolumeVisibility = MenuNS.updateVolumeVisibility;
+const initPreview = MenuNS.initPreview;
+const refreshPreview = MenuNS.refreshPreview || (() => {});
 import { stars, nebulas, planets, superAsteroids, initParallax, drawParallax, drawSuperArena } from './world/Parallax.js';
 import { DASH } from './Data/Constants.js';
 import { initLayoutEditor, enterEditMode, exitEditMode, isEditorActive, setEditorExitHandler } from './ui/LayoutEditor.js';
@@ -111,7 +117,7 @@ let padBombHeld = false, padParryHeld = false, padDashHeld = false;
 
 // Compat wrappers para que Menu pueda consultar visibilidad
 window.toggleVolume = toggleVolume;
-window.changeNaveColor = (c) => changeColor(c);
+window.changeNaveColor = (c) => { changeColor(c); refreshPreview(); };
 window.showScreen = showScreen;
 window.toggleTouchUI = toggleTouchUI;
 window.togglePause = togglePause;

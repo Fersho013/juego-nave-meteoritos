@@ -2,17 +2,28 @@
 
 export const hudState = { score: 0, comboCount: 0, comboMultiplier: 1, comboResetTimer: null };
 
+// Referencias cacheadas: updateHUD se llama ~12 veces/s y antes hacía 6
+// getElementById por llamada. Si el nodo se recrea, isConnected lo detecta.
+const hudEls = {};
+function el(id) {
+    const cached = hudEls[id];
+    if (cached && cached.isConnected) return cached;
+    const node = document.getElementById(id);
+    hudEls[id] = node;
+    return node;
+}
+
 export function updateHUD({ combatState, weaponState, progression, gameMode }) {
     // Solo escribimos en el DOM cuando el valor cambia: innerText/textContent fuerza
     // recálculo de layout y esto se llamaba 60 veces por segundo.
-    const scoreEl = document.getElementById('val-score');
+    const scoreEl = el('val-score');
     if (scoreEl) { const v = String(hudState.score); if (scoreEl.textContent !== v) scoreEl.textContent = v; }
-    const bombEl = document.getElementById('val-bombs');
+    const bombEl = el('val-bombs');
     if (bombEl) { const v = String(combatState.bombs); if (bombEl.textContent !== v) bombEl.textContent = v; }
 
     const hpPct = Math.max(0, Math.min(100, combatState.health));
-    const healthFill = document.getElementById('health-bar-fill');
-    const healthPctEl = document.getElementById('val-health-pct');
+    const healthFill = el('health-bar-fill');
+    const healthPctEl = el('val-health-pct');
     if (healthFill) {
         const w = hpPct + '%';
         if (healthFill.style.width !== w) {
@@ -22,16 +33,16 @@ export function updateHUD({ combatState, weaponState, progression, gameMode }) {
     }
     if (healthPctEl) { const v = Math.round(hpPct) + '%'; if (healthPctEl.textContent !== v) healthPctEl.textContent = v; }
     const sectorLabel = gameMode.value === 'progressive' ? ` — SECTOR ${progression.currentWave}` : '';
-    const levelTag = document.getElementById('level-tag');
+    const levelTag = el('level-tag');
     if (levelTag) { const v = `MODO: ${gameMode.value.toUpperCase()}${sectorLabel}`; if (levelTag.textContent !== v) levelTag.textContent = v; }
-    const wEl = document.getElementById('val-weapon');
+    const wEl = el('val-weapon');
     if (wEl) {
         const v = weaponState.current === 'spread' ? 'SPREAD ★' : weaponState.current === 'laser' ? 'LASER ★' : 'NORMAL';
         if (wEl.textContent !== v) wEl.textContent = v;
         const c = weaponState.current !== 'normal' ? '#ff9900' : 'var(--primary)';
         if (wEl.style.color !== c) wEl.style.color = c;
     }
-    const rEl = document.getElementById('val-revive');
+    const rEl = el('val-revive');
     if (rEl) { const v = combatState.hasRevive ? 'inline' : 'none'; if (rEl.style.display !== v) rEl.style.display = v; }
 }
 
