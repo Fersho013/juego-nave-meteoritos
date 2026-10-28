@@ -15,6 +15,19 @@ export const progression = {
     waveTransitionMsg: ''
 };
 
+// ID del timeout de transición para poder cancelarlo al salir/reiniciar.
+let waveTransitionTimeout = null;
+
+export function cancelWaveTransition() {
+    if (waveTransitionTimeout !== null) {
+        clearTimeout(waveTransitionTimeout);
+        waveTransitionTimeout = null;
+    }
+    progression.waveTransition = false;
+    progression.waveTransitionTimer = 0;
+    progression.waveTransitionMsg = '';
+}
+
 export function startWaveTransition(msg, nextPhase, callback) {
     if (progression.waveTransition) return;
     progression.waveTransition = true;
@@ -23,7 +36,8 @@ export function startWaveTransition(msg, nextPhase, callback) {
     progression.wavePhase = nextPhase;
     enemies.length = 0; enemyBullets.length = 0;
     fxState.screenShake = 5;
-    setTimeout(() => {
+    waveTransitionTimeout = setTimeout(() => {
+        waveTransitionTimeout = null;
         callback();
         progression.waveTransition = false;
         progression.waveTransitionMsg = '';
