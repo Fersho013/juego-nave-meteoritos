@@ -1,6 +1,6 @@
 // js/entities/SuperBoss.js — Super Boss Nodriza (3 fases) + modifier permanente
 import * as EffectsNS from '../system/Effects.js';
-const MAX_PARTICLES = EffectsNS.MAX_PARTICLES || 400;
+import { drawGlow } from '../system/Sprites.js';
 
 export const superBossState = {
     active: false,
@@ -114,7 +114,7 @@ export function updateSuperBoss({ canvas, nave, bullets, enemyBullets, enemies, 
                 grantSuperModifier();
                 hasSuperModifier = true;
                 if (floatingTexts) floatingTexts.push({ x: mp.x, y: mp.y - 30, text: '✦ MODIFICADOR VERDE PERMANENTE ✦', life: 2.0, color: '#00ff66' });
-                if (particles && particles.length < MAX_PARTICLES) particles.push({ x: mp.x, y: mp.y, vx: 0, vy: 0, life: 1, type: 'bomb_ring', color: '#00ff66' });
+                if (particles) EffectsNS.pushParticle({ x: mp.x, y: mp.y, vx: 0, vy: 0, life: 1, type: 'bomb_ring', color: '#00ff66' });
                 if (hudState) hudState.score += 15000;
             }
         }
@@ -124,7 +124,7 @@ export function updateSuperBoss({ canvas, nave, bullets, enemyBullets, enemies, 
             gp.pulse += 0.11;
             if (Math.hypot(gp.x - nave.x, gp.y - nave.y) < gp.radius + 16) {
                 if (floatingTexts) floatingTexts.push({ x: gp.x, y: gp.y - 30, text: '¡REGRESANDO A ZONA NORMAL!', life: 1.6, color: '#00ff66' });
-                if (particles && particles.length < MAX_PARTICLES) particles.push({ x: gp.x, y: gp.y, vx: 0, vy: 0, life: 1, type: 'bomb_ring', color: '#00ff66' });
+                if (particles) EffectsNS.pushParticle({ x: gp.x, y: gp.y, vx: 0, vy: 0, life: 1, type: 'bomb_ring', color: '#00ff66' });
                 clearSuperBoss();
             }
         }
@@ -168,7 +168,7 @@ export function updateSuperBoss({ canvas, nave, bullets, enemyBullets, enemies, 
                 lastSpawn: Date.now()
             };
             if (floatingTexts) floatingTexts.push({ x: superBossState.x, y: superBossState.y + 80, text: '— COMPUERTA ABIERTA —', life: 1.8, color: '#ff9900' });
-            if (particles && particles.length < MAX_PARTICLES) particles.push({ x: superBossState.x, y: superBossState.y, vx: 0, vy: 0, life: 1, type: 'bomb_ring', color: '#ff9900' });
+            if (particles) EffectsNS.pushParticle({ x: superBossState.x, y: superBossState.y, vx: 0, vy: 0, life: 1, type: 'bomb_ring', color: '#ff9900' });
         }
     } else if (superBossState.phase === 2) {
         // Compuerta suelta enemigos
@@ -303,9 +303,9 @@ export function drawSuperBoss(ctx, frameCount) {
             ctx.fillStyle = gg;
             ctx.beginPath(); ctx.arc(gp.x, gp.y, gp.radius * 3.0, 0, Math.PI*2); ctx.fill();
             ctx.globalAlpha = 0.96;
-            ctx.strokeStyle = '#3dff8a'; ctx.lineWidth = 2.6; ctx.shadowBlur = 18; ctx.shadowColor = '#00ff66';
+            drawGlow(ctx, gp.x, gp.y, gp.radius * 1.8, '#00ff66', 0.55);
+            ctx.strokeStyle = '#3dff8a'; ctx.lineWidth = 2.6;
             ctx.beginPath(); ctx.arc(gp.x, gp.y, gp.radius, 0, Math.PI*2); ctx.stroke();
-            ctx.shadowBlur = 0;
             ctx.globalAlpha = 0.85;
             ctx.strokeStyle = '#b8ffcf'; ctx.lineWidth = 1.2;
             ctx.beginPath(); ctx.arc(gp.x, gp.y, gp.radius*0.62, gp.pulse, gp.pulse + Math.PI*1.6); ctx.stroke();
@@ -319,11 +319,10 @@ export function drawSuperBoss(ctx, frameCount) {
             const pulse = 0.8 + Math.sin(p.pulse || 0) * 0.2;
             ctx.save();
             ctx.globalAlpha = pulse;
-            ctx.shadowBlur = 18; ctx.shadowColor = '#00ff66';
+            drawGlow(ctx, p.x, p.y, 34, '#00ff66', pulse * 0.8);
             ctx.fillStyle = '#00ff66';
             ctx.beginPath(); ctx.arc(p.x, p.y, 14, 0, Math.PI * 2); ctx.fill();
             ctx.strokeStyle = '#003a18'; ctx.lineWidth = 2; ctx.stroke();
-            ctx.shadowBlur = 0;
             ctx.fillStyle = '#002b12';
             ctx.font = 'bold 14px Orbitron'; ctx.textAlign = 'center';
             ctx.fillText('✦', p.x, p.y + 5);
@@ -340,8 +339,8 @@ export function drawSuperBoss(ctx, frameCount) {
 
     // Fondo nodriza: barra superior que abarca ancho
     ctx.save();
-    // sombra
-    ctx.shadowBlur = 22; ctx.shadowColor = sb.shield ? '#1e90ff' : '#ff3366';
+    // brillo (sprite) en lugar de shadowBlur
+    drawGlow(ctx, sb.x, sb.y, Math.max(sb.w, sb.h) * 0.8, sb.shield ? '#1e90ff' : '#ff3366', 0.5);
     // cuerpo principal
     const grad = ctx.createLinearGradient(sb.x - sb.w / 2, sb.y, sb.x + sb.w / 2, sb.y);
     grad.addColorStop(0, '#1a1a2e'); grad.addColorStop(0.5, '#2a2a4a'); grad.addColorStop(1, '#1a1a2e');
@@ -367,7 +366,6 @@ export function drawSuperBoss(ctx, frameCount) {
         ctx.strokeRect(sb.x - sb.w / 2 - 6, sb.y - sb.h / 2 - 6, sb.w + 12, sb.h + 12);
         ctx.setLineDash([]);
     }
-    ctx.shadowBlur = 0;
     // HP barra principal (solo cuando puede recibir daño o escudo)
     const hpPct = sb.hp / sb.maxHp;
     const barW = sb.w * 0.86;
