@@ -69,7 +69,9 @@ export function clearSuperBoss() {
 function getCannonPositions() { return superBossState.cannons; }
 
 export function updateSuperBoss({ canvas, nave, bullets, enemyBullets, enemies, particles, floatingTexts, fxState, createExplosion, spawnDebris, hudState, combatState, dropPickup, frameCount }) {
-    if (!superBossState.active || superBossState.destroyed) return;
+    // Importante: no salir cuando destroyed===true. El bloque de destrucción
+    // (portal verde + consumible + explosiones) necesita ejecutarse cada frame.
+    if (!superBossState.active) return;
 
     // Si destruido, manejar animación + portal verde + consumible
     if (superBossState.hp <= 0 && !superBossState.destroyed) {
@@ -88,11 +90,15 @@ export function updateSuperBoss({ canvas, nave, bullets, enemyBullets, enemies, 
         if (floatingTexts) floatingTexts.push({ x: superBossState.modifierPickup.x, y: superBossState.modifierPickup.y - 30, text: 'CONSUMIBLE VERDE', life: 4, color: '#00ff66' });
     }
     if (superBossState.destroyed) {
-        superBossState.explosionTimer--;
-        if (superBossState.explosionTimer % 12 === 0) {
-            const rx = superBossState.x + (Math.random() - 0.5) * superBossState.w * 0.8;
-            const ry = superBossState.y + (Math.random() - 0.5) * 22;
-            createExplosion(rx, ry, '#ff6600', 10);
+        // La animación de explosión dura 90 frames; evitar que siga
+        // generando explosiones indefinidamente mientras se recogen los pickups.
+        if (superBossState.explosionTimer > 0) {
+            superBossState.explosionTimer--;
+            if (superBossState.explosionTimer % 12 === 0) {
+                const rx = superBossState.x + (Math.random() - 0.5) * superBossState.w * 0.8;
+                const ry = superBossState.y + (Math.random() - 0.5) * 22;
+                createExplosion(rx, ry, '#ff6600', 10);
+            }
         }
         // Actualizar consumible flotante
         if (superBossState.modifierPickup?.active) {
