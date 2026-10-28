@@ -34,6 +34,10 @@ let parryActive = false, parryCooldown = false;
 let parryTimer = 0;
 let dashActive = false, dashCooldown = false;
 let dashHitSet = new Set();
+// Estado real del ratón, independiente del mando (evita que un gamepad inactivo lo pise).
+let mouseShootHeld = false, mouseTripleHeld = false;
+// Botones one-shot del mando: solo se liberan si los activó el propio mando.
+let padBombHeld = false, padParryHeld = false, padDashHeld = false;
 
 // Compat wrappers para que Menu pueda consultar visibilidad
 window.toggleVolume = toggleVolume;
@@ -158,8 +162,11 @@ initLayoutEditor();
 window.addEventListener('keydown', e => { if (e.code === 'Escape' && isEditorActive()) { exitEditMode(true); showScreen('menu-pause'); updateVolumeVisibility(); return; } keys[e.code] = true; if (e.code === 'KeyP') { togglePause(); keys[e.code] = false; } });
 window.addEventListener('keyup', e => keys[e.code] = false);
 canvas.addEventListener('mousemove', e => { if (isEditorActive()) return; const rect = canvas.getBoundingClientRect(); input.aimX = e.clientX - rect.left; input.aimY = e.clientY - rect.top; setUsingGamepad(false); });
-canvas.addEventListener('mousedown', e => { if (isEditorActive()) return; initAudio(); if (e.button === 0) input.shoot = true; if (e.button === 2) input.triple = true; });
-canvas.addEventListener('mouseup', e => { if (e.button === 0) input.shoot = false; if (e.button === 2) input.triple = false; });
+canvas.addEventListener('mousedown', e => { if (isEditorActive()) return; initAudio(); if (e.button === 0) { mouseShootHeld = true; input.shoot = true; } if (e.button === 2) { mouseTripleHeld = true; input.triple = true; } });
+const releaseMouseButtons = e => { if (e.button === 0) { mouseShootHeld = false; input.shoot = false; } if (e.button === 2) { mouseTripleHeld = false; input.triple = false; } };
+canvas.addEventListener('mouseup', releaseMouseButtons);
+// También al soltar fuera del canvas, para no dejar el disparo trabado.
+window.addEventListener('mouseup', releaseMouseButtons);
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 
 function setupJoystick(baseId, stickId, type) {
@@ -223,17 +230,51 @@ function pollInput() {
     if (keys['Space']) { input.bomb = true; keys['Space']=false; } else if(!platform.isMobile) input.bomb=false;
     if (keys['KeyE']) { input.parry=true; keys['KeyE']=false; } else if(!platform.isMobile) input.parry=false;
     if (keys['ShiftLeft']||keys['ShiftRight']) { input.dash=true; keys['ShiftLeft']=false; keys['ShiftRight']=false; } else if(!platform.isMobile) input.dash=false;
-    const pads = navigator.getGamepads();
-    if (pads[0]) {
-        const pad = pads[0]; setUsingGamepad(true);
-        if(Math.abs(pad.axes[0])>0.1) input.moveX=pad.axes[0];
-        if(Math.abs(pad.axes[1])>0.1) input.moveY=pad.axes[1];
-        if(Math.hypot(pad.axes[2],pad.axes[3])>0.2){ input.aimX+=pad.axes[2]*15; input.aimY+=pad.axes[3]*15; input.aimX=Math.max(0,Math.min(canvas.width,input.aimX)); input.aimY=Math.max(0,Math.min(canvas.height,input.aimY)); }
-        input.shoot=pad.buttons[7].value>0.2; input.triple=pad.buttons[6].value>0.2;
-        if(pad.buttons[4].pressed && !input.bomb) input.bomb=true; else if(!pad.buttons[4].pressed) input.bomb=false;
-        if(pad.buttons[5].pressed && !input.parry) input.parry=true; else if(!pad.buttons[5].pressed) input.parry=false;
-        if(pad.buttons[2].pressed && !input.dash) input.dash=true; else if(!pad.buttons[2].pressed) input.dash=false;
-        if(pad.buttons[9].pressed && !startBtnPressed){ togglePause(); startBtnPressed=true; } else if(!pad.buttons[9].pressed) startBtnPressed=false;
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    const pad = pads && pads[0];
+    if (pad) {
+        const axes = pad.axes || [];
+        const buttons = pad.buttons || [];
+        const btn = i => buttons[i] || { pressed: false, value: 0 };
+        const padShoot = btn(7).value > 0.2;
+        const padTriple = btn(6).value > 0.2;
+        const stickActive = Math.abs(axes[0] || 0) > 0.2 || Math.abs(axes[1] || 0) > 0.2 || Math.hypot(axes[2] || 0, axes[3] || 0) > 0.25;
+        const buttonsActive = [0,1,2,3,4,5,6,7,8,9,10,11].some(i => btn(i).pressed || btn(i).value > 0.2);
+        const padActive = stickActive || buttonsActive;
+
+        if (padActive) {
+            setUsingGamepad(true);
+            if (Math.abs(axes[0] || 0) > 0.1) input.moveX = axes[0];
+            if (Math.abs(axes[1] || 0) > 0.1) input.moveY = axes[1];
+            if (Math.hypot(axes[2] || 0, axes[3] || 0) > 0.2) { input.aimX += axes[2] * 15; input.aimY += axes[3] * 15; input.aimX = Math.max(0, Math.min(canvas.width, input.aimX)); input.aimY = Math.max(0, Math.min(canvas.height, input.aimY)); }
+            // Solo un mando en uso controla el disparo; si el ratón sigue pulsado, se respeta.
+            if (padShoot) input.shoot = true;
+            else if (!mouseShootHeld && !platform.rightJoyActive) input.shoot = false;
+            if (padTriple) input.triple = true;
+            else if (!mouseTripleHeld && !platform.isMobile) input.triple = false;
+            if (btn(4).pressed) { if (!padBombHeld) { input.bomb = true; padBombHeld = true; } }
+            else if (padBombHeld) { input.bomb = false; padBombHeld = false; }
+            if (btn(5).pressed) { if (!padParryHeld) { input.parry = true; padParryHeld = true; } }
+            else if (padParryHeld) { input.parry = false; padParryHeld = false; }
+            if (btn(2).pressed) { if (!padDashHeld) { input.dash = true; padDashHeld = true; } }
+            else if (padDashHeld) { input.dash = false; padDashHeld = false; }
+            if (btn(9).pressed && !startBtnPressed) { togglePause(); startBtnPressed = true; } else if (!btn(9).pressed) startBtnPressed = false;
+        } else {
+            // Mando conectado pero inactivo: no debe secuestrar ratón, teclado ni táctil.
+            setUsingGamepad(false);
+            if (!mouseShootHeld && !platform.rightJoyActive) input.shoot = false;
+            if (!mouseTripleHeld && !platform.isMobile) input.triple = false;
+            if (padBombHeld) { input.bomb = false; padBombHeld = false; }
+            if (padParryHeld) { input.parry = false; padParryHeld = false; }
+            if (padDashHeld) { input.dash = false; padDashHeld = false; }
+        }
+    } else if (platform.usingGamepad) {
+        // El mando se desconectó: liberar cualquier control que hubiera quedado activo.
+        setUsingGamepad(false);
+        if (!mouseShootHeld && !platform.rightJoyActive) input.shoot = false;
+        if (!mouseTripleHeld && !platform.isMobile) input.triple = false;
+        padBombHeld = padParryHeld = padDashHeld = false;
+        input.bomb = false; input.parry = false; input.dash = false;
     }
     if(platform.isMobile && !platform.usingGamepad && !platform.rightJoyActive && (input.moveX!==0||input.moveY!==0)){
         input.aimX = nave.x + input.moveX * 150; input.aimY = nave.y + input.moveY * 150;
@@ -501,7 +542,7 @@ function update(){
     if(input.dash && !dashCooldown && !dashActive){ input.dash=false; sfx.dash(); dashActive=true; dashCooldown=true; nave.inmune=true; dashHitSet.clear(); const dx=input.moveX||0,dy=input.moveY||0; const len=Math.hypot(dx,dy)||1; nave.vx=(dx/len)*DASH.SPEED; nave.vy=(dy/len)*DASH.SPEED; const el=document.getElementById('val-dash'); if(el){el.innerText="ACTIVE"; el.style.color="#a0c4ff";} for(let i=0;i<12;i++) particles.push({x:nave.x,y:nave.y,vx:(Math.random()-0.5)*4,vy:(Math.random()-0.5)*4,life:0.9,color:'#a0c4ff',type:'spark'}); setTimeout(()=>{dashActive=false; nave.inmune=false; const e2=document.getElementById('val-dash'); if(e2){e2.innerText="RECHARGING"; e2.style.color="var(--danger)";}},DASH.DURATION); setTimeout(()=>{dashCooldown=false; const e3=document.getElementById('val-dash'); if(e3){e3.innerText="READY"; e3.style.color="var(--success)";}},DASH.COOLDOWN); }
     if(!superBossState.arena) {
         if(Math.random()<0.02+(progression.currentWave*0.005) && bosses.length===0) spawnEnemy({canvas,bosses,gameMode:{value:gameMode},currentWave:{value:progression.currentWave},waveTransition:{value:progression.waveTransition},customSelection});
-        if(bosses.length===0 && fxState.frameCount%420===0 && gameMode!=='custom'){ const forms=['triangle','square','circle']; spawnFormation({canvas,bosses,formType:forms[Math.floor(Math.random()*forms.length)]}); }
+        if(bosses.length===0 && !progression.waveTransition && fxState.frameCount%420===0 && gameMode!=='custom'){ const forms=['triangle','square','circle']; spawnFormation({canvas,bosses,formType:forms[Math.floor(Math.random()*forms.length)],waveTransition:{value:progression.waveTransition}}); }
     }
     enemies.forEach((e,i)=>{
         if(e.zigzag){ e.zigzagPhase=(e.zigzagPhase||0)+0.05; e.vx=Math.sin(e.zigzagPhase)*3; }
@@ -719,3 +760,8 @@ function draw(currentTime){
 initParallax(canvas);
 applyOptions(); updateVolumeVisibility();
 requestAnimationFrame(draw);
+
+// El juego arrancó correctamente: el diagnóstico de index.html ya no debe avisar.
+window.__gameBooted = true;
+const bootOverlay = document.getElementById('boot-error');
+if (bootOverlay) bootOverlay.style.display = 'none';

@@ -43,8 +43,10 @@ function pickWaveType(currentWave) {
     return 'common';
 }
 
-export function spawnFormation({ canvas, bosses, formType }) {
+export function spawnFormation({ canvas, bosses, formType, waveTransition }) {
     if (bosses.length > 0) return;
+    // No generar formaciones mientras el juego está en transición de oleada.
+    if (waveTransition?.value) return;
     const baseX = canvas.width / 2, baseY = -30;
     let positions = [];
     if (formType === 'triangle') {
