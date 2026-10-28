@@ -8,9 +8,7 @@ import { enemyBullets, pickUps } from '../entities/Projectile.js';
 import { particles, debrisChunks, floatingTexts, fxState, createExplosion } from './Effects.js';
 import { registerComboHits } from '../ui/Hud.js';
 
-export const combatState = { health: 100, maxHealth: 100, damagePerHit: 20, bombs: 3, hasRevive: false, credits: 0 };
-export function addCredits(n) { combatState.credits += n; }
-export function spendCredits(n) { if (combatState.credits < n) return false; combatState.credits -= n; return true; }
+export const combatState = { health: 100, maxHealth: 100, damagePerHit: 20, bombs: 3, hasRevive: false };
 
 export function dropRevivePickup(x, y) {
     if (combatState.hasRevive) pickUps.push({ x, y, type: 'bomb' });
