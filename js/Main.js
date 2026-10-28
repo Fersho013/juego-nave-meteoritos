@@ -114,6 +114,45 @@ let customSelection = [];
 window.__getGameState = () => gameState;
 window.__getGameMode = () => gameMode;
 
+// --- Animación de nave en menú ---
+let menuShipAnim = {
+    active: true,
+    angle: 0,
+    orbitRadius: 140,
+    orbitSpeed: 0.006,
+    centerX: 400,
+    centerY: 300,
+    transitioning: false,
+    transitionProgress: 0,
+    transitionStartX: 0,
+    transitionStartY: 0,
+    targetX: 0,
+    targetY: 0
+};
+
+function initMenuShipAnimation() {
+    menuShipAnim.centerX = canvas.width / 2;
+    menuShipAnim.centerY = canvas.height / 2 - 20;
+    menuShipAnim.orbitRadius = Math.min(canvas.width, canvas.height) * 0.18;
+    menuShipAnim.angle = 0;
+    menuShipAnim.active = true;
+    menuShipAnim.transitioning = false;
+    menuShipAnim.transitionProgress = 0;
+    // Colocar nave en posición inicial
+    nave.x = menuShipAnim.centerX + Math.cos(menuShipAnim.angle) * menuShipAnim.orbitRadius;
+    nave.y = menuShipAnim.centerY + Math.sin(menuShipAnim.angle) * menuShipAnim.orbitRadius * 0.5;
+}
+
+function startMenuToGameTransition() {
+    if (menuShipAnim.transitioning) return;
+    menuShipAnim.transitioning = true;
+    menuShipAnim.transitionProgress = 0;
+    menuShipAnim.transitionStartX = nave.x;
+    menuShipAnim.transitionStartY = nave.y;
+    menuShipAnim.targetX = canvas.width / 2;
+    menuShipAnim.targetY = canvas.height - 100;
+}
+
 // Globals equivalentes al original
 let parryActive = false, parryCooldown = false;
 let parryTimer = 0;
@@ -198,7 +237,11 @@ function applyOptions() {
     if (container) { container.style.width = config.w + 'px'; container.style.height = config.h + 'px'; }
     if (prevW && prevH && (prevW !== canvas.width || prevH !== canvas.height)) rescaleBackground(prevW, prevH);
 
-    nave.x = canvas.width / 2; nave.y = canvas.height - 100;
+    if (gameState === 'MENU') {
+        initMenuShipAnimation();
+    } else {
+        nave.x = canvas.width / 2; nave.y = canvas.height - 100;
+    }
     showScreen('menu-main');
 }
 
@@ -209,6 +252,9 @@ function rescaleBackground(prevW, prevH) {
     const sx = canvas.width / prevW, sy = canvas.height / prevH;
     if (sx === 1 && sy === 1) return;
     stars.forEach(s => { s.x *= sx; s.y *= sy; });
+    if (gameState === 'MENU') {
+        initMenuShipAnimation();
+    }
 }
 
 bindResize(config, canvas, nave, () => gameState, (prevW, prevH) => rescaleBackground(prevW, prevH));
@@ -249,6 +295,8 @@ function exitToMenu() {
     clearPortals(); clearSuperBoss(); clearSuperModifier();
     // restaurar fondo normal al salir
     showScreen('menu-main');
+    // Reactivar animación de nave en menú
+    initMenuShipAnimation();
 }
 function promptContinue() {
     gameState = 'CONTINUE';
@@ -422,49 +470,56 @@ function startCustom(){
 }
 
 function startMission(mode){
-    initAudio(); gameMode=mode; gameState='PLAYING';
-    hudState.score=0; progression.currentWave=1; progression.wavePhase=1;
-    combatState.damagePerHit = parseInt(document.getElementById('opt-damage')?.value) || 20;
-    combatState.health=100; combatState.hasRevive=false; combatState.bombs=3;
-    fxState.screenShake=0; parryTimer=0; parryCooldown=false;
-    progression.waveKills=0; cancelWaveTransition();
-    // Al reiniciar (o al pasar de progresivo a custom/solo_boss) no deben quedar
-    // el contador de oleada ni el aviso de bomba con datos de la partida anterior.
-    resetWaveProgressUI();
-    progression.waveKillTarget = parseInt(document.getElementById('opt-kills')?.value) || 50;
-    dashActive=false; dashCooldown=false;
-    resetCombo();
-    weaponState.current='normal'; weaponState.timer=0; weaponPowerUps.length=0; debrisChunks.length=0; fxState.hitStopFrames=0;
-    homingState.active=false; homingState.timer=0; droneState.drones.length=0; droneState.timer=0; shipTrail.length=0;
-    bullets.length=0; enemyBullets.length=0; enemies.length=0; cleanupAllBossTimers(); bosses.length=0; renderBossUI(); pickUps.length=0; clearParticles(); clearBlasts(); floatingTexts.length=0;
-    clearPortals(); clearSuperBoss(); clearSuperModifier();
-    // Estado del jugador que antes se arrastraba entre partidas.
-    clearImmunity(); parryActive=false; parryCooldown=false; parryTimer=0;
-    input.shoot=false; input.triple=false; input.bomb=false; input.parry=false; input.dash=false;
-    mouseShootHeld=false; mouseTripleHeld=false;
-    nave.x=canvas.width/2; nave.y=canvas.height-100; nave.vx=0; nave.vy=0;
-    showScreen('none');
-    setHudVisible(true);
-    const mu=document.getElementById('mobile-ui'); if(mu) mu.style.display=(platform.isMobile && !platform.isTouchUIHidden)?'block':'none';
-    if(mode==='custom'){
-        // b1/b2/b3 comparten jefes: sin deduplicar, elegir "b1" + "b3" creaba
-        // dos B1 superpuestos y dos barras #hp-B1 (la segunda nunca se actualizaba).
-        const madeBosses = new Set();
-        const addBoss = (type, id) => { if (madeBosses.has(id)) return; madeBosses.add(id); createBoss({ canvas, type, id }); };
-        customSelection.forEach(val=>{
-            if(val==='b1') addBoss('static','B1');
-            if(val==='b2') addBoss('moving','B2');
-            if(val==='b3'){ addBoss('static','B1'); addBoss('moving','B2'); }
-            if(val==='b_hunter') addBoss('hunter','B_HUNTER');
-            if(val==='b_berserker') addBoss('berserker','B_BERSERK');
-            if(val==='b4') addBoss('doppel','DOPPEL');
-            if(val==='superboss_direct') { spawnSuperBoss(canvas); floatingTexts.push({x: canvas.width/2, y: canvas.height/2 - 40, text: '★ NODRIZA SUPER BOSS ★', life: 1.8, color: '#6ec8ff'}); }
-        });
-        if(customSelection.includes('superboss_portal')) {
-            floatingTexts.push({x: canvas.width/2, y: 80, text: 'Portal azul habilitado (usa bomba)', life: 2.5, color: '#6ec8ff'});
+    initAudio(); gameMode=mode; 
+    // Iniciar transición de nave antes de pasar a PLAYING
+    startMenuToGameTransition();
+    // Pequeño delay para que se vea la transición
+    setTimeout(() => {
+        gameState='PLAYING';
+        hudState.score=0; progression.currentWave=1; progression.wavePhase=1;
+        combatState.damagePerHit = parseInt(document.getElementById('opt-damage')?.value) || 20;
+        combatState.health=100; combatState.hasRevive=false; combatState.bombs=3;
+        fxState.screenShake=0; parryTimer=0; parryCooldown=false;
+        progression.waveKills=0; cancelWaveTransition();
+        // Al reiniciar (o al pasar de progresivo a custom/solo_boss) no deben quedar
+        // el contador de oleada ni el aviso de bomba con datos de la partida anterior.
+        resetWaveProgressUI();
+        progression.waveKillTarget = parseInt(document.getElementById('opt-kills')?.value) || 50;
+        dashActive=false; dashCooldown=false;
+        resetCombo();
+        weaponState.current='normal'; weaponState.timer=0; weaponPowerUps.length=0; debrisChunks.length=0; fxState.hitStopFrames=0;
+        homingState.active=false; homingState.timer=0; droneState.drones.length=0; droneState.timer=0; shipTrail.length=0;
+        bullets.length=0; enemyBullets.length=0; enemies.length=0; cleanupAllBossTimers(); bosses.length=0; renderBossUI(); pickUps.length=0; clearParticles(); clearBlasts(); floatingTexts.length=0;
+        clearPortals(); clearSuperBoss(); clearSuperModifier();
+        // Estado del jugador que antes se arrastraba entre partidas.
+        clearImmunity(); parryActive=false; parryCooldown=false; parryTimer=0;
+        input.shoot=false; input.triple=false; input.bomb=false; input.parry=false; input.dash=false;
+        mouseShootHeld=false; mouseTripleHeld=false;
+        nave.x=canvas.width/2; nave.y=canvas.height-100; nave.vx=0; nave.vy=0;
+        menuShipAnim.transitioning = false;
+        showScreen('none');
+        setHudVisible(true);
+        const mu=document.getElementById('mobile-ui'); if(mu) mu.style.display=(platform.isMobile && !platform.isTouchUIHidden)?'block':'none';
+        if(mode==='custom'){
+            // b1/b2/b3 comparten jefes: sin deduplicar, elegir "b1" + "b3" creaba
+            // dos B1 superpuestos y dos barras #hp-B1 (la segunda nunca se actualizaba).
+            const madeBosses = new Set();
+            const addBoss = (type, id) => { if (madeBosses.has(id)) return; madeBosses.add(id); createBoss({ canvas, type, id }); };
+            customSelection.forEach(val=>{
+                if(val==='b1') addBoss('static','B1');
+                if(val==='b2') addBoss('moving','B2');
+                if(val==='b3'){ addBoss('static','B1'); addBoss('moving','B2'); }
+                if(val==='b_hunter') addBoss('hunter','B_HUNTER');
+                if(val==='b_berserker') addBoss('berserker','B_BERSERK');
+                if(val==='b4') addBoss('doppel','DOPPEL');
+                if(val==='superboss_direct') { spawnSuperBoss(canvas); floatingTexts.push({x: canvas.width/2, y: canvas.height/2 - 40, text: '★ NODRIZA SUPER BOSS ★', life: 1.8, color: '#6ec8ff'}); }
+            });
+            if(customSelection.includes('superboss_portal')) {
+                floatingTexts.push({x: canvas.width/2, y: 80, text: 'Portal azul habilitado (usa bomba)', life: 2.5, color: '#6ec8ff'});
+            }
         }
-    }
-    syncHud(true);
+        syncHud(true);
+    }, 600);
 }
 
 let lastHudSync = 0;
@@ -578,6 +633,25 @@ function findHomingTarget(fromX, fromY) {
 // --- UPDATE ---
 function update(){
     pollInput();
+    if(gameState === 'MENU') {
+        if(menuShipAnim.transitioning) {
+            menuShipAnim.transitionProgress += 0.016;
+            if(menuShipAnim.transitionProgress > 1) menuShipAnim.transitionProgress = 1;
+            // Easing suave
+            const t = menuShipAnim.transitionProgress;
+            const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+            nave.x = menuShipAnim.transitionStartX + (menuShipAnim.targetX - menuShipAnim.transitionStartX) * ease;
+            nave.y = menuShipAnim.transitionStartY + (menuShipAnim.targetY - menuShipAnim.transitionStartY) * ease;
+            // Ajustar velocidad para transición fluida
+            nave.vx = 0; nave.vy = 0;
+        } else if(menuShipAnim.active) {
+            menuShipAnim.angle += menuShipAnim.orbitSpeed;
+            nave.x = menuShipAnim.centerX + Math.cos(menuShipAnim.angle) * menuShipAnim.orbitRadius + Math.sin(fxState.frameCount * 0.01) * 12;
+            nave.y = menuShipAnim.centerY + Math.sin(menuShipAnim.angle) * menuShipAnim.orbitRadius * 0.5 + Math.cos(fxState.frameCount * 0.015) * 8;
+            nave.vx = 0; nave.vy = 0;
+        }
+        return;
+    }
     if(gameState!=='PLAYING') return;
     if(fxState.hitStopFrames>0){ fxState.hitStopFrames--; return; }
     fxState.frameCount++; 
@@ -951,8 +1025,47 @@ function draw(currentTime){
         if(progression.waveTransition && progression.waveTransitionMsg){ const progress=1-(progression.waveTransitionTimer/150); const alpha=progress<0.2?progress/0.2:progress>0.8?(1-progress)/0.2:1; ctx.globalAlpha=alpha*0.85; ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.globalAlpha=alpha; ctx.textAlign='center'; ctx.font='bold 14px Orbitron'; ctx.fillStyle='#666'; ctx.fillText('— PREPARATE —',canvas.width/2,canvas.height/2-50); ctx.font='bold 40px Orbitron'; ctx.fillStyle=waveGradient(); ctx.shadowBlur=20; ctx.shadowColor='#fff'; ctx.fillText(progression.waveTransitionMsg,canvas.width/2,canvas.height/2+10); ctx.shadowBlur=0; ctx.font='13px Orbitron'; ctx.fillStyle='#aaa'; const waveLabel=['SECTOR 1','BOSS 1','SECTOR 2','BOSS 2','SECTOR 3','BOSS 3','SECTOR 4','JEFE FINAL','FIN'][progression.wavePhase-1]||''; ctx.fillText(`SIGUIENTE: ${waveLabel}`,canvas.width/2,canvas.height/2+55); ctx.globalAlpha=1; ctx.textAlign='left'; if(progression.waveTransitionTimer>0) progression.waveTransitionTimer--; }
         if(nave.inmune && !dashActive){ ensureVignettes(); const pulse=Math.abs(Math.sin(fxState.frameCount*0.18)); ctx.globalAlpha=0.35*pulse; ctx.drawImage(immuneVignette,0,0); ctx.globalAlpha=1; }
     }
+    // Dibujar nave en menú
+    drawMenuShip(ctx);
     ctx.restore(); update();
     adaptParticleBudget(deltaTime, performance.now()-workStart);
+}
+
+// --- DRAW MENÚ NAVE ---
+function drawMenuShip(ctx) {
+    if (gameState !== 'MENU') return;
+    if (!menuShipAnim.active && !menuShipAnim.transitioning) return;
+    
+    ctx.save();
+    if(!nave.inmune || fxState.frameCount%10<5){
+        let angle = 0;
+        if(menuShipAnim.transitioning) {
+            // Mirar hacia abajo/centro durante transición
+            angle = Math.PI / 2;
+        } else {
+            // Mirar tangencialmente a la órbita
+            angle = menuShipAnim.angle + Math.PI / 2;
+        }
+        
+        drawGlow(ctx,nave.x,nave.y,34,nave.color,0.9);
+        ctx.save(); 
+        ctx.translate(nave.x,nave.y); 
+        ctx.rotate(angle); 
+        ctx.fillStyle=nave.color; 
+        ctx.beginPath(); 
+        ctx.moveTo(22,0); 
+        ctx.lineTo(-16,-16); 
+        ctx.lineTo(-16,16); 
+        ctx.fill(); 
+        ctx.restore();
+        
+        // Estela sutil en menú
+        if (fxState.frameCount % 4 === 0 && !menuShipAnim.transitioning) {
+            const trailAngle = menuShipAnim.angle + Math.PI / 2;
+            shipTrail.push({x:nave.x,y:nave.y,angle:trailAngle,life:0.6,color:nave.color});
+        }
+    }
+    ctx.restore();
 }
 
 // El canvas HTML nace en 300×150: si se inicializa el parallax antes de
@@ -960,6 +1073,7 @@ function draw(currentTime){
 // fondo aparece vacío. Primero se fija el tamaño real y luego se reparte.
 applyOptions();
 initParallax(canvas);
+initMenuShipAnimation();
 updateVolumeVisibility();
 requestAnimationFrame(draw);
 
