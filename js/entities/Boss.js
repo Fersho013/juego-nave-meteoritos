@@ -44,8 +44,12 @@ export function renderBossUI() {
 }
 
 export function updateBossHP(b) {
+    // Se llamaba por cada bala que impacta: limitamos a cambios de 1 %.
+    const pct = Math.max(0, Math.round((b.hp / b.maxHp) * 100));
+    if (b._hpPct === pct) return;
+    b._hpPct = pct;
     const hpBar = document.getElementById(`hp-${b.id}`);
-    if (hpBar) hpBar.style.width = Math.max(0, (b.hp / b.maxHp) * 100) + '%';
+    if (hpBar) hpBar.style.width = pct + '%';
 }
 
 export function clearBosses() { bosses.length = 0; renderBossUI(); }

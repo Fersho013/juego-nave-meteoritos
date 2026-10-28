@@ -1,4 +1,7 @@
 // js/entities/SuperBoss.js — Super Boss Nodriza (3 fases) + modifier permanente
+import * as EffectsNS from '../system/Effects.js';
+const MAX_PARTICLES = EffectsNS.MAX_PARTICLES || 400;
+
 export const superBossState = {
     active: false,
     arena: false,
@@ -111,7 +114,7 @@ export function updateSuperBoss({ canvas, nave, bullets, enemyBullets, enemies, 
                 grantSuperModifier();
                 hasSuperModifier = true;
                 if (floatingTexts) floatingTexts.push({ x: mp.x, y: mp.y - 30, text: '✦ MODIFICADOR VERDE PERMANENTE ✦', life: 2.0, color: '#00ff66' });
-                if (particles) particles.push({ x: mp.x, y: mp.y, vx: 0, vy: 0, life: 1, type: 'bomb_ring', color: '#00ff66' });
+                if (particles && particles.length < MAX_PARTICLES) particles.push({ x: mp.x, y: mp.y, vx: 0, vy: 0, life: 1, type: 'bomb_ring', color: '#00ff66' });
                 if (hudState) hudState.score += 15000;
             }
         }
@@ -121,7 +124,7 @@ export function updateSuperBoss({ canvas, nave, bullets, enemyBullets, enemies, 
             gp.pulse += 0.11;
             if (Math.hypot(gp.x - nave.x, gp.y - nave.y) < gp.radius + 16) {
                 if (floatingTexts) floatingTexts.push({ x: gp.x, y: gp.y - 30, text: '¡REGRESANDO A ZONA NORMAL!', life: 1.6, color: '#00ff66' });
-                if (particles) particles.push({ x: gp.x, y: gp.y, vx: 0, vy: 0, life: 1, type: 'bomb_ring', color: '#00ff66' });
+                if (particles && particles.length < MAX_PARTICLES) particles.push({ x: gp.x, y: gp.y, vx: 0, vy: 0, life: 1, type: 'bomb_ring', color: '#00ff66' });
                 clearSuperBoss();
             }
         }
@@ -165,7 +168,7 @@ export function updateSuperBoss({ canvas, nave, bullets, enemyBullets, enemies, 
                 lastSpawn: Date.now()
             };
             if (floatingTexts) floatingTexts.push({ x: superBossState.x, y: superBossState.y + 80, text: '— COMPUERTA ABIERTA —', life: 1.8, color: '#ff9900' });
-            if (particles) particles.push({ x: superBossState.x, y: superBossState.y, vx: 0, vy: 0, life: 1, type: 'bomb_ring', color: '#ff9900' });
+            if (particles && particles.length < MAX_PARTICLES) particles.push({ x: superBossState.x, y: superBossState.y, vx: 0, vy: 0, life: 1, type: 'bomb_ring', color: '#ff9900' });
         }
     } else if (superBossState.phase === 2) {
         // Compuerta suelta enemigos

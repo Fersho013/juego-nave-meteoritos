@@ -23,6 +23,10 @@ export function initPreview() {
     if (!pCanvas) return;
     const pCtx = pCanvas.getContext('2d');
     function renderPreview() {
+        requestAnimationFrame(renderPreview);
+        // Solo dibujamos cuando el menú está visible: antes este bucle seguía
+        // renderizando (con shadowBlur) durante toda la partida.
+        if (document.hidden || pCanvas.offsetParent === null) return;
         pCtx.clearRect(0, 0, pCanvas.width, pCanvas.height);
         pCtx.save();
         pCtx.translate(pCanvas.width / 2, pCanvas.height / 2);
@@ -31,7 +35,6 @@ export function initPreview() {
         pCtx.fillStyle = nave.color;
         pCtx.beginPath(); pCtx.moveTo(25, 0); pCtx.lineTo(-20, -20); pCtx.lineTo(-20, 20); pCtx.fill();
         pCtx.restore();
-        requestAnimationFrame(renderPreview);
     }
     renderPreview();
 }

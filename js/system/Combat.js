@@ -5,7 +5,9 @@ import { nave } from '../entities/Player.js';
 import { bosses, updateBossHP } from '../entities/Boss.js';
 import { enemies } from '../entities/Enemy.js';
 import { enemyBullets, pickUps } from '../entities/Projectile.js';
-import { particles, debrisChunks, floatingTexts, fxState, createExplosion } from './Effects.js';
+import * as EffectsNS from './Effects.js';
+import { floatingTexts, fxState, createExplosion } from './Effects.js';
+const pushParticle = EffectsNS.pushParticle || ((p) => { if (EffectsNS.particles.length < (EffectsNS.MAX_PARTICLES || 400)) { EffectsNS.particles.push(p); return true; } return false; });
 import { registerComboHits } from '../ui/Hud.js';
 
 export const combatState = { health: 100, maxHealth: 100, damagePerHit: 20, bombs: 3, hasRevive: false };
@@ -18,7 +20,7 @@ export function dropRevivePickup(x, y) {
 export function triggerBomb(isPlayer, origin, { inputRef } = {}) {
     if (isPlayer) { if (combatState.bombs <= 0) return; combatState.bombs--; if (inputRef) inputRef.bomb = false; sfx.bomb(); }
     fxState.screenShake = 40;
-    particles.push({ x: origin.x, y: origin.y, vx: 0, vy: 0, life: 1, type: 'bomb_ring', color: isPlayer ? '#fff' : '#ff0044' });
+    pushParticle({ x: origin.x, y: origin.y, vx: 0, vy: 0, life: 1, type: 'bomb_ring', color: isPlayer ? '#fff' : '#ff0044' });
     if (isPlayer) {
         enemyBullets.length = 0;
         let bombKills = 0;
@@ -39,7 +41,7 @@ export function triggerRevive({ updateHUD }) {
     combatState.hasRevive = false;
     combatState.health = 100;
     fxState.screenShake = 50; fxState.hitStopFrames = 14;
-    particles.push({ x: nave.x, y: nave.y, vx: 0, vy: 0, life: 1, type: 'bomb_ring', color: '#ffee88' });
+    pushParticle({ x: nave.x, y: nave.y, vx: 0, vy: 0, life: 1, type: 'bomb_ring', color: '#ffee88' });
     enemyBullets.length = 0;
     enemies.forEach(e => createExplosion(e.x, e.y, '#fff', 10));
     enemies.length = 0;

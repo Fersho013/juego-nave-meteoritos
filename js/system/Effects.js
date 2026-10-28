@@ -7,8 +7,23 @@ export const shipTrail = [];
 
 export const fxState = { screenShake: 0, hitStopFrames: 0, frameCount: 0 };
 
-const MAX_PARTICLES = 400;
+export const MAX_PARTICLES = 400;
 const MAX_DEBRIS = 200;
+
+// Único punto de entrada para partículas: respeta el presupuesto global.
+export function pushParticle(p) {
+    if (particles.length >= MAX_PARTICLES) return false;
+    particles.push(p);
+    return true;
+}
+
+// Eliminación O(1) sin reordenar el resto (evita los saltos de splice en bucles).
+export function removeParticleAt(i) {
+    const last = particles.length - 1;
+    if (i < 0 || i > last) return;
+    if (i !== last) particles[i] = particles[last];
+    particles.length = last;
+}
 
 export function createExplosion(x, y, color, count = 12) {
     if (particles.length >= MAX_PARTICLES) return;

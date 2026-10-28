@@ -98,3 +98,5 @@ select, input { width: 100%; background: #111; border: 1px solid #444; color: wh
 .btn-editor { flex: 1; padding: 8px; font-size: 0.75rem; }
 .btn-editor.small { font-size: 0.68rem; padding: 6px; }
 #editor-scale { touch-action: none; }
+
+@keyframes bombAlertPulse { 0%, 100% { color: var(--warning); border-color: var(--warning); } 50% { color: #ff3366; border-color: #ff3366; } }

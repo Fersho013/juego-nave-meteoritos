@@ -3,29 +3,36 @@
 export const hudState = { score: 0, comboCount: 0, comboMultiplier: 1, comboResetTimer: null };
 
 export function updateHUD({ combatState, weaponState, progression, gameMode }) {
+    // Solo escribimos en el DOM cuando el valor cambia: innerText/textContent fuerza
+    // recálculo de layout y esto se llamaba 60 veces por segundo.
     const scoreEl = document.getElementById('val-score');
-    if (scoreEl) scoreEl.innerText = hudState.score;
+    if (scoreEl) { const v = String(hudState.score); if (scoreEl.textContent !== v) scoreEl.textContent = v; }
     const bombEl = document.getElementById('val-bombs');
-    if (bombEl) bombEl.innerText = combatState.bombs;
+    if (bombEl) { const v = String(combatState.bombs); if (bombEl.textContent !== v) bombEl.textContent = v; }
 
     const hpPct = Math.max(0, Math.min(100, combatState.health));
     const healthFill = document.getElementById('health-bar-fill');
     const healthPctEl = document.getElementById('val-health-pct');
     if (healthFill) {
-        healthFill.style.width = hpPct + '%';
-        healthFill.style.background = hpPct > 50 ? '#33ff66' : hpPct > 25 ? '#ffcc00' : '#ff3344';
+        const w = hpPct + '%';
+        if (healthFill.style.width !== w) {
+            healthFill.style.width = w;
+            healthFill.style.background = hpPct > 50 ? '#33ff66' : hpPct > 25 ? '#ffcc00' : '#ff3344';
+        }
     }
-    if (healthPctEl) healthPctEl.innerText = Math.round(hpPct) + '%';
+    if (healthPctEl) { const v = Math.round(hpPct) + '%'; if (healthPctEl.textContent !== v) healthPctEl.textContent = v; }
     const sectorLabel = gameMode.value === 'progressive' ? ` — SECTOR ${progression.currentWave}` : '';
     const levelTag = document.getElementById('level-tag');
-    if (levelTag) levelTag.innerText = `MODO: ${gameMode.value.toUpperCase()}${sectorLabel}`;
+    if (levelTag) { const v = `MODO: ${gameMode.value.toUpperCase()}${sectorLabel}`; if (levelTag.textContent !== v) levelTag.textContent = v; }
     const wEl = document.getElementById('val-weapon');
     if (wEl) {
-        wEl.innerText = weaponState.current === 'spread' ? 'SPREAD ★' : weaponState.current === 'laser' ? 'LASER ★' : 'NORMAL';
-        wEl.style.color = weaponState.current !== 'normal' ? '#ff9900' : 'var(--primary)';
+        const v = weaponState.current === 'spread' ? 'SPREAD ★' : weaponState.current === 'laser' ? 'LASER ★' : 'NORMAL';
+        if (wEl.textContent !== v) wEl.textContent = v;
+        const c = weaponState.current !== 'normal' ? '#ff9900' : 'var(--primary)';
+        if (wEl.style.color !== c) wEl.style.color = c;
     }
     const rEl = document.getElementById('val-revive');
-    if (rEl) rEl.style.display = combatState.hasRevive ? 'inline' : 'none';
+    if (rEl) { const v = combatState.hasRevive ? 'inline' : 'none'; if (rEl.style.display !== v) rEl.style.display = v; }
 }
 
 // Resetea el combo y cancela cualquier temporizador pendiente.
@@ -80,34 +87,43 @@ export function updateComboDisplay() {
     }
 }
 
+// Se llama varias veces por frame: solo reconstruimos el DOM cuando cambia algo.
+let waveProgressKey = '';
+
 export function updateWaveProgress({ gameMode, progression, bosses }) {
     if (gameMode.value !== 'progressive') return;
     const el = document.getElementById('wave-progress');
     const alertEl = document.getElementById('bomb-alert');
     if (!el) return;
+    const key = `${progression.wavePhase}|${progression.waveKills}|${progression.waveKillTarget}|${progression.waveTransition ? 1 : 0}|${bosses.length}`;
+    if (key === waveProgressKey) return;
+    waveProgressKey = key;
+
     const isWavePhase = [1,3,5,7].includes(progression.wavePhase);
     if (!isWavePhase || progression.waveTransition) {
-        el.style.display = 'none';
-        if (alertEl) alertEl.style.display = 'none';
+        if (el.style.display !== 'none') el.style.display = 'none';
+        if (alertEl && alertEl.style.display !== 'none') alertEl.style.display = 'none';
         return;
     }
     const pct = Math.min(100, (progression.waveKills / progression.waveKillTarget) * 100);
     const sectorNum = progression.wavePhase === 1 ? 1 : progression.wavePhase === 3 ? 2 : progression.wavePhase === 5 ? 3 : 4;
-    el.style.display = 'block';
+    if (el.style.display !== 'block') el.style.display = 'block';
     el.innerHTML = `SECTOR ${sectorNum}: <span style="color:${pct>=100?'#00ff00':'var(--primary)'}">${progression.waveKills}/${progression.waveKillTarget}</span>
         <div style="width:100%;height:4px;background:#333;border-radius:2px;margin-top:3px;">
           <div style="width:${pct}%;height:4px;background:${pct>=100?'#00ff00':'var(--primary)'};border-radius:2px;transition:width 0.1s;"></div>
         </div>`;
     if (alertEl) {
         if (pct >= 100 && bosses.length === 0) {
-            alertEl.style.display = 'block';
-            const pulse = Math.sin(Date.now() / 250);
-            const col = pulse > 0 ? 'var(--warning)' : '#ff3366';
-            alertEl.style.color = col;
-            alertEl.style.borderColor = col;
-            alertEl.style.textShadow = `0 0 10px ${col}`;
-            alertEl.innerText = '💣 USA BOMBA → IR AL JEFE 💣';
-        } else {
+            if (alertEl.style.display !== 'block') alertEl.style.display = 'block';
+            // El pulso se hace por CSS (antes se reescribían 4 estilos 60 veces/s).
+            if (!alertEl.style.animation) {
+                alertEl.style.animation = 'bombAlertPulse 0.5s infinite';
+                alertEl.style.color = 'var(--warning)';
+                alertEl.style.borderColor = 'var(--warning)';
+                alertEl.style.textShadow = '0 0 10px var(--warning)';
+            }
+            alertEl.textContent = '💣 USA BOMBA → IR AL JEFE 💣';
+        } else if (alertEl.style.display !== 'none') {
             alertEl.style.display = 'none';
         }
     }
