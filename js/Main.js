@@ -9,12 +9,12 @@ import { bosses, createBoss, renderBossUI, updateBossHP } from './entities/Boss.
 import { bullets, enemyBullets, pickUps, weaponPowerUps, weaponState, homingState, droneState } from './entities/Projectile.js';
 import { particles, debrisChunks, floatingTexts, shipTrail, fxState, createExplosion, spawnDebris } from './system/Effects.js';
 import { combatState, dropRevivePickup, playerHit as combatPlayerHit, triggerBomb as combatTriggerBomb, triggerRevive } from './system/Combat.js';
-import { progression, checkProgression } from './system/Progression.js';
+import { progression, checkProgression, cancelWaveTransition } from './system/Progression.js';
 import { hudState, updateHUD as hudUpdate, updateWaveProgress, resetCombo, registerComboHit, registerComboHits } from './ui/Hud.js';
 import { showScreen, updateVolumeVisibility, initPreview } from './ui/Menu.js';
 import { stars, nebulas, planets, superAsteroids, initParallax, drawParallax, drawSuperArena } from './world/Parallax.js';
 import { DASH } from './Data/Constants.js';
-import { initLayoutEditor, enterEditMode, exitEditMode, isEditorActive } from './ui/LayoutEditor.js';
+import { initLayoutEditor, enterEditMode, exitEditMode, isEditorActive, setEditorExitHandler } from './ui/LayoutEditor.js';
 import { portals, spawnPortal, clearPortals, updatePortals, drawPortals } from './entities/Portal.js';
 import { superBossState, spawnSuperBoss, clearSuperBoss, updateSuperBoss, drawSuperBoss, canDamageSuperBoss, damageSuperBoss, damageCannon, damageGate, hasSuperModifierActive, grantSuperModifier, clearSuperModifier } from './entities/SuperBoss.js';
 
@@ -119,6 +119,7 @@ function cleanupAllBossTimers() { bosses.forEach(cleanupBossTimers); }
 
 function exitToMenu() {
     gameState = 'MENU';
+    cancelWaveTransition();
     setHudVisible(false);
     const mu = document.getElementById('mobile-ui'); if (mu) mu.style.display = 'none';
     cleanupAllBossTimers();
@@ -148,6 +149,9 @@ function winGame() {
 }
 
 // --- Init layout editor (HUD / controles editables) ---
+// Al cerrar el editor restauramos el menú de pausa para no dejar el juego
+// en estado PAUSED sin ninguna pantalla activa.
+setEditorExitHandler(() => { showScreen('menu-pause'); updateVolumeVisibility(); });
 initLayoutEditor();
 
 // --- Input listeners ---
@@ -249,7 +253,7 @@ function startMission(mode){
     combatState.damagePerHit = parseInt(document.getElementById('opt-damage')?.value) || 20;
     combatState.health=100; combatState.hasRevive=false; combatState.bombs=3;
     fxState.screenShake=0; parryTimer=0; parryCooldown=false;
-    progression.waveKills=0; progression.waveTransition=false; progression.waveTransitionTimer=0;
+    progression.waveKills=0; cancelWaveTransition();
     progression.waveKillTarget = parseInt(document.getElementById('opt-kills')?.value) || 50;
     dashActive=false; dashCooldown=false;
     resetCombo();
@@ -447,25 +451,47 @@ function update(){
     if(input.bomb) triggerBomb(true,nave);
     if(weaponState.current==='laser' && input.shoot && fxState.frameCount%3===0){
         sfx.laser(); const ang=Math.atan2(input.aimY-nave.y,input.aimX-nave.x); const cos=Math.cos(ang),sin=Math.sin(ang);
-        // Laser daña a Super Boss incluso con escudo (atraviesa) y a todo lo que conlleva
+        // El láser respeta las fases del Super Boss (igual que las balas):
+        // fase 1 → cañones, fase 2 → compuerta, fase 3 → Nodriza solo sin escudo.
         if (superBossState.active && !superBossState.destroyed) {
             const sb = superBossState;
-            // Cañones
-            sb.cannons.forEach((c, idx)=>{
-                if(!c.alive) return;
-                const dx=c.x-nave.x, dy=c.y-nave.y;
-                const proj=dx*cos+dy*sin; const perp=Math.abs(dx*sin - dy*cos);
-                if(proj>0 && perp<20){ c.hp -= 90; if(c.hp<=0){c.hp=0; c.alive=false; createExplosion(c.x,c.y,'#00ff66',12); spawnDebris(c.x,c.y,'#ff5555',2);} createExplosion(c.x,c.y,'#00ccff',2); }
-            });
-            // Compuerta
-            if(sb.gate){
-                const g=sb.gate; const dx=g.x-nave.x, dy=g.y-nave.y; const proj=dx*cos+dy*sin; const perp=Math.abs(dx*sin - dy*cos);
-                if(proj>0 && perp < 24 && Math.abs(g.x - (nave.x + cos*proj)) < g.w/2) { g.hp -= 90; if(g.hp<0) g.hp=0; createExplosion(g.x,g.y,'#ff9900',3); }
-            }
-            // Nodriza directo (atraviesa escudo)
-            {
-                const dx=sb.x-nave.x, dy=sb.y-nave.y; const proj=dx*cos+dy*sin; const perp=Math.abs(dx*sin - dy*cos);
-                if(proj>0 && perp < sb.h/2 + 12 && Math.abs(sb.x - (nave.x + cos*proj)) < sb.w/2) { sb.hp -= 90; if(sb.hp<0) sb.hp=0; createExplosion(sb.x + (Math.random()-0.5)*sb.w*0.6, sb.y, '#00ff66', 3); }
+            const beamHits = (tx, ty, radius, halfW = Infinity) => {
+                const dx = tx - nave.x, dy = ty - nave.y;
+                const proj = dx * cos + dy * sin;
+                const perp = Math.abs(dx * sin - dy * cos);
+                return proj > 0 && perp < radius && Math.abs(tx - (nave.x + cos * proj)) <= halfW;
+            };
+            if (sb.phase === 1) {
+                // Cañones: el escudo de la Nodriza no los protege
+                sb.cannons.forEach((c, idx) => {
+                    if (!c.alive || !beamHits(c.x, c.y, 20)) return;
+                    const killed = damageCannon(idx, 90);
+                    createExplosion(c.x, c.y, '#00ccff', 2);
+                    if (killed) {
+                        createExplosion(c.x, c.y, '#ff6600', 18);
+                        spawnDebris(c.x, c.y, '#ff6600', 4);
+                        fxState.screenShake = 8;
+                        floatingTexts.push({ x: c.x, y: c.y - 24, text: '¡CAÑÓN DESTRUIDO!', life: 1.2, color: '#ff9900' });
+                    }
+                });
+            } else if (sb.phase === 2 && sb.gate) {
+                // Solo la compuerta recibe daño
+                const g = sb.gate;
+                const dx = g.x - nave.x, dy = g.y - nave.y;
+                const proj = dx * cos + dy * sin;
+                const perp = Math.abs(dx * sin - dy * cos);
+                if (proj > 0 && perp < 24 && Math.abs(g.x - (nave.x + cos * proj)) < g.w / 2) {
+                    damageGate(90);
+                    createExplosion(g.x, g.y, '#ff9900', 3);
+                }
+            } else if (sb.phase === 3 && beamHits(sb.x, sb.y, sb.h / 2 + 12, sb.w / 2)) {
+                if (canDamageSuperBoss()) {
+                    damageSuperBoss(90);
+                    createExplosion(sb.x + (Math.random() - 0.5) * sb.w * 0.6, sb.y, '#00ff66', 3);
+                } else {
+                    // Escudo activo: absorbe el láser, sin daño
+                    createExplosion(sb.x + (Math.random() - 0.5) * sb.w * 0.6, sb.y, '#1e90ff', 2);
+                }
             }
         }
         enemies.forEach((e,ei)=>{ const dx=e.x-nave.x,dy=e.y-nave.y; const proj=dx*cos+dy*sin; const perpDist=Math.abs(dx*sin-dy*cos); if(proj>0 && perpDist<18){ if(e.shield){e.shield=false;} else { createExplosion(e.x,e.y); if(e.type==='elite'||e.type==='special') spawnDebris(e.x,e.y,'#00ccff'); enemies.splice(ei,1); if(e.type!=='life'){ const combo=registerComboHit(); const pts=combo.pts; floatingTexts.push({x:e.x,y:e.y,text:combo.multiplier>1?`+${pts} x${combo.multiplier}!`:`+${pts}`,life:1.0,color:combo.multiplier>=3?'#ff3366':combo.multiplier===2?'#ffcc00':'#00ccff'}); if(gameMode==='progressive'){progression.waveKills++; updateWaveProgress({gameMode:{value:gameMode},progression,bosses});} if(e.type==='elite'&&Math.random()>0.4){ const letters=['S','L','R','D']; const wt=letters[Math.floor(Math.random()*4)]; weaponPowerUps.push({x:e.x,y:e.y,letter:wt,vy:1.5,life:600}); } } else { combatState.health=Math.min(100, combatState.health+combatState.damagePerHit); syncHud(); floatingTexts.push({x:e.x,y:e.y,text:`+${combatState.damagePerHit}% VIDA`,life:1.0,color:'#ff66cc'}); } } } });
