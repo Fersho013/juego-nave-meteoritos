@@ -1,11 +1,13 @@
 // js/system/Effects.js — Partículas (pool reciclado), debris, textos flotantes, screenShake, hitStop
 
 import { getGlowSprite } from './Sprites.js';
+import { getBlastSheet, drawBlastFrame, BLAST_FRAMES, BLAST_LIFE } from './Atlas.js';
 
 export const particles = [];
 export const debrisChunks = [];
 export const floatingTexts = [];
 export const shipTrail = [];
+export const blasts = [];
 
 export const fxState = { screenShake: 0, hitStopFrames: 0, frameCount: 0 };
 
@@ -105,8 +107,47 @@ export function drawParticles(ctx) {
     ctx.restore();
 }
 
+// Explosiones grandes: un fotograma de hoja + menos chispas.
+// 1 drawImage del atlas sustituye a ~2/3 de las partículas de la explosión.
+const MAX_BLASTS = 28;
+
+export function spawnBlast(x, y, color, scale = 1) {
+    if (blasts.length >= MAX_BLASTS) blasts.shift();
+    blasts.push({ x, y, color: color || '#ff5500', scale, age: 0, sheet: getBlastSheet(color || '#ff5500') });
+}
+
+export function updateBlasts() {
+    for (let i = blasts.length - 1; i >= 0; i--) {
+        const b = blasts[i];
+        b.age++;
+        if (b.age >= BLAST_LIFE) {
+            const last = blasts.length - 1;
+            if (i !== last) blasts[i] = blasts[last];
+            blasts.pop();
+        }
+    }
+}
+
+export function drawBlasts(ctx) {
+    for (let i = 0; i < blasts.length; i++) {
+        const b = blasts[i];
+        const frame = Math.min(BLAST_FRAMES - 1, (b.age * BLAST_FRAMES / BLAST_LIFE) | 0);
+        const alpha = 1 - b.age / BLAST_LIFE;
+        drawBlastFrame(ctx, b.sheet, frame, b.x, b.y, b.scale, alpha);
+    }
+}
+
+export function clearBlasts() {
+    blasts.length = 0;
+}
+
 export function createExplosion(x, y, color, count = 12) {
     const c = color || '#ff5500';
+    // Explosión grande → hoja de animación + chispas reducidas.
+    if (count >= 10) {
+        spawnBlast(x, y, c, count >= 40 ? 1.9 : 1);
+        count = Math.max(3, Math.round(count * 0.35));
+    }
     const n = Math.min(count, budget - particles.length);
     for (let i = 0; i < n; i++) {
         const a = Math.random() * Math.PI * 2;

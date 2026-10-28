@@ -71,30 +71,36 @@ export function initParallax(canvas) {
     planets.forEach(p => { p.sprite = makeGlowSprite(p.r, p.color); });
 }
 
-// Gradientes de la arena: dependen solo del tamaño del canvas.
+// Fondo de la arena pre-renderizado: antes se pintaba un degradado lineal a
+// pantalla completa + un radial gigante en cada frame. Ahora es un drawImage.
 let arenaKey = '';
-let arenaBg = null;
-let arenaGlow = null;
-function ensureArenaGradients(ctx, canvas) {
+let arenaCanvas = null;
+function ensureArenaBg(canvas) {
     const key = canvas.width + 'x' + canvas.height;
-    if (key === arenaKey) return;
+    if (key === arenaKey) return arenaCanvas;
     arenaKey = key;
-    arenaBg = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    arenaBg.addColorStop(0, '#2a0a0a');
-    arenaBg.addColorStop(0.45, '#4a1018');
-    arenaBg.addColorStop(1, '#0a0a1a');
-    arenaGlow = ctx.createRadialGradient(canvas.width * 0.5, canvas.height * 0.35, 0, canvas.width * 0.5, canvas.height * 0.35, canvas.width * 0.7);
-    arenaGlow.addColorStop(0, 'rgba(255,60,40,0.55)');
-    arenaGlow.addColorStop(1, 'transparent');
+    const w = canvas.width, h = canvas.height;
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const g = c.getContext('2d');
+    const bg = g.createLinearGradient(0, 0, 0, h);
+    bg.addColorStop(0, '#2a0a0a');
+    bg.addColorStop(0.45, '#4a1018');
+    bg.addColorStop(1, '#0a0a1a');
+    g.fillStyle = bg; g.fillRect(0, 0, w, h);
+    g.globalAlpha = 0.22;
+    const glow = g.createRadialGradient(w * 0.5, h * 0.35, 0, w * 0.5, h * 0.35, w * 0.7);
+    glow.addColorStop(0, 'rgba(255,60,40,0.55)');
+    glow.addColorStop(1, 'transparent');
+    g.fillStyle = glow;
+    g.beginPath(); g.arc(w * 0.5, h * 0.35, w * 0.7, 0, Math.PI * 2); g.fill();
+    g.globalAlpha = 1;
+    arenaCanvas = c;
+    return c;
 }
 
 export function drawSuperArena(ctx, canvas, gameState) {
-    ensureArenaGradients(ctx, canvas);
-    ctx.fillStyle = arenaBg; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.globalAlpha = 0.22;
-    ctx.fillStyle = arenaGlow;
-    ctx.beginPath(); ctx.arc(canvas.width * 0.5, canvas.height * 0.35, canvas.width * 0.7, 0, Math.PI * 2); ctx.fill();
-    ctx.globalAlpha = 1;
+    ctx.drawImage(ensureArenaBg(canvas), 0, 0);
 
     // Estilo constante: se fija una vez, no por asteroide.
     ctx.fillStyle = '#3a6ea5'; ctx.strokeStyle = '#6ec8ff'; ctx.lineWidth = 1.2;

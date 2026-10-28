@@ -9,7 +9,7 @@ const MAX_CACHE = 120;
 
 // Convierte '#rgb' / '#rrggbb' a rgba() con el alfa indicado.
 // Si el color no es hex (hsl, rgba, nombre) se devuelve tal cual.
-function rgba(color, a) {
+export function rgba(color, a) {
     if (typeof color === 'string' && color.charCodeAt(0) === 35 /* # */) {
         let h = color.slice(1);
         if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];

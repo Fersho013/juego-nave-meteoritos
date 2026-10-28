@@ -17,6 +17,9 @@ const pushParticle = EffectsNS.pushParticle || ((p) => { if (particles.length < 
 const setParticleBudget = EffectsNS.setParticleBudget || (() => {});
 const getParticleBudget = EffectsNS.getParticleBudget || (() => MAX_PARTICLES);
 const clearParticles = EffectsNS.clearParticles || (() => { particles.length = 0; });
+const updateBlasts = EffectsNS.updateBlasts || (() => {});
+const drawBlasts = EffectsNS.drawBlasts || (() => {});
+const clearBlasts = EffectsNS.clearBlasts || (() => {});
 const updateParticles = EffectsNS.updateParticles || (() => {
     for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
@@ -55,19 +58,38 @@ const ctx = canvas.getContext('2d', { alpha: false });
 const dist2 = (x1, y1, x2, y2) => { const dx = x1 - x2, dy = y1 - y2; return Math.sqrt(dx * dx + dy * dy); };
 const len2 = (x, y) => Math.sqrt(x * x + y * y);
 
-// Viñetas: el gradiente solo depende del tamaño del canvas, así que se cachea
-// y el pulso se aplica con globalAlpha (antes se creaba uno nuevo por frame).
+// Viñetas pre-renderizadas a un canvas: antes se rellenaba la pantalla con un
+// degradado radial cada frame; ahora es un drawImage con globalAlpha.
 let vignetteKey = '', dangerVignette = null, immuneVignette = null;
+// Degradado del rótulo de oleada: también cacheado (se creaba cada frame).
+let waveGradKey = '', waveGrad = null;
+function waveGradient() {
+    const key = canvas.width + 'x' + canvas.height;
+    if (key === waveGradKey) return waveGrad;
+    waveGradKey = key;
+    waveGrad = ctx.createLinearGradient(canvas.width/2-200, 0, canvas.width/2+200, 0);
+    waveGrad.addColorStop(0, '#ff3366');
+    waveGrad.addColorStop(0.5, '#fff');
+    waveGrad.addColorStop(1, '#1e90ff');
+    return waveGrad;
+}
+function makeVignette(w, h, r0, r1, color) {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const g = c.getContext('2d');
+    const grad = g.createRadialGradient(w/2, h/2, h*r0, w/2, h/2, h*r1);
+    grad.addColorStop(0, 'rgba(255,0,0,0)');
+    grad.addColorStop(1, color);
+    g.fillStyle = grad;
+    g.fillRect(0, 0, w, h);
+    return c;
+}
 function ensureVignettes() {
     const key = canvas.width + 'x' + canvas.height;
     if (key === vignetteKey) return;
     vignetteKey = key;
-    dangerVignette = ctx.createRadialGradient(canvas.width/2, canvas.height/2, canvas.height*0.32, canvas.width/2, canvas.height/2, canvas.height*0.78);
-    dangerVignette.addColorStop(0, 'rgba(255,0,0,0)');
-    dangerVignette.addColorStop(1, 'rgba(255,0,30,1)');
-    immuneVignette = ctx.createRadialGradient(canvas.width/2, canvas.height/2, canvas.height*0.3, canvas.width/2, canvas.height/2, canvas.height*0.85);
-    immuneVignette.addColorStop(0, 'rgba(255,0,0,0)');
-    immuneVignette.addColorStop(1, 'rgba(255,0,0,1)');
+    dangerVignette = makeVignette(canvas.width, canvas.height, 0.32, 0.78, 'rgba(255,0,30,1)');
+    immuneVignette = makeVignette(canvas.width, canvas.height, 0.3, 0.85, 'rgba(255,0,0,1)');
 }
 
 // Exponer para ui/Menu que consulta estado global
@@ -351,7 +373,7 @@ function startMission(mode){
     resetCombo();
     weaponState.current='normal'; weaponState.timer=0; weaponPowerUps.length=0; debrisChunks.length=0; fxState.hitStopFrames=0;
     homingState.active=false; homingState.timer=0; droneState.drones.length=0; droneState.timer=0; shipTrail.length=0;
-    bullets.length=0; enemyBullets.length=0; enemies.length=0; cleanupAllBossTimers(); bosses.length=0; pickUps.length=0; clearParticles(); floatingTexts.length=0;
+    bullets.length=0; enemyBullets.length=0; enemies.length=0; cleanupAllBossTimers(); bosses.length=0; pickUps.length=0; clearParticles(); clearBlasts(); floatingTexts.length=0;
     clearPortals(); clearSuperBoss(); clearSuperModifier();
     // Estado del jugador que antes se arrastraba entre partidas.
     nave.inmune=false; parryActive=false; parryCooldown=false; parryTimer=0;
@@ -490,6 +512,7 @@ function update(){
     if(fxState.hitStopFrames>0){ fxState.hitStopFrames--; return; }
     fxState.frameCount++; 
     updateParticles();
+    updateBlasts();
     // Portal azul: actualizar y detectar entrada a arena Super Boss
     updatePortals({ nave, onEnter: () => {
         // Teleport a arena azul/roja con nodriza
@@ -839,12 +862,13 @@ function draw(currentTime){
             if(parryCooldown && parryTimer>0){ let ratio=1-(parryTimer/2000); ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(nave.x-20,nave.y+25,40,4); ctx.fillStyle='#00ffcc'; ctx.fillRect(nave.x-20,nave.y+25,40*ratio,4); }
         }
         ctx.strokeStyle='rgba(255,0,0,0.5)'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(input.aimX,input.aimY,10,0,Math.PI*2); ctx.moveTo(input.aimX-15,input.aimY); ctx.lineTo(input.aimX+15,input.aimY); ctx.moveTo(input.aimX,input.aimY-15); ctx.lineTo(input.aimX,input.aimY+15); ctx.stroke();
-        // Partículas: anillos + chispas con sprite aditivo (sin shadowBlur).
+        // Explosiones (hoja de animación) + partículas (anillos y chispas).
+        drawBlasts(ctx);
         drawParticles(ctx); ctx.globalAlpha=1;
         floatingTexts.forEach(ft=>{ ctx.globalAlpha=Math.max(0,ft.life); ctx.fillStyle=ft.color; ctx.font="bold 16px Orbitron"; ctx.fillText(ft.text,ft.x-25,ft.y-15); }); ctx.globalAlpha=1;
-        if(combatState.health>0 && combatState.health<=combatState.damagePerHit && gameState==='PLAYING'){ ensureVignettes(); const pulse=0.32+Math.sin(fxState.frameCount*0.12)*0.18; ctx.globalAlpha=pulse; ctx.fillStyle=dangerVignette; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.globalAlpha=1; for(let s=0;s<22;s++){const sx=Math.random()*canvas.width,sy=Math.random()*canvas.height; ctx.globalAlpha=Math.random()*0.35; ctx.fillStyle=Math.random()>0.5?'#ffffff':'#ff2222'; ctx.fillRect(sx,sy,Math.random()*2+1,Math.random()*2+1);} ctx.globalAlpha=1; }
-        if(progression.waveTransition && progression.waveTransitionMsg){ const progress=1-(progression.waveTransitionTimer/150); const alpha=progress<0.2?progress/0.2:progress>0.8?(1-progress)/0.2:1; ctx.globalAlpha=alpha*0.85; ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.globalAlpha=alpha; ctx.textAlign='center'; ctx.font='bold 14px Orbitron'; ctx.fillStyle='#666'; ctx.fillText('— PREPARATE —',canvas.width/2,canvas.height/2-50); ctx.font='bold 40px Orbitron'; const grad=ctx.createLinearGradient(canvas.width/2-200,0,canvas.width/2+200,0); grad.addColorStop(0,'#ff3366'); grad.addColorStop(0.5,'#fff'); grad.addColorStop(1,'#1e90ff'); ctx.fillStyle=grad; ctx.shadowBlur=20; ctx.shadowColor='#fff'; ctx.fillText(progression.waveTransitionMsg,canvas.width/2,canvas.height/2+10); ctx.shadowBlur=0; ctx.font='13px Orbitron'; ctx.fillStyle='#aaa'; const waveLabel=['SECTOR 1','BOSS 1','SECTOR 2','BOSS 2','SECTOR 3','BOSS 3','SECTOR 4','JEFE FINAL','FIN'][progression.wavePhase-1]||''; ctx.fillText(`SIGUIENTE: ${waveLabel}`,canvas.width/2,canvas.height/2+55); ctx.globalAlpha=1; ctx.textAlign='left'; if(progression.waveTransitionTimer>0) progression.waveTransitionTimer--; }
-        if(nave.inmune && !dashActive){ ensureVignettes(); const pulse=Math.abs(Math.sin(fxState.frameCount*0.18)); ctx.globalAlpha=0.35*pulse; ctx.fillStyle=immuneVignette; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.globalAlpha=1; }
+        if(combatState.health>0 && combatState.health<=combatState.damagePerHit && gameState==='PLAYING'){ ensureVignettes(); const pulse=0.32+Math.sin(fxState.frameCount*0.12)*0.18; ctx.globalAlpha=pulse; ctx.drawImage(dangerVignette,0,0); ctx.globalAlpha=1; for(let s=0;s<22;s++){const sx=Math.random()*canvas.width,sy=Math.random()*canvas.height; ctx.globalAlpha=Math.random()*0.35; ctx.fillStyle=Math.random()>0.5?'#ffffff':'#ff2222'; ctx.fillRect(sx,sy,Math.random()*2+1,Math.random()*2+1);} ctx.globalAlpha=1; }
+        if(progression.waveTransition && progression.waveTransitionMsg){ const progress=1-(progression.waveTransitionTimer/150); const alpha=progress<0.2?progress/0.2:progress>0.8?(1-progress)/0.2:1; ctx.globalAlpha=alpha*0.85; ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.globalAlpha=alpha; ctx.textAlign='center'; ctx.font='bold 14px Orbitron'; ctx.fillStyle='#666'; ctx.fillText('— PREPARATE —',canvas.width/2,canvas.height/2-50); ctx.font='bold 40px Orbitron'; ctx.fillStyle=waveGradient(); ctx.shadowBlur=20; ctx.shadowColor='#fff'; ctx.fillText(progression.waveTransitionMsg,canvas.width/2,canvas.height/2+10); ctx.shadowBlur=0; ctx.font='13px Orbitron'; ctx.fillStyle='#aaa'; const waveLabel=['SECTOR 1','BOSS 1','SECTOR 2','BOSS 2','SECTOR 3','BOSS 3','SECTOR 4','JEFE FINAL','FIN'][progression.wavePhase-1]||''; ctx.fillText(`SIGUIENTE: ${waveLabel}`,canvas.width/2,canvas.height/2+55); ctx.globalAlpha=1; ctx.textAlign='left'; if(progression.waveTransitionTimer>0) progression.waveTransitionTimer--; }
+        if(nave.inmune && !dashActive){ ensureVignettes(); const pulse=Math.abs(Math.sin(fxState.frameCount*0.18)); ctx.globalAlpha=0.35*pulse; ctx.drawImage(immuneVignette,0,0); ctx.globalAlpha=1; }
     }
     ctx.restore(); update();
     adaptParticleBudget(deltaTime, performance.now()-workStart);
