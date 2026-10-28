@@ -43,6 +43,15 @@ import { drawGlow } from './system/Sprites.js';
 import { combatState, dropRevivePickup, playerHit as combatPlayerHit, triggerBomb as combatTriggerBomb, triggerRevive } from './system/Combat.js';
 import { progression, checkProgression, cancelWaveTransition } from './system/Progression.js';
 import { hudState, updateHUD as hudUpdate, updateWaveProgress, resetCombo, registerComboHit, registerComboHits } from './ui/Hud.js';
+// Namespace + fallback: si GitHub Pages sirve un Hud.js antiguo (sin
+// resetWaveProgressUI) el juego sigue arrancando igual.
+import * as HudNS from './ui/Hud.js';
+const resetWaveProgressUI = HudNS.resetWaveProgressUI || (() => {
+    const wp = document.getElementById('wave-progress');
+    if (wp) { wp.style.display = 'none'; wp.innerHTML = ''; }
+    const ba = document.getElementById('bomb-alert');
+    if (ba) { ba.style.display = 'none'; ba.textContent = ''; }
+});
 // Namespace + fallback: si GitHub Pages sirve un Menu.js antiguo (sin
 // refreshPreview) el juego sigue arrancando igual.
 import * as MenuNS from './ui/Menu.js';
@@ -115,6 +124,20 @@ let mouseShootHeld = false, mouseTripleHeld = false;
 // Botones one-shot del mando: solo se liberan si los activó el propio mando.
 let padBombHeld = false, padParryHeld = false, padDashHeld = false;
 
+// Inmunidad con token: un timer viejo (2 s) no debe anular una inmunidad más
+// larga (revive/continue = 3 s). El token vive en `nave` para compartirlo con
+// Combat.js sin exportar nada nuevo (tolera caché mixta de GitHub Pages).
+function grantImmunity(ms) {
+    const token = (nave.__immToken || 0) + 1;
+    nave.__immToken = token;
+    nave.inmune = true;
+    setTimeout(() => { if (nave.__immToken === token) nave.inmune = false; }, ms);
+}
+function clearImmunity() {
+    nave.__immToken = (nave.__immToken || 0) + 1;
+    nave.inmune = false;
+}
+
 // Compat wrappers para que Menu pueda consultar visibilidad
 window.toggleVolume = toggleVolume;
 window.changeNaveColor = (c) => { changeColor(c); refreshPreview(); };
@@ -152,27 +175,43 @@ function refreshVolumeVisibility() { updateVolumeVisibility(); }
 
 // --- applyOptions con platform awareness ---
 function applyOptions() {
-    const sizeVal = document.getElementById('opt-size')?.value || '800x600';
-    if (sizeVal === 'auto' || platform.isForcedMobile) {
-        config.w = window.innerWidth; config.h = window.innerHeight;
-    } else {
-        const [w, h] = sizeVal.split('x').map(Number);
-        config.w = w; config.h = h;
-    }
-    canvas.width = config.w; canvas.height = config.h;
-    const container = document.getElementById('game-container');
-    if (container) { container.style.width = config.w + 'px'; container.style.height = config.h + 'px'; }
-
+    // Primero el modo (móvil/PC): de él depende el tamaño.
     const touchOpt = document.getElementById('opt-touch')?.value;
     if (touchOpt === 'force') platform.isMobile = true;
     else if (touchOpt === 'hide') platform.isMobile = false;
     else if (!platform.isForcedMobile) platform.isMobile = /Mobi|Android/i.test(navigator.userAgent);
 
+    const sizeVal = document.getElementById('opt-size')?.value || '800x600';
+    let w, h;
+    if (sizeVal === 'auto' || platform.isForcedMobile || platform.isMobile) {
+        w = window.innerWidth; h = window.innerHeight;
+    } else {
+        [w, h] = sizeVal.split('x').map(Number);
+        // Si la resolución elegida no cabe en la ventana, se recortaría el
+        // canvas y se perderían la nave y los joysticks: usar el área visible.
+        if (w > window.innerWidth || h > window.innerHeight) { w = window.innerWidth; h = window.innerHeight; }
+    }
+    config.w = w; config.h = h;
+    const prevW = canvas.width, prevH = canvas.height;
+    canvas.width = config.w; canvas.height = config.h;
+    const container = document.getElementById('game-container');
+    if (container) { container.style.width = config.w + 'px'; container.style.height = config.h + 'px'; }
+    if (prevW && prevH && (prevW !== canvas.width || prevH !== canvas.height)) rescaleBackground(prevW, prevH);
+
     nave.x = canvas.width / 2; nave.y = canvas.height - 100;
     showScreen('menu-main');
 }
 
-bindResize(config, canvas, nave, () => gameState);
+// Reajusta las estrellas al nuevo tamaño del canvas. Sin esto, al cambiar de
+// resolución (o girar el móvil) el fondo solo cubriría el tamaño antiguo.
+function rescaleBackground(prevW, prevH) {
+    if (!prevW || !prevH) return;
+    const sx = canvas.width / prevW, sy = canvas.height / prevH;
+    if (sx === 1 && sy === 1) return;
+    stars.forEach(s => { s.x *= sx; s.y *= sy; });
+}
+
+bindResize(config, canvas, nave, () => gameState, (prevW, prevH) => rescaleBackground(prevW, prevH));
 
 function showScreenWrapper(id) { showScreen(id); }
 function togglePause() {
@@ -220,8 +259,9 @@ function promptContinue() {
 function acceptContinue() {
     initAudio(); combatState.health = 100; gameState = 'PLAYING'; showScreen('none');
     setHudVisible(true);
+    renderBossUI();
     if (platform.isMobile && !platform.isTouchUIHidden) { const mu = document.getElementById('mobile-ui'); if (mu) mu.style.display = 'block'; }
-    enemyBullets.length = 0; nave.inmune = true; setTimeout(() => nave.inmune = false, 3000); syncHud(true);
+    enemyBullets.length = 0; grantImmunity(3000); syncHud(true);
 }
 function winGame() {
     gameState = 'WIN';
@@ -237,7 +277,14 @@ setEditorExitHandler(() => { showScreen('menu-pause'); updateVolumeVisibility();
 initLayoutEditor();
 
 // --- Input listeners ---
-window.addEventListener('keydown', e => { if (e.code === 'Escape' && isEditorActive()) { exitEditMode(true); showScreen('menu-pause'); updateVolumeVisibility(); return; } keys[e.code] = true; if (e.code === 'KeyP') { togglePause(); keys[e.code] = false; } });
+window.addEventListener('keydown', e => {
+    // e.repeat: mantener Espacio gastaba todas las bombas y mantener P
+    // alternaba pausa sin parar. La primera pulsación ya fija keys[code].
+    if (e.repeat) return;
+    if (e.code === 'Escape' && isEditorActive()) { exitEditMode(true); showScreen('menu-pause'); updateVolumeVisibility(); return; }
+    keys[e.code] = true;
+    if (e.code === 'KeyP') { togglePause(); keys[e.code] = false; }
+});
 window.addEventListener('keyup', e => keys[e.code] = false);
 canvas.addEventListener('mousemove', e => { if (isEditorActive()) return; const rect = canvas.getBoundingClientRect(); input.aimX = e.clientX - rect.left; input.aimY = e.clientY - rect.top; setUsingGamepad(false); });
 canvas.addEventListener('mousedown', e => { if (isEditorActive()) return; initAudio(); if (e.button === 0) { mouseShootHeld = true; input.shoot = true; } if (e.button === 2) { mouseTripleHeld = true; input.triple = true; } });
@@ -271,7 +318,7 @@ function setupJoystick(baseId, stickId, type) {
         for (let t of e.changedTouches) if (t.identifier === touchId) {
             touchId = null; stick.style.transform = `translate(-50%, -50%)`;
             if (type === 'left') setTouchMove(0, 0);
-            if (type === 'right') { setRightJoyActive(false); input.shoot = false; }
+            if (type === 'right') { setRightJoyActive(false); input.shoot = false; platform.rightJoyX = 0; platform.rightJoyY = 0; }
             break;
         }
     };
@@ -284,8 +331,10 @@ function setupJoystick(baseId, stickId, type) {
         stick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
         if (type === 'left') setTouchMove(dx / maxDist, dy / maxDist);
         else if (type === 'right') {
-            if (dist > 5) { input.aimX = nave.x + (dx / maxDist) * 300; input.aimY = nave.y + (dy / maxDist) * 300; input.shoot = true; }
-            else input.shoot = false;
+            // Guardamos la DIRECCIÓN, no el punto del mundo: si se fijara en
+            // coordenadas absolutas, al mover la nave el disparo giraría solo.
+            if (dist > 5) { platform.rightJoyX = dx / maxDist; platform.rightJoyY = dy / maxDist; input.shoot = true; }
+            else { platform.rightJoyX = 0; platform.rightJoyY = 0; input.shoot = false; }
         }
     }
 }
@@ -303,6 +352,11 @@ function pollInput() {
     if (isEditorActive()) return;
     if (gameState === 'MENU' || gameState === 'CONTINUE' || gameState === 'WIN') return;
     input.moveX = platform.touchMoveX; input.moveY = platform.touchMoveY;
+    // El joystick derecho apunta relativo a la nave: se recalcula cada frame.
+    if (platform.rightJoyActive) {
+        input.aimX = nave.x + (platform.rightJoyX || 0) * 300;
+        input.aimY = nave.y + (platform.rightJoyY || 0) * 300;
+    }
     if (keys['KeyW']) input.moveY = -1; if (keys['KeyS']) input.moveY = 1;
     if (keys['KeyA']) input.moveX = -1; if (keys['KeyD']) input.moveX = 1;
     if (keys['Space']) { input.bomb = true; keys['Space']=false; } else if(!platform.isMobile) input.bomb=false;
@@ -374,15 +428,18 @@ function startMission(mode){
     combatState.health=100; combatState.hasRevive=false; combatState.bombs=3;
     fxState.screenShake=0; parryTimer=0; parryCooldown=false;
     progression.waveKills=0; cancelWaveTransition();
+    // Al reiniciar (o al pasar de progresivo a custom/solo_boss) no deben quedar
+    // el contador de oleada ni el aviso de bomba con datos de la partida anterior.
+    resetWaveProgressUI();
     progression.waveKillTarget = parseInt(document.getElementById('opt-kills')?.value) || 50;
     dashActive=false; dashCooldown=false;
     resetCombo();
     weaponState.current='normal'; weaponState.timer=0; weaponPowerUps.length=0; debrisChunks.length=0; fxState.hitStopFrames=0;
     homingState.active=false; homingState.timer=0; droneState.drones.length=0; droneState.timer=0; shipTrail.length=0;
-    bullets.length=0; enemyBullets.length=0; enemies.length=0; cleanupAllBossTimers(); bosses.length=0; pickUps.length=0; clearParticles(); clearBlasts(); floatingTexts.length=0;
+    bullets.length=0; enemyBullets.length=0; enemies.length=0; cleanupAllBossTimers(); bosses.length=0; renderBossUI(); pickUps.length=0; clearParticles(); clearBlasts(); floatingTexts.length=0;
     clearPortals(); clearSuperBoss(); clearSuperModifier();
     // Estado del jugador que antes se arrastraba entre partidas.
-    nave.inmune=false; parryActive=false; parryCooldown=false; parryTimer=0;
+    clearImmunity(); parryActive=false; parryCooldown=false; parryTimer=0;
     input.shoot=false; input.triple=false; input.bomb=false; input.parry=false; input.dash=false;
     mouseShootHeld=false; mouseTripleHeld=false;
     nave.x=canvas.width/2; nave.y=canvas.height-100; nave.vx=0; nave.vy=0;
@@ -390,13 +447,17 @@ function startMission(mode){
     setHudVisible(true);
     const mu=document.getElementById('mobile-ui'); if(mu) mu.style.display=(platform.isMobile && !platform.isTouchUIHidden)?'block':'none';
     if(mode==='custom'){
+        // b1/b2/b3 comparten jefes: sin deduplicar, elegir "b1" + "b3" creaba
+        // dos B1 superpuestos y dos barras #hp-B1 (la segunda nunca se actualizaba).
+        const madeBosses = new Set();
+        const addBoss = (type, id) => { if (madeBosses.has(id)) return; madeBosses.add(id); createBoss({ canvas, type, id }); };
         customSelection.forEach(val=>{
-            if(val==='b1') createBoss({canvas, type:'static', id:'B1'});
-            if(val==='b2') createBoss({canvas, type:'moving', id:'B2'});
-            if(val==='b3'){ createBoss({canvas, type:'static', id:'B1'}); createBoss({canvas, type:'moving', id:'B2'}); }
-            if(val==='b_hunter') createBoss({canvas, type:'hunter', id:'B_HUNTER'});
-            if(val==='b_berserker') createBoss({canvas, type:'berserker', id:'B_BERSERK'});
-            if(val==='b4') createBoss({canvas, type:'doppel', id:'DOPPEL'});
+            if(val==='b1') addBoss('static','B1');
+            if(val==='b2') addBoss('moving','B2');
+            if(val==='b3'){ addBoss('static','B1'); addBoss('moving','B2'); }
+            if(val==='b_hunter') addBoss('hunter','B_HUNTER');
+            if(val==='b_berserker') addBoss('berserker','B_BERSERK');
+            if(val==='b4') addBoss('doppel','DOPPEL');
             if(val==='superboss_direct') { spawnSuperBoss(canvas); floatingTexts.push({x: canvas.width/2, y: canvas.height/2 - 40, text: '★ NODRIZA SUPER BOSS ★', life: 1.8, color: '#6ec8ff'}); }
         });
         if(customSelection.includes('superboss_portal')) {
@@ -470,7 +531,7 @@ function triggerBomb(isPlayer, origin){
             fxState.hitStopFrames = 6;
         }
         // 1% portal azul solo si no hay boss activo ni super boss, en combate normal
-        const canSpawnPortal = bosses.length===0 && !superBossState.active && !superBossState.arena && gameState==='PLAYING';
+        const canSpawnPortal = bosses.length===0 && !superBossState.active && !superBossState.arena && !progression.waveTransition && gameState==='PLAYING';
         // En custom, solo si el usuario habilitó super boss
         const customAllows = gameMode!=='custom' || customSelection.includes('superboss_portal');
         const portalProb = parseInt(document.getElementById('opt-portal')?.value) || 1;
@@ -486,8 +547,11 @@ function doPlayerHit(heavy=false){
     if(nave.inmune) return;
     sfx.hit(); fxState.hitStopFrames = heavy?7:4;
     combatState.health -= heavy? combatState.damagePerHit*2 : combatState.damagePerHit;
-    combatState.health=Math.max(0,combatState.health); fxState.screenShake=heavy?30:15; nave.inmune=true; createExplosion(nave.x,nave.y,'#ff0000', heavy?40:25); syncHud();
-    setTimeout(()=>nave.inmune=false,2000); if(combatState.health<=0){ if(combatState.hasRevive){ triggerRevive({updateHUD:syncHud}); } else promptContinue(); }
+    combatState.health=Math.max(0,combatState.health); fxState.screenShake=heavy?30:15; grantImmunity(2000); createExplosion(nave.x,nave.y,'#ff0000', heavy?40:25); syncHud();
+    // Si el golpe mata, triggerRevive/acceptContinue dan 3 s: el token invalida
+    // el timer de 2 s que se acaba de programar. El grant extra cubre también
+    // el caso de caché mixta (Main nuevo + Combat.js antiguo en Pages).
+    if(combatState.health<=0){ if(combatState.hasRevive){ triggerRevive({updateHUD:syncHud}); grantImmunity(3000); } else promptContinue(); }
 }
 
 // Busca el objetivo más cercano para misiles teledirigidos, incluyendo al Super Boss Nodriza.
@@ -519,8 +583,11 @@ function update(){
     fxState.frameCount++; 
     updateParticles();
     updateBlasts();
-    // Portal azul: actualizar y detectar entrada a arena Super Boss
-    updatePortals({ nave, onEnter: () => {
+    // Portal azul: si mientras estaba activo aparece un jefe o empieza una
+    // transición, se descarta. Si no, se podría entrar y dejar al jefe vivo
+    // disparando dentro de la arena (o apareciendo tras el timeout).
+    if (bosses.length > 0 || progression.waveTransition || superBossState.active) clearPortals();
+    else updatePortals({ nave, onEnter: () => {
         // Teleport a arena azul/roja con nodriza
         enemies.length = 0; enemyBullets.length = 0; portals.length = 0;
         // Pausar oleadas normales mientras dure arena
@@ -630,13 +697,16 @@ function update(){
         for(let bLIdx=bosses.length-1; bLIdx>=0; bLIdx--){ const b=bosses[bLIdx]; if(b.type==='doppel'&&b.parryActive) continue; if(b.immune) continue; const dx=b.x-nave.x,dy=b.y-nave.y; const proj=dx*cos+dy*sin,perp=Math.abs(dx*sin-dy*cos); const lRadius=(b.type==='doppel_y'||b.type==='doppel_o')?30:50; if(proj>0 && perp<lRadius){ b.hp-=100; updateBossHP(b); if(b.hp<=0 && (b.type==='doppel_y'||b.type==='doppel_o')){ const col=b.type==='doppel_y'?'#ffff00':'#ff6600'; createExplosion(b.x,b.y,col,50); spawnDebris(b.x,b.y,col,6); fxState.hitStopFrames=8; fxState.screenShake=20; hudState.score+=8000; floatingTexts.push({x:b.x,y:b.y-50,text:b.type==='doppel_y'?'★ DOPPEL AMARILLO DESTRUIDO ★':'★ DOPPEL NARANJA DESTRUIDO ★',life:2.0,color:col}); cleanupBossTimers(b); bosses.splice(bLIdx,1); renderBossUI(); dropRevivePickup(b.x,b.y); } } }
     }
     if(input.parry && !parryCooldown){ sfx.parry(); parryActive=true; parryCooldown=true; input.parry=false; parryTimer=2000; const el=document.getElementById('val-parry'); if(el){el.innerText="ACTIVE"; el.style.color="var(--success)";} setTimeout(()=>{parryActive=false; const e2=document.getElementById('val-parry'); if(e2){e2.innerText="RECHARGING"; e2.style.color="var(--danger)";}},200); setTimeout(()=>{parryCooldown=false; const e3=document.getElementById('val-parry'); if(e3){e3.innerText="READY"; e3.style.color="var(--success)";}},2000); }
-    if(input.dash && !dashCooldown && !dashActive){ input.dash=false; sfx.dash(); dashActive=true; dashCooldown=true; nave.inmune=true; dashHitSet.clear(); const dx=input.moveX||0,dy=input.moveY||0; const len=len2(dx,dy)||1; nave.vx=(dx/len)*DASH.SPEED; nave.vy=(dy/len)*DASH.SPEED; const el=document.getElementById('val-dash'); if(el){el.innerText="ACTIVE"; el.style.color="#a0c4ff";} for(let i=0;i<12;i++) pushParticle({x:nave.x,y:nave.y,vx:(Math.random()-0.5)*4,vy:(Math.random()-0.5)*4,life:0.9,color:'#a0c4ff',type:'spark'}); setTimeout(()=>{dashActive=false; nave.inmune=false; const e2=document.getElementById('val-dash'); if(e2){e2.innerText="RECHARGING"; e2.style.color="var(--danger)";}},DASH.DURATION); setTimeout(()=>{dashCooldown=false; const e3=document.getElementById('val-dash'); if(e3){e3.innerText="READY"; e3.style.color="var(--success)";}},DASH.COOLDOWN); }
+    if(input.dash && !dashCooldown && !dashActive){ input.dash=false; sfx.dash(); dashActive=true; dashCooldown=true; grantImmunity(DASH.DURATION); dashHitSet.clear(); const dx=input.moveX||0,dy=input.moveY||0; const len=len2(dx,dy)||1; nave.vx=(dx/len)*DASH.SPEED; nave.vy=(dy/len)*DASH.SPEED; const el=document.getElementById('val-dash'); if(el){el.innerText="ACTIVE"; el.style.color="#a0c4ff";} for(let i=0;i<12;i++) pushParticle({x:nave.x,y:nave.y,vx:(Math.random()-0.5)*4,vy:(Math.random()-0.5)*4,life:0.9,color:'#a0c4ff',type:'spark'}); setTimeout(()=>{dashActive=false; const e2=document.getElementById('val-dash'); if(e2){e2.innerText="RECHARGING"; e2.style.color="var(--danger)";}},DASH.DURATION); setTimeout(()=>{dashCooldown=false; const e3=document.getElementById('val-dash'); if(e3){e3.innerText="READY"; e3.style.color="var(--success)";}},DASH.COOLDOWN); }
     if(!superBossState.arena) {
         if(Math.random()<0.02+(progression.currentWave*0.005) && bosses.length===0) spawnEnemy({canvas,bosses,gameMode:{value:gameMode},currentWave:{value:progression.currentWave},waveTransition:{value:progression.waveTransition},customSelection});
         if(bosses.length===0 && !progression.waveTransition && fxState.frameCount%420===0 && gameMode!=='custom'){ const forms=['triangle','square','circle']; spawnFormation({canvas,bosses,formType:forms[Math.floor(Math.random()*forms.length)],waveTransition:{value:progression.waveTransition}}); }
     }
     for(let i=enemies.length-1; i>=0; i--){
         const e=enemies[i];
+        // doPlayerHit() puede llamar a triggerRevive(), que vacía `enemies`:
+        // sin esta guarda el frame aborta con "Cannot read properties of undefined".
+        if(!e) continue;
         if(e.zigzag){ e.zigzagPhase=(e.zigzagPhase||0)+0.05; e.vx=Math.sin(e.zigzagPhase)*3; }
         e.x+=e.vx; e.y+=e.vy;
         if(e.type==='kamikaze'){ const ang=Math.atan2(nave.y-e.y,nave.x-e.x); e.vx+=Math.cos(ang)*0.4; e.vy+=Math.sin(ang)*0.4; const spd=len2(e.vx,e.vy); if(spd>9){e.vx=(e.vx/spd)*9; e.vy=(e.vy/spd)*9; } }
@@ -646,8 +716,11 @@ function update(){
                 fxState.screenShake = 16; fxState.hitStopFrames = 6;
                 // Daño en área
                 if(dist2(e.x,e.y,nave.x,nave.y) < 52) doPlayerHit(true);
-                // limpiar balas cercanas
-                enemyBullets.length = Math.max(0, enemyBullets.length - 4);
+                // limpiar balas cercanas (antes borraba las 4 últimas del array)
+                for (let bi2 = enemyBullets.length - 1; bi2 >= 0; bi2--) {
+                    const nb = enemyBullets[bi2];
+                    if (nb && dist2(nb.x, nb.y, e.x, e.y) < 120) enemyBullets.splice(bi2, 1);
+                }
                 enemies.splice(i,1);
                 continue;
             }
@@ -655,7 +728,7 @@ function update(){
         if(e.type==='elite' && !(e.dodgeCooldown)){ const aimAngle=Math.atan2(input.aimY-nave.y,input.aimX-nave.x); const toEnemy=Math.atan2(e.y-nave.y,e.x-nave.x); const angleDiff=Math.abs(((aimAngle-toEnemy)+Math.PI)%(Math.PI*2)-Math.PI); const dist=dist2(e.x,e.y,nave.x,nave.y); if(angleDiff<0.12 && dist<350 && input.shoot){ e.vx+=(Math.random()>0.5?1:-1)*8; e.dodgeCooldown=true; setTimeout(()=>{if(e) e.dodgeCooldown=false;},1200); } }
         if(e.suicidal){ const ang=Math.atan2(nave.y-e.y,nave.x-e.x); e.vx+=Math.cos(ang)*0.25; e.vy+=Math.sin(ang)*0.25; const spd=len2(e.vx,e.vy); if(spd>6){e.vx=(e.vx/spd)*6; e.vy=(e.vy/spd)*6; } }
         if(e.type==='elite' && fxState.frameCount%70===0){ const angle=Math.atan2(nave.y-e.y,nave.x-e.x); enemyBullets.push({x:e.x,y:e.y,vx:Math.cos(angle)*6,vy:Math.sin(angle)*6,color:'#00ffcc'}); }
-        if(dist2(e.x,e.y,nave.x,nave.y)<20){ if(dashActive && !dashHitSet.has(e)){ dashHitSet.add(e); createExplosion(e.x,e.y,'#a0c4ff',22); spawnDebris(e.x,e.y,'#a0c4ff',3); hudState.score+=100; floatingTexts.push({x:e.x,y:e.y,text:'¡EMBESTIDA! +100',life:1.0,color:'#a0c4ff'}); fxState.hitStopFrames=3; fxState.screenShake=5; } else { doPlayerHit(); } enemies.splice(i,1); }
+        if(dist2(e.x,e.y,nave.x,nave.y)<20){ if(dashActive && !dashHitSet.has(e)){ dashHitSet.add(e); createExplosion(e.x,e.y,'#a0c4ff',22); spawnDebris(e.x,e.y,'#a0c4ff',3); hudState.score+=100; floatingTexts.push({x:e.x,y:e.y,text:'¡EMBESTIDA! +100',life:1.0,color:'#a0c4ff'}); fxState.hitStopFrames=3; fxState.screenShake=5; } else { doPlayerHit(); } enemies.splice(i,1); continue; }
         if(e.y>canvas.height) enemies.splice(i,1);
     }
 
@@ -769,6 +842,8 @@ function update(){
     }
     for(let ei=enemyBullets.length-1; ei>=0; ei--){
         let eb=enemyBullets[ei];
+        // triggerRevive() vacía enemyBullets desde doPlayerHit(): guarda obligatoria.
+        if(!eb) continue;
         if(eb.isMissile){ eb.life=(eb.life||420)-1; if(eb.life<=0){enemyBullets.splice(ei,1); continue;} const mAng=Math.atan2(nave.y-eb.y,nave.x-eb.x); eb.vx+=Math.cos(mAng)*0.35; eb.vy+=Math.sin(mAng)*0.35; const ms=len2(eb.vx,eb.vy); if(ms>10){eb.vx=(eb.vx/ms)*10; eb.vy=(eb.vy/ms)*10; } }
         eb.x+=eb.vx; eb.y+=eb.vy; let destroyed=false;
         if(parryActive && dist2(eb.x,eb.y,nave.x,nave.y)<45){ createExplosion(eb.x,eb.y,'#00ffcc',5); hudState.score+=50; enemyBullets.splice(ei,1); destroyed=true; }
@@ -880,8 +955,12 @@ function draw(currentTime){
     adaptParticleBudget(deltaTime, performance.now()-workStart);
 }
 
+// El canvas HTML nace en 300×150: si se inicializa el parallax antes de
+// applyOptions(), las estrellas quedan medidas para 300×150 y el resto del
+// fondo aparece vacío. Primero se fija el tamaño real y luego se reparte.
+applyOptions();
 initParallax(canvas);
-applyOptions(); updateVolumeVisibility();
+updateVolumeVisibility();
 requestAnimationFrame(draw);
 
 // El juego arrancó correctamente: el diagnóstico de index.html ya no debe avisar.

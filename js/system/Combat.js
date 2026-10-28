@@ -12,6 +12,15 @@ import { registerComboHits } from '../ui/Hud.js';
 
 export const combatState = { health: 100, maxHealth: 100, damagePerHit: 20, bombs: 3, hasRevive: false };
 
+// Mismo token de inmunidad que Main.js (vive en `nave`): un timer de 2 s no
+// debe anular los 3 s de revive/continue. Sin export nuevo (caché mixta).
+function grantImmunity(ms) {
+    const token = (nave.__immToken || 0) + 1;
+    nave.__immToken = token;
+    nave.inmune = true;
+    setTimeout(() => { if (nave.__immToken === token) nave.inmune = false; }, ms);
+}
+
 export function dropRevivePickup(x, y) {
     if (combatState.hasRevive) pickUps.push({ x, y, type: 'bomb' });
     else pickUps.push({ x, y, type: 'revive' });
@@ -46,7 +55,7 @@ export function triggerRevive({ updateHUD }) {
     enemies.forEach(e => createExplosion(e.x, e.y, '#fff', 10));
     enemies.length = 0;
     bosses.forEach(b => { if (!b.immune) { b.hp -= b.maxHp * 0.15; updateBossHP(b); } });
-    nave.inmune = true; setTimeout(() => nave.inmune = false, 3000);
+    grantImmunity(3000);
     floatingTexts.push({ x: nave.x, y: nave.y - 60, text: '✨ ¡SEGUNDA OPORTUNIDAD! ✨', life: 2.5, color: '#ffee88' });
     if (updateHUD) updateHUD();
 }
@@ -58,10 +67,9 @@ export function playerHit(heavy = false, { updateHUD, promptContinue }) {
     combatState.health -= heavy ? combatState.damagePerHit * 2 : combatState.damagePerHit;
     combatState.health = Math.max(0, combatState.health);
     fxState.screenShake = heavy ? 30 : 15;
-    nave.inmune = true;
+    grantImmunity(2000);
     createExplosion(nave.x, nave.y, '#ff0000', heavy ? 40 : 25);
     if (updateHUD) updateHUD();
-    setTimeout(() => nave.inmune = false, 2000);
     if (combatState.health <= 0) {
         if (combatState.hasRevive) triggerRevive({ updateHUD });
         else if (promptContinue) promptContinue();

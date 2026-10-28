@@ -2,8 +2,12 @@
 
 export const bosses = [];
 
+// uid único por jefe: el DOM usa `hp-<uid>` para que dos jefes con el mismo id
+// (p. ej. b1 + b3 en modo custom) no compartan barra de vida.
+let bossUidSeq = 0;
+
 export function createBoss({ canvas, type, id }) {
-    let b = { id, type, x: id === 'B1' ? canvas.width*0.3 : canvas.width*0.7, y: -100, targetY: 150, hp: 4000, maxHp: 4000, dir: 1, lastShot: 0, parryCooldown: false, parryActive: false, bombs: 2 };
+    let b = { id, uid: 'b' + (++bossUidSeq), type, x: id === 'B1' ? canvas.width*0.3 : canvas.width*0.7, y: -100, targetY: 150, hp: 4000, maxHp: 4000, dir: 1, lastShot: 0, parryCooldown: false, parryActive: false, bombs: 2 };
     if (type === 'static') b.x = canvas.width / 2;
     if (type === 'doppel') { b.x = canvas.width / 2; b.targetY = 100; b.maxHp = 6000; b.hp = 6000; }
     if (type === 'hunter') {
@@ -39,7 +43,7 @@ export function renderBossUI() {
     const container = document.getElementById('boss-container');
     if (!container) return;
     container.innerHTML = '';
-    bosses.forEach(b => { container.innerHTML += `<div class="boss-hp-row"><div style="font-size:0.6rem; color:var(--danger)">ADVERTENCIA: ENTIDAD ${b.id}</div><div class="hp-bar-bg"><div id="hp-${b.id}" class="hp-fill"></div></div></div>`; });
+    bosses.forEach(b => { const key = b.uid || b.id; container.innerHTML += `<div class="boss-hp-row"><div style="font-size:0.6rem; color:var(--danger)">ADVERTENCIA: ENTIDAD ${b.id}</div><div class="hp-bar-bg"><div id="hp-${key}" class="hp-fill"></div></div></div>`; });
     container.style.display = bosses.length ? 'block' : 'none';
 }
 
@@ -48,7 +52,7 @@ export function updateBossHP(b) {
     const pct = Math.max(0, Math.round((b.hp / b.maxHp) * 100));
     if (b._hpPct === pct) return;
     b._hpPct = pct;
-    const hpBar = document.getElementById(`hp-${b.id}`);
+    const hpBar = document.getElementById(`hp-${b.uid || b.id}`);
     if (hpBar) hpBar.style.width = pct + '%';
 }
 

@@ -101,6 +101,17 @@ export function updateComboDisplay() {
 // Se llama varias veces por frame: solo reconstruimos el DOM cuando cambia algo.
 let waveProgressKey = '';
 
+// Limpia el contador de oleada y el aviso de bomba al reiniciar o al cambiar
+// de modo (progresivo → custom/solo_boss): antes quedaban visibles con datos
+// de la partida anterior.
+export function resetWaveProgressUI() {
+    waveProgressKey = '';
+    const el = document.getElementById('wave-progress');
+    const alertEl = document.getElementById('bomb-alert');
+    if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+    if (alertEl) { alertEl.style.display = 'none'; alertEl.textContent = ''; }
+}
+
 export function updateWaveProgress({ gameMode, progression, bosses }) {
     if (gameMode.value !== 'progressive') return;
     const el = document.getElementById('wave-progress');

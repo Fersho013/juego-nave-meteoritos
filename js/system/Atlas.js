@@ -12,7 +12,9 @@ export const BLAST_SIZE = 96;
 export const BLAST_LIFE = 20;
 
 const sheets = new Map();
-const MAX_SHEETS = 8;
+// La paleta real de explosiones usa 9 colores distintos: con 8, la hoja se
+// vaciaba (sheets.clear()) y se regeneraba en mitad del combate.
+const MAX_SHEETS = 12;
 
 function drawFrame(g, ox, t, color) {
     const cx = ox + BLAST_SIZE / 2, cy = BLAST_SIZE / 2;

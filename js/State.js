@@ -80,17 +80,25 @@ export function toggleDeviceMode(config, canvas) {
 }
 
 // Suscribe a resize para modo auto / forzado móvil
-export function bindResize(config, canvas, nave, getGameState) {
+export function bindResize(config, canvas, nave, getGameState, onResize) {
     window.addEventListener('resize', () => {
         const sizeOpt = document.getElementById('opt-size')?.value;
-        if (platform.isForcedMobile || sizeOpt === 'auto') {
-            setTimeout(() => {
-                config.w = window.innerWidth; config.h = window.innerHeight;
-                canvas.width = config.w; canvas.height = config.h;
-                const container = document.getElementById('game-container');
-                if (container) { container.style.width = config.w + 'px'; container.style.height = config.h + 'px'; }
-                if (getGameState() === 'MENU') { nave.x = canvas.width / 2; nave.y = canvas.height - 100; }
-            }, 150);
-        }
+        // En móvil el canvas SIEMPRE ocupa la pantalla; en PC, además, si la
+        // resolución elegida no cabe (ventana pequeña) se ajusta. Al agrandar
+        // la ventana se recupera la resolución elegida.
+        const [sw, sh] = sizeOpt === 'auto' ? [0, 0] : String(sizeOpt || '').split('x').map(Number);
+        const fullscreen = platform.isForcedMobile || platform.isMobile || sizeOpt === 'auto' || sw > window.innerWidth || sh > window.innerHeight;
+        setTimeout(() => {
+            const prevW = canvas.width, prevH = canvas.height;
+            if (fullscreen) { config.w = window.innerWidth; config.h = window.innerHeight; }
+            else if (sw > 0 && sh > 0) { config.w = sw; config.h = sh; }
+            else return;
+            if (canvas.width === config.w && canvas.height === config.h) return;
+            canvas.width = config.w; canvas.height = config.h;
+            const container = document.getElementById('game-container');
+            if (container) { container.style.width = config.w + 'px'; container.style.height = config.h + 'px'; }
+            if (onResize) onResize(prevW, prevH);
+            if (getGameState() === 'MENU') { nave.x = canvas.width / 2; nave.y = canvas.height - 100; }
+        }, 150);
     });
 }
