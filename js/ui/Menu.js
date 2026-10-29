@@ -12,7 +12,7 @@ let previewCtx = null;
 
 export function showScreen(id) {
     initAudio();
-    document.querySelectorAll('.ui-screen').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.ui-screen').forEach(s => { s.classList.remove('active'); s.classList.remove('launch-fade'); });
     if (id !== 'none' && document.getElementById(id)) document.getElementById(id).classList.add('active');
     if (id === 'menu-customize') drawPreview();
     updateVolumeVisibility();

@@ -114,6 +114,26 @@ let customSelection = [];
 window.__getGameState = () => gameState;
 window.__getGameMode = () => gameMode;
 
+// --- Fase 1: nave en órbita del menú + transición de lanzamiento ---
+// En MENU la nave orbita el centro del canvas; al pulsar Jugar se desactiva
+// la órbita, la nave vuela al punto de salida (centro-abajo) y solo entonces
+// arranca la partida. Así el menú deja de ser una pantalla muerta.
+const MENU_ORBIT_SPEED = 0.55;      // rad/s
+const MENU_ORBIT_RADIUS_X = 0.38;   // fracción del ancho del canvas
+const MENU_ORBIT_RADIUS_Y = 0.36;   // fracción del alto del canvas
+const MENU_ORBIT_CY = 0.50;         // centro vertical de la órbita
+const LAUNCH_DURATION = 0.8;        // segundos de la transición
+const menuIdle = {
+    angle: -Math.PI / 2,
+    rot: -Math.PI / 2,
+    time: 0,
+    launching: false,
+    launchT: 0,
+    pendingMode: null,
+    startX: 0, startY: 0, startRot: -Math.PI / 2,
+    scale: 1
+};
+
 // Globals equivalentes al original
 let parryActive = false, parryCooldown = false;
 let parryTimer = 0;
@@ -240,6 +260,11 @@ function cleanupAllBossTimers() { bosses.forEach(cleanupBossTimers); }
 
 function exitToMenu() {
     gameState = 'MENU';
+    // Cancelar cualquier lanzamiento a medias y devolver el menú a su estado normal.
+    menuIdle.launching = false;
+    menuIdle.pendingMode = null;
+    menuIdle.scale = 1;
+    document.querySelectorAll('.ui-screen.launch-fade').forEach(s => s.classList.remove('launch-fade'));
     cancelWaveTransition();
     setHudVisible(false);
     const mu = document.getElementById('mobile-ui'); if (mu) mu.style.display = 'none';
@@ -350,7 +375,7 @@ bindTouchBtn('btn-triple','triple'); bindTouchBtn('btn-parry','parry'); bindTouc
 
 function pollInput() {
     if (isEditorActive()) return;
-    if (gameState === 'MENU' || gameState === 'CONTINUE' || gameState === 'WIN') return;
+    if (gameState === 'MENU' || gameState === 'LAUNCHING' || gameState === 'CONTINUE' || gameState === 'WIN') return;
     input.moveX = platform.touchMoveX; input.moveY = platform.touchMoveY;
     // El joystick derecho apunta relativo a la nave: se recalcula cada frame.
     if (platform.rightJoyActive) {
@@ -422,6 +447,73 @@ function startCustom(){
 }
 
 function startMission(mode){
+    // Desde el menú se reproduce la transición de lanzamiento; en cualquier
+    // otro estado (reinicio desde pausa, etc.) se arranca de inmediato.
+    if (gameState === 'MENU') { beginLaunch(mode); return; }
+    // Si ya se está despegando, el último modo elegido manda sin cortar la transición.
+    if (gameState === 'LAUNCHING') { menuIdle.pendingMode = mode; return; }
+    beginMission(mode);
+}
+
+function beginLaunch(mode){
+    if (gameState !== 'MENU' || menuIdle.launching) return;
+    initAudio();
+    menuIdle.launching = true;
+    menuIdle.launchT = 0;
+    menuIdle.pendingMode = mode;
+    menuIdle.startX = nave.x;
+    menuIdle.startY = nave.y;
+    menuIdle.startRot = menuIdle.rot;
+    gameState = 'LAUNCHING';
+    setHudVisible(false);
+    // El menú se desvanece (CSS) mientras la nave vuela al centro.
+    document.querySelectorAll('.ui-screen.active').forEach(s => s.classList.add('launch-fade'));
+}
+
+function lerpAngle(a, b, t){
+    let d = ((b - a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+    return a + d * t;
+}
+
+function updateMenuIdle(dt){
+    menuIdle.time += dt;
+    menuIdle.angle += MENU_ORBIT_SPEED * dt;
+    const cx = canvas.width / 2;
+    const cy = canvas.height * MENU_ORBIT_CY;
+    const rx = canvas.width * MENU_ORBIT_RADIUS_X;
+    const ry = canvas.height * MENU_ORBIT_RADIUS_Y;
+    const wobble = 1 + Math.sin(menuIdle.time * 1.1) * 0.05;
+    const x = cx + Math.cos(menuIdle.angle) * rx * wobble;
+    const y = cy + Math.sin(menuIdle.angle) * ry * wobble;
+    // Rumbo tangente a la órbita: la nave "vuela" alrededor del menú.
+    const vx = -Math.sin(menuIdle.angle) * rx;
+    const vy = Math.cos(menuIdle.angle) * ry;
+    menuIdle.rot = Math.atan2(vy, vx);
+    menuIdle.scale = 1;
+    nave.x = x; nave.y = y; nave.vx = 0; nave.vy = 0;
+}
+
+function updateLaunch(dt){
+    menuIdle.launchT += dt / LAUNCH_DURATION;
+    const t = Math.min(1, menuIdle.launchT);
+    // Ease-in-out cúbico: arranca suave y frena al llegar al punto de salida.
+    const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    const tx = canvas.width / 2;
+    const ty = canvas.height - 100;
+    nave.x = menuIdle.startX + (tx - menuIdle.startX) * e;
+    nave.y = menuIdle.startY + (ty - menuIdle.startY) * e;
+    menuIdle.rot = lerpAngle(menuIdle.startRot, -Math.PI / 2, e);
+    menuIdle.scale = 1 + 0.35 * Math.sin(Math.PI * t);
+    if (t >= 1){
+        const mode = menuIdle.pendingMode || 'progressive';
+        menuIdle.launching = false;
+        menuIdle.pendingMode = null;
+        menuIdle.scale = 1;
+        beginMission(mode);
+    }
+}
+
+function beginMission(mode){
     initAudio(); gameMode=mode; gameState='PLAYING';
     hudState.score=0; progression.currentWave=1; progression.wavePhase=1;
     combatState.damagePerHit = parseInt(document.getElementById('opt-damage')?.value) || 20;
@@ -576,8 +668,11 @@ function findHomingTarget(fromX, fromY) {
 }
 
 // --- UPDATE ---
-function update(){
+function update(dtMs){
+    const dt = Math.min(0.05, (dtMs || 1000 / 60) / 1000);
     pollInput();
+    if (gameState === 'MENU') { updateMenuIdle(dt); return; }
+    if (gameState === 'LAUNCHING') { updateLaunch(dt); return; }
     if(gameState!=='PLAYING') return;
     if(fxState.hitStopFrames>0){ fxState.hitStopFrames--; return; }
     fxState.frameCount++; 
@@ -875,6 +970,46 @@ function adaptParticleBudget(deltaTime, workMs){
     if(frameAvg>baseDelta*1.25) setParticleBudget(Math.round(b*0.75));
     else if(frameAvg<baseDelta*1.06 && workAvg<6 && b<MAX_PARTICLES) setParticleBudget(Math.min(MAX_PARTICLES,Math.round(b*1.2)));
 }
+// Nave del menú: órbita idle y transición de lanzamiento. Se dibuja sobre el
+// parallax (que también se mueve en MENU) para que el menú no parezca estático.
+function drawMenuShip(ctx){
+    if (gameState !== 'MENU' && gameState !== 'LAUNCHING') return;
+    const x = nave.x, y = nave.y;
+    const pulse = 0.85 + Math.sin(menuIdle.time * 3) * 0.15;
+    if (!menuIdle.launching){
+        // Anillo tenue de la órbita (solo en el menú, no durante el despegue).
+        ctx.save();
+        ctx.strokeStyle = 'rgba(110,200,255,0.10)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.ellipse(canvas.width / 2, canvas.height * MENU_ORBIT_CY,
+            canvas.width * MENU_ORBIT_RADIUS_X, canvas.height * MENU_ORBIT_RADIUS_Y,
+            0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    }
+    // Estela del motor
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(menuIdle.rot);
+    ctx.globalAlpha = 0.22 * pulse;
+    ctx.fillStyle = nave.color;
+    ctx.beginPath();
+    ctx.moveTo(-16, -6); ctx.lineTo(-16 - 24 * pulse, 0); ctx.lineTo(-16, 6);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+    drawGlow(ctx, x, y, 40 * menuIdle.scale, nave.color, 0.9);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(menuIdle.rot);
+    ctx.scale(menuIdle.scale, menuIdle.scale);
+    ctx.fillStyle = nave.color;
+    ctx.beginPath(); ctx.moveTo(22, 0); ctx.lineTo(-16, -16); ctx.lineTo(-16, 16); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(-4, -5); ctx.lineTo(-4, 5); ctx.closePath(); ctx.fill();
+    ctx.restore();
+}
+
 function draw(currentTime){
     requestAnimationFrame(draw);
     if(!currentTime) currentTime=performance.now();
@@ -892,6 +1027,8 @@ function draw(currentTime){
     }
     // Portal azul siempre visible si existe
     drawPortals(ctx);
+    // Nave del menú (órbita idle / despegue) sobre el fondo animado
+    drawMenuShip(ctx);
     if(gameState==='PLAYING'||gameState==='PAUSED'||gameState==='CONTINUE'||gameState==='WIN'){
         pickUps.forEach(p=>{
             if(p.type==='revive'){ const pulse=0.75+Math.sin(fxState.frameCount*0.15)*0.25; drawGlow(ctx,p.x,p.y,26,'#ffee88',pulse*0.85); ctx.save(); ctx.globalAlpha=pulse; ctx.fillStyle='#ffee88'; ctx.beginPath(); ctx.arc(p.x,p.y,12,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1; ctx.fillStyle='#000'; ctx.font='bold 13px Orbitron'; ctx.fillText('✨',p.x-7,p.y+5); ctx.restore(); }
@@ -951,7 +1088,7 @@ function draw(currentTime){
         if(progression.waveTransition && progression.waveTransitionMsg){ const progress=1-(progression.waveTransitionTimer/150); const alpha=progress<0.2?progress/0.2:progress>0.8?(1-progress)/0.2:1; ctx.globalAlpha=alpha*0.85; ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.globalAlpha=alpha; ctx.textAlign='center'; ctx.font='bold 14px Orbitron'; ctx.fillStyle='#666'; ctx.fillText('— PREPARATE —',canvas.width/2,canvas.height/2-50); ctx.font='bold 40px Orbitron'; ctx.fillStyle=waveGradient(); ctx.shadowBlur=20; ctx.shadowColor='#fff'; ctx.fillText(progression.waveTransitionMsg,canvas.width/2,canvas.height/2+10); ctx.shadowBlur=0; ctx.font='13px Orbitron'; ctx.fillStyle='#aaa'; const waveLabel=['SECTOR 1','BOSS 1','SECTOR 2','BOSS 2','SECTOR 3','BOSS 3','SECTOR 4','JEFE FINAL','FIN'][progression.wavePhase-1]||''; ctx.fillText(`SIGUIENTE: ${waveLabel}`,canvas.width/2,canvas.height/2+55); ctx.globalAlpha=1; ctx.textAlign='left'; if(progression.waveTransitionTimer>0) progression.waveTransitionTimer--; }
         if(nave.inmune && !dashActive){ ensureVignettes(); const pulse=Math.abs(Math.sin(fxState.frameCount*0.18)); ctx.globalAlpha=0.35*pulse; ctx.drawImage(immuneVignette,0,0); ctx.globalAlpha=1; }
     }
-    ctx.restore(); update();
+    ctx.restore(); update(deltaTime);
     adaptParticleBudget(deltaTime, performance.now()-workStart);
 }
 

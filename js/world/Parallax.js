@@ -122,12 +122,18 @@ export function drawSuperArena(ctx, canvas, gameState) {
 }
 
 export function drawParallax(ctx, canvas, gameState) {
+    // El fondo también se mueve en MENU y durante el despegue (a distinta
+    // velocidad), para que el menú no parezca una captura estática.
+    const scroll = gameState === 'PLAYING' ? 1
+        : gameState === 'MENU' ? 0.5
+        : gameState === 'LAUNCHING' ? 1.6
+        : 0;
     // Planetas (sprite cacheado)
     ctx.globalAlpha = 0.18;
     for (let i = 0; i < planets.length; i++) {
         const p = planets[i];
         ctx.drawImage(p.sprite, p.x - p.r, p.y - p.r);
-        if (gameState === 'PLAYING') p.y += p.speed;
+        if (scroll) p.y += p.speed * scroll;
         if (p.y - p.r > canvas.height) { p.y = -p.r; p.x = Math.random() * canvas.width; }
     }
     ctx.globalAlpha = 1;
@@ -136,14 +142,13 @@ export function drawParallax(ctx, canvas, gameState) {
         const n = nebulas[i];
         ctx.globalAlpha = n.alpha;
         ctx.drawImage(n.sprite, n.x - n.r, n.y - n.r);
-        if (gameState === 'PLAYING') n.y += n.speed;
+        if (scroll) n.y += n.speed * scroll;
         if (n.y - n.r > canvas.height) { n.y = -n.r; n.x = Math.random() * canvas.width; }
     }
     ctx.globalAlpha = 1;
     // Estrellas por lotes (capa × nivel de alfa). Se acumulan en un path y se
     // rellenan de una vez: ~1,8× más rápido que un fillRect por estrella.
     ctx.fillStyle = '#ffffff';
-    const playing = gameState === 'PLAYING';
     for (let l = 0; l < STAR_LAYERS; l++) {
         const layers = starBuckets[l];
         for (let b = 0; b < STAR_ALPHA_STEPS; b++) {
@@ -154,8 +159,8 @@ export function drawParallax(ctx, canvas, gameState) {
             for (let i = 0; i < arr.length; i++) {
                 const s = arr[i];
                 ctx.rect(s.x, s.y, s.size, s.size);
-                if (playing) {
-                    s.y += s.speed;
+                if (scroll) {
+                    s.y += s.speed * scroll;
                     if (s.y > canvas.height) { s.y = 0; s.x = Math.random() * canvas.width; }
                 }
             }
