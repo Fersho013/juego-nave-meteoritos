@@ -71,6 +71,21 @@ export function initParallax(canvas) {
     planets.forEach(p => { p.sprite = makeGlowSprite(p.r, p.color); });
 }
 
+// Capa de fondo repetible para mundos sin límite. Cada capa avanza una
+// fracción del desplazamiento de la cámara y se repite sin saltos en ambos
+// sentidos, incluso al viajar a coordenadas negativas.
+export function drawCameraParallaxLayer(ctx, canvas, tile, cameraX, cameraY, depth) {
+    if (!tile || !tile.width || !tile.height) return;
+    const tileW = tile.width;
+    const tileH = tile.height;
+    const mod = (value, size) => ((value % size) + size) % size;
+    const startX = -mod(cameraX * depth, tileW);
+    const startY = -mod(cameraY * depth, tileH);
+    for (let y = startY; y < canvas.height; y += tileH) {
+        for (let x = startX; x < canvas.width; x += tileW) ctx.drawImage(tile, x, y);
+    }
+}
+
 // Fondo de la arena pre-renderizado: antes se pintaba un degradado lineal a
 // pantalla completa + un radial gigante en cada frame. Ahora es un drawImage.
 let arenaKey = '';

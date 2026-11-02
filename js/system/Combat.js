@@ -10,7 +10,20 @@ import { floatingTexts, fxState, createExplosion } from './Effects.js';
 const pushParticle = EffectsNS.pushParticle || ((p) => { if (EffectsNS.particles.length < (EffectsNS.MAX_PARTICLES || 400)) { EffectsNS.particles.push(p); return true; } return false; });
 import { registerComboHits } from '../ui/Hud.js';
 
-export const combatState = { health: 100, maxHealth: 100, damagePerHit: 20, bombs: 3, hasRevive: false };
+export const combatState = { health: 100, maxHealth: 100, damagePerHit: 20, bombs: 3, hasRevive: false, credits: 0 };
+
+export function awardCredits(amount) {
+    const reward = Math.max(0, Math.floor(Number(amount) || 0));
+    combatState.credits += reward;
+    return combatState.credits;
+}
+
+export function spendCredits(amount) {
+    const cost = Math.max(0, Math.floor(Number(amount) || 0));
+    if (combatState.credits < cost) return false;
+    combatState.credits -= cost;
+    return true;
+}
 
 // Mismo token de inmunidad que Main.js (vive en `nave`): un timer de 2 s no
 // debe anular los 3 s de revive/continue. Sin export nuevo (caché mixta).
@@ -22,8 +35,9 @@ function grantImmunity(ms) {
 }
 
 export function dropRevivePickup(x, y) {
-    if (combatState.hasRevive) pickUps.push({ x, y, type: 'bomb' });
-    else pickUps.push({ x, y, type: 'revive' });
+    const pickup = { x, y, type: combatState.hasRevive ? 'bomb' : 'revive', bossReward: true };
+    pickUps.push(pickup);
+    return pickup;
 }
 
 export function triggerBomb(isPlayer, origin, { inputRef } = {}) {
@@ -37,6 +51,7 @@ export function triggerBomb(isPlayer, origin, { inputRef } = {}) {
         enemies.length = 0;
         if (bombKills > 0) {
             const { pts } = registerComboHits(bombKills);
+            awardCredits(bombKills * 5);
             floatingTexts.push({ x: origin.x, y: origin.y - 60, text: `+${pts} BOMBA x${bombKills}`, life: 1.5, color: '#ffcc00' });
         }
         bosses.forEach(b => { b.hp -= b.maxHp * 0.1; updateBossHP(b); });

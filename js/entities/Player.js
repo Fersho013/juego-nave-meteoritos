@@ -1,6 +1,6 @@
 // js/entities/Player.js — Nave del jugador y acciones de disparo
 
-export const nave = { x: 400, y: 500, vx: 0, vy: 0, accel: 0.9, fric: 0.90, inmune: false, color: '#ffffff' };
+export const nave = { x: 400, y: 500, vx: 0, vy: 0, accel: 0.9, fric: 0.90, damageLevel: 0, dashLevel: 0, shieldLevel: 0, tripleLevel: 0, inmune: false, color: '#ffffff' };
 
 import { sfx } from '../Core/Audio.js';
 

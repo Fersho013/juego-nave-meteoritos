@@ -49,7 +49,9 @@ export function spawnFormation({ canvas, bosses, formType, waveTransition }) {
     if (waveTransition?.value) return;
     const baseX = canvas.width / 2, baseY = -30;
     let positions = [];
-    if (formType === 'triangle') {
+    if (formType === 'v') {
+        for (let i = 0; i < 5; i++) positions.push({ x: baseX + (i - 2) * 62, y: baseY - Math.abs(i - 2) * 42 });
+    } else if (formType === 'triangle') {
         for (let i = -2; i <= 2; i++) positions.push({ x: baseX + i*60, y: baseY - Math.abs(i)*40 });
     } else if (formType === 'square') {
         for (let row = 0; row < 3; row++) { for (let col = 0; col < 3; col++) positions.push({ x: baseX + (col-1)*70, y: baseY - row*60 }); }

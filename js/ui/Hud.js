@@ -20,6 +20,8 @@ export function updateHUD({ combatState, weaponState, progression, gameMode }) {
     if (scoreEl) { const v = String(hudState.score); if (scoreEl.textContent !== v) scoreEl.textContent = v; }
     const bombEl = el('val-bombs');
     if (bombEl) { const v = String(combatState.bombs); if (bombEl.textContent !== v) bombEl.textContent = v; }
+    const creditsEl = el('val-credits');
+    if (creditsEl) { const v = String(combatState.credits || 0); if (creditsEl.textContent !== v) creditsEl.textContent = v; }
 
     const hpPct = Math.max(0, Math.min(100, combatState.health));
     const healthFill = el('health-bar-fill');
@@ -44,6 +46,41 @@ export function updateHUD({ combatState, weaponState, progression, gameMode }) {
     }
     const rEl = el('val-revive');
     if (rEl) { const v = combatState.hasRevive ? 'inline' : 'none'; if (rEl.style.display !== v) rEl.style.display = v; }
+}
+
+export function updateExplorationHUD({ active = true, credits = 0, health = 100, bombs = 3, hasRevive = false, accel = 0.9, nearStation = null, nearZone = false, nearPlanet = null, nearCache = false, zoneLabel = '', panelOpen = false } = {}) {
+    const balance = el('explore-credits');
+    if (balance) balance.style.display = 'none';
+    const status = el('explore-ship-status');
+    if (status) {
+        status.style.display = active ? 'block' : 'none';
+        const upgrades = Math.max(0, Math.round((accel / 0.9 - 1) * 100));
+        const upgradeLabel = el('explore-upgrades-value');
+        const ship = typeof window.getShipUpgrades === 'function' ? window.getShipUpgrades() : {};
+        const upgradeText = `MEJORAS · MOTORES +${upgrades}% · DAÑO +${(ship.damage || 0) * 12}% · DASH -${(ship.dash || 0) * 10}% · ESCUDO +${(ship.shield || 0) * 15}%${ship.triple ? ' · TRIPLE' : ''}`;
+        if (upgradeLabel && upgradeLabel.textContent !== upgradeText) upgradeLabel.textContent = upgradeText;
+    }
+    const mapButton = el('btn-system-map');
+    if (mapButton) mapButton.style.display = active ? 'block' : 'none';
+    const prompt = el('explore-interact-prompt');
+    if (prompt) {
+        prompt.style.display = active && !panelOpen ? 'block' : 'none';
+        const message = nearStation
+            ? `PRESIONA [E] (O TOCA) PARA INTERACTUAR · ${nearStation.label}`
+            : nearPlanet
+                ? `PRESIONA [E] PARA ENTRAR A LA ÓRBITA DE ${nearPlanet.name}`
+            : nearCache
+                ? 'PRESIONA [E] PARA EXAMINAR EL COFRE DE DATOS'
+            : nearZone
+                ? `PRESIONA [E] (O TOCA) PARA ENTRAR · ${zoneLabel}`
+                : 'SIGUE LA SEÑAL AZUL · E INTERACTÚA · ESC: PAUSA';
+        if (prompt.textContent !== message) prompt.textContent = message;
+        prompt.classList.toggle('is-active', Boolean((nearStation || nearZone || nearPlanet || nearCache) && !panelOpen));
+    }
+    const touchButton = el('btn-interact');
+    if (touchButton) touchButton.style.display = active && !panelOpen && Boolean(nearStation || nearZone || nearPlanet || nearCache) ? 'flex' : 'none';
+    const miniMapButton = el('btn-minimap');
+    if (miniMapButton) miniMapButton.style.display = active && !panelOpen ? 'block' : 'none';
 }
 
 // Resetea el combo y cancela cualquier temporizador pendiente.

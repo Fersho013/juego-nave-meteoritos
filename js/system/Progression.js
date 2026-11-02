@@ -12,7 +12,11 @@ export const progression = {
     waveKillTarget: 50,
     waveTransition: false,
     waveTransitionTimer: 0,
-    waveTransitionMsg: ''
+    waveTransitionMsg: '',
+    awaitingCheckpoint: false,
+    awaitingBossReward: false,
+    suspendedAdventure: false,
+    pendingBossRewardType: null
 };
 
 // ID del timeout de transición para poder cancelarlo al salir/reiniciar.
@@ -44,7 +48,7 @@ export function startWaveTransition(msg, nextPhase, callback) {
     }, 2500);
 }
 
-export function checkProgression({ gameMode, currentWaveRef, customSelection, frameCount, winGame }) {
+export function checkProgression({ gameMode, currentWaveRef, customSelection, frameCount, winGame, onBossDefeated }) {
     if (gameMode.value === 'custom') {
         const hasBoss = customSelection.some(v => ['b1','b2','b3','b_hunter','b_berserker','b4'].includes(v));
         if (bosses.length === 0 && hasBoss && progression.currentWave > 1) { winGame(); }
@@ -62,6 +66,11 @@ export function checkProgression({ gameMode, currentWaveRef, customSelection, fr
         return;
     }
     if (gameMode.value === 'progressive') {
+        if (progression.awaitingCheckpoint) {
+            onBossDefeated?.(progression.wavePhase);
+            return;
+        }
+        if (progression.awaitingBossReward) return;
         if (progression.waveTransition) return;
         if (progression.wavePhase === 1 && progression.waveKills >= progression.waveKillTarget && bosses.length === 0 && enemies.length === 0) {
             startWaveTransition('JEFE 1', 2, () => { createBoss({ canvas: currentWaveRef.canvas, type: 'static', id: 'B1' }); });
@@ -74,14 +83,17 @@ export function checkProgression({ gameMode, currentWaveRef, customSelection, fr
         } else if (progression.wavePhase === 9 && bosses.length === 0) winGame();
 
         if (progression.wavePhase === 2 && bosses.length === 0 && !progression.waveTransition && frameCount > 10) {
-            startWaveTransition('SECTOR 2', 3, () => { progression.currentWave = 2; progression.waveKills = 0; });
+            progression.awaitingBossReward = true;
+            onBossDefeated?.(progression.wavePhase);
         } else if (progression.wavePhase === 4 && bosses.length === 0 && !progression.waveTransition && frameCount > 10) {
-            startWaveTransition('SECTOR 3', 5, () => { progression.currentWave = 3; progression.waveKills = 0; });
+            progression.awaitingBossReward = true;
+            onBossDefeated?.(progression.wavePhase);
         } else if (progression.wavePhase === 6 && bosses.length === 0 && !progression.waveTransition && frameCount > 10) {
-            startWaveTransition('SECTOR 4', 7, () => { progression.currentWave = 4; progression.waveKills = 0; });
-        } else if (progression.wavePhase === 8 && !progression.waveTransition && frameCount > 10) {
-            const doppelAllDead = !bosses.some(b => b.type === 'doppel' || b.type === 'doppel_y' || b.type === 'doppel_o');
-            if (doppelAllDead && bosses.length === 0) progression.wavePhase = 9;
+            progression.awaitingBossReward = true;
+            onBossDefeated?.(progression.wavePhase);
+        } else if (progression.wavePhase === 8 && bosses.length === 0 && !progression.waveTransition && frameCount > 10) {
+            progression.awaitingBossReward = true;
+            onBossDefeated?.(progression.wavePhase);
         }
     }
 }
