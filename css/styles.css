@@ -145,8 +145,9 @@ button:disabled:hover { color: #5e6c7c; background: rgba(15,20,26,0.7); box-shad
   .system-map-header { align-items:flex-start; }
   .system-map-header strong { max-width:120px; font-size:10px; }
   .system-map-header small { max-width:130px; font-size:8px; }
-  .system-map-actions { gap:4px; }
+  .system-map-actions { gap:4px; flex-wrap:wrap; justify-content:flex-end; }
   .system-map-actions button { min-width:32px; min-height:34px; padding:5px; font-size:9px; }
+  #system-map-clear-route { padding:5px 6px; font-size:8px; }
   #system-map-close { min-width:36px; font-size:22px; }
   #system-map footer { font-size:8px; line-height:1.4; }
 }
