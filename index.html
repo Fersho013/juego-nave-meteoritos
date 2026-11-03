@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>SPACE MISSION: ECHELON (ULTRA)</title>
-    <link rel="stylesheet" href="./css/styles.css?v=20261102b">
+    <link rel="stylesheet" href="./css/styles.css?v=20261102g">
 </head>
 <body>
     <div id="game-container">
@@ -54,11 +54,12 @@
                     <button id="system-map-zoom-out" type="button" aria-label="Alejar">−</button>
                     <button id="system-map-zoom-in" type="button" aria-label="Acercar">+</button>
                     <button id="system-map-reset" type="button">SISTEMA COMPLETO</button>
+                    <button id="system-map-clear-route" type="button" style="display:none;" title="Borrar el punto de ruta">QUITAR RUTA</button>
                     <button id="system-map-close" type="button" aria-label="Cerrar mapa">×</button>
                 </div>
             </header>
             <canvas id="system-map-canvas"></canvas>
-            <footer>Planetas: siempre visibles · Sectores, retos y cinturones: se revelan al explorarlos</footer>
+            <footer>Toca el mapa para fijar un punto de ruta · Planetas siempre visibles · Sectores, retos y cinturones se revelan al explorarlos</footer>
         </section>
         <section id="station-panel" class="station-panel" role="dialog" aria-modal="true" aria-labelledby="station-title" style="display:none;">
             <h2 id="station-title">ESTACIÓN</h2>
@@ -193,7 +194,7 @@
                         <div style="color:var(--success); font-family:'Orbitron', sans-serif; font-weight:bold; margin-bottom: 5px;">[MÓVIL / PANTALLA TÁCTIL]</div>
                         <div>• Pad Izq: Movimiento | Pad Der: Apuntar y Disparar</div>
                         <div>• Iconos: 🔱 Triple | 🛡️ Parry (Q) | 💣 Bomba | ⚡ Dash | E Interactuar</div>
-                        <div>• Minimapa (editable desde el layout): toca para abrir el mapa completo</div>
+                        <div>• Minimapa (editable desde el layout): toca para abrir el mapa completo · toca el mapa grande para fijar un punto de ruta</div>
                         <div>• Caja naranja 🟧: Recoger para cambiar arma (S=Spread, L=Laser)</div>
                     </div>
                 </div>
@@ -389,6 +390,6 @@
         }
     })();
     </script>
-    <script type="module" src="./js/Main.js?v=20261102b"></script>
+    <script type="module" src="./js/Main.js?v=20261102g"></script>
 </body>
 </html>

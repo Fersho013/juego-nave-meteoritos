@@ -6,7 +6,8 @@ import { world, camera, setViewport, screenToWorld } from './Camera.js';
 import { drawParallax } from './Parallax.js';
 import { drawGlow, getGlowSprite } from '../system/Sprites.js';
 import { drawHub, hubState } from './Hub.js';
-import { createPlanets, drawPlanet } from './Planets.js';
+import { createPlanets, drawPlanet } from './Planets.js?v=20261102g';
+import { getWaypoint, clearWaypoint } from '../ui/StarMap.js?v=20261102g';
 
 const CHUNK_SIZE = 900;
 const CHUNK_MARGIN = 1;
@@ -17,8 +18,7 @@ const SAFE_ZONE_RADIUS = 1500;
 const EVENT_GRID_SIZE = 6000;
 const EXPLORATION_ENEMY_TYPES = ['common', 'shield', 'suicidal', 'special', 'elite', 'kamikaze', 'kamikaze_bomb'];
 
-export const exploration = {
-    initialized: false,
+export const exploration = {    initialized: false,
     time: 0,
     nearGate: false,
     gateDist: 0,
@@ -49,6 +49,12 @@ export const exploration = {
     planets: [], nearPlanet: null, planetDist: Infinity,
     cache: null, cacheTimer: 10, nearCache: false
 };
+
+// Una celda del mapa (6 km) solo revela sus objetos cuando el jugador la ha
+// recorrido. Los planetas son la única excepción: siempre visibles.
+export function isPointExplored(x, y) {
+    return exploration.exploredCells.has(`${Math.round(x / EVENT_GRID_SIZE)},${Math.round(y / EVENT_GRID_SIZE)}`);
+}
 
 function mulberry32(seed) {
     return function () {
@@ -274,6 +280,7 @@ export function resetExplorationProgress() {
     exploration.combatZones.length = 0;
     exploration.huntBosses.length = 0;
     exploration.cache = null;
+    clearWaypoint();
 }
 
 export function enterExploration(nave, canvas, { fresh = false } = {}) {
@@ -814,8 +821,9 @@ function drawMiniMap(nave) {
         ctx.restore();
     };
 
-    // Estaciones y servicios.
+    // Estaciones y servicios (solo en cuadrantes ya explorados).
     for (const station of hubState.stations) {
+        if (!isPointExplored(station.x, station.y)) continue;
         const p = project(station.x, station.y);
         const color = station.color || '#6ec8ff';
         ctx.fillStyle = color;
@@ -827,6 +835,7 @@ function drawMiniMap(nave) {
     }
     // Cinturones/zona del hub.
     for (const zone of hubState.zones) {
+        if (!isPointExplored(zone.x, zone.y)) continue;
         const p = project(zone.x, zone.y);
         ctx.globalAlpha = zone.cleared ? 0.32 : 0.9;
         ctx.fillStyle = '#ff9966';
@@ -836,6 +845,7 @@ function drawMiniMap(nave) {
 
     // Portales de combate.
     for (const zone of exploration.combatZones) {
+        if (!isPointExplored(zone.x, zone.y)) continue;
         const p = project(zone.x, zone.y);
         const color = zone.type === 'procedural' ? '#cf8cff' : zone.type === 'meteors' ? '#ffae62' : '#6ec8ff';
         if (zone.type === 'procedural') {
@@ -852,7 +862,7 @@ function drawMiniMap(nave) {
     }
     // Retos procedurales descubiertos.
     for (const event of exploration.proceduralEvents.values()) {
-        if (!event?.discovered) continue;
+        if (!event?.discovered || !isPointExplored(event.x, event.y)) continue;
         const p = project(event.x, event.y);
         ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(Math.PI / 4);
         ctx.fillStyle = '#cf8cff'; ctx.fillRect(-3, -3, 6, 6);
@@ -861,7 +871,7 @@ function drawMiniMap(nave) {
     for (const planet of exploration.planets) drawPlanetMarker(planet);
 
     // Cofre de datos: diamante dorado pulsante.
-    if (exploration.cache) {
+    if (exploration.cache && isPointExplored(exploration.cache.x, exploration.cache.y)) {
         const p = project(exploration.cache.x, exploration.cache.y);
         const pulse = 0.65 + Math.sin(now / 220) * 0.35;
         ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(Math.PI / 4);
@@ -871,7 +881,7 @@ function drawMiniMap(nave) {
         ctx.restore(); ctx.globalAlpha = 1;
     }
     // Contacto hostil.
-    if (exploration.encounter) {
+    if (exploration.encounter && isPointExplored(exploration.encounter.x, exploration.encounter.y)) {
         const p = project(exploration.encounter.x, exploration.encounter.y);
         const pulse = 0.55 + Math.sin(now / 180) * 0.45;
         ctx.fillStyle = '#ff657a';
@@ -882,6 +892,7 @@ function drawMiniMap(nave) {
     }
     // Jefes de caza: triángulos rojos con pulso.
     for (const boss of exploration.huntBosses) {
+        if (!isPointExplored(boss.x, boss.y)) continue;
         const p = project(boss.x, boss.y);
         ctx.fillStyle = '#ff3344';
         ctx.beginPath(); ctx.moveTo(p.x, p.y - 4.5); ctx.lineTo(p.x + 3.8, p.y + 3.2); ctx.lineTo(p.x - 3.8, p.y + 3.2); ctx.closePath(); ctx.fill();
@@ -894,6 +905,7 @@ function drawMiniMap(nave) {
     for (const ship of exploration.traffic) {
         const p = project(ship.x, ship.y);
         if (p.distance > range) continue;
+        if (!isPointExplored(ship.x, ship.y) && p.distance > 2600) continue;
         ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(ship.rot || 0);
         ctx.fillRect(-1.4, -1.4, 2.8, 2.8);
         ctx.restore();
@@ -905,14 +917,43 @@ function drawMiniMap(nave) {
     ctx.strokeStyle = 'rgba(86,216,255,0.6)';
     ctx.beginPath(); ctx.arc(basePoint.x, basePoint.y, 5.4, 0, Math.PI * 2); ctx.stroke();
 
+    // Punto de ruta fijado desde el mapa grande: línea guía y marcador dorado.
+    const route = getWaypoint();
+    let routeDistance = 0;
+    if (route) {
+        const angle = Math.atan2(route.y - nave.y, route.x - nave.x);
+        routeDistance = Math.hypot(route.x - nave.x, route.y - nave.y);
+        const markerDistance = Math.min(plotRadius - 4, routeDistance / range * plotRadius);
+        const mx = centerX + Math.cos(angle) * markerDistance;
+        const my = centerY + Math.sin(angle) * markerDistance;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,214,102,0.45)';
+        ctx.setLineDash([2, 3]);
+        ctx.beginPath(); ctx.moveTo(centerX, centerY); ctx.lineTo(mx, my); ctx.stroke();
+        ctx.setLineDash([]);
+        const routePulse = 0.6 + Math.sin(now / 260) * 0.4;
+        ctx.globalAlpha = routePulse;
+        ctx.strokeStyle = '#ffe9a8';
+        ctx.beginPath(); ctx.arc(mx, my, 5.4, 0, Math.PI * 2); ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.translate(mx, my); ctx.rotate(Math.PI / 4);
+        ctx.fillStyle = '#ffd666'; ctx.fillRect(-2.4, -2.4, 4.8, 4.8);
+        ctx.restore();
+    }
+
     // Brújula y escala dentro del radar.
     ctx.textAlign = 'center';
     ctx.font = 'bold 7px Orbitron';
     ctx.fillStyle = 'rgba(180,230,255,0.8)';
     ctx.fillText('N', centerX, centerY - plotRadius + 7);
     ctx.font = '6px Orbitron';
-    ctx.fillStyle = 'rgba(150,190,220,0.65)';
-    ctx.fillText('6 km', centerX, centerY + plotRadius - 4);
+    if (route) {
+        ctx.fillStyle = '#ffd666';
+        ctx.fillText(`RUTA ${(routeDistance / 1000).toFixed(1)}k`, centerX, centerY + plotRadius - 4);
+    } else {
+        ctx.fillStyle = 'rgba(150,190,220,0.65)';
+        ctx.fillText('6 km', centerX, centerY + plotRadius - 4);
+    }
     ctx.restore();
 
     // Aro exterior y marcas cada 30°.
@@ -1105,6 +1146,26 @@ export function drawExploration(ctx, canvas, nave, input, combat = {}) {
     ctx.restore();
     if (combat.parryActive) {
         ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(shipScreenX, shipScreenY, 36, 0, Math.PI * 2); ctx.stroke();
+    }
+
+    // Guía de ruta: chevron dorado alrededor de la nave apuntando al punto
+    // fijado desde el mapa grande.
+    const routeTarget = getWaypoint();
+    if (routeTarget) {
+        const routeDx = routeTarget.x - nave.x, routeDy = routeTarget.y - nave.y;
+        const routeDist = Math.hypot(routeDx, routeDy);
+        if (routeDist > 250) {
+            const routeAngle = Math.atan2(routeDy, routeDx);
+            const routePulse = 0.55 + Math.sin(exploration.time * 3) * 0.25;
+            ctx.save();
+            ctx.globalAlpha = routePulse;
+            ctx.translate(shipScreenX + Math.cos(routeAngle) * 54, shipScreenY + Math.sin(routeAngle) * 54);
+            ctx.rotate(routeAngle);
+            ctx.fillStyle = '#ffd666';
+            ctx.beginPath(); ctx.moveTo(9, 0); ctx.lineTo(-5, -5); ctx.lineTo(-5, 5); ctx.closePath(); ctx.fill();
+            ctx.restore();
+            ctx.globalAlpha = 1;
+        }
     }
 
     // Segunda mira fija a pantalla, igual que durante el combate.

@@ -19,7 +19,7 @@ export const PLANET_CATALOG = [
 export function createPlanets(seed) {
     return PLANET_CATALOG.map((spec, index) => {
         const angle = ((seed >>> (index % 24)) * 0.0000001 + index * 2.3999632297) % (Math.PI * 2);
-        return { ...spec, x:Math.cos(angle)*spec.distance, y:Math.sin(angle)*spec.distance,
+        return { ...spec, type:'planet', x:Math.cos(angle)*spec.distance, y:Math.sin(angle)*spec.distance,
             activationRadius:Math.max(400, spec.radius + 150), discovered:index < 3, cleared:false };
     });
 }

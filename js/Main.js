@@ -61,10 +61,11 @@ const updateVolumeVisibility = MenuNS.updateVolumeVisibility;
 const initPreview = MenuNS.initPreview;
 const refreshPreview = MenuNS.refreshPreview || (() => {});
 import { stars, nebulas, planets, superAsteroids, initParallax, drawParallax, drawSuperArena } from './world/Parallax.js';
+import { drawPlanetAtmosphere, drawPlanetForeground } from './world/PlanetAtmosphere.js?v=20261102g';
 import { world, resetCamera, centerCamera } from './world/Camera.js';
-import { enterExploration, updateExploration, drawExploration, exploration, resetExplorationProgress } from './world/Exploration.js';
+import { enterExploration, updateExploration, drawExploration, exploration, resetExplorationProgress, isPointExplored } from './world/Exploration.js';
 import { hubState, initHub, updateHub, closeStationPanel } from './world/Hub.js';
-import { initSystemMap, isSystemMapOpen, toggleSystemMap, closeSystemMap, drawSystemMapFrame } from './ui/StarMap.js';
+import { initSystemMap, isSystemMapOpen, toggleSystemMap, closeSystemMap, drawSystemMapFrame } from './ui/StarMap.js?v=20261102g';
 import { DASH } from './Data/Constants.js';
 import { initLayoutEditor, enterEditMode, exitEditMode, isEditorActive, setEditorExitHandler } from './ui/LayoutEditor.js';
 import { portals, spawnPortal, clearPortals, updatePortals, drawPortals } from './entities/Portal.js';
@@ -236,7 +237,7 @@ initSystemMap(() => {
     for (const event of exploration.proceduralEvents.values()) if (event?.discovered) add(event, 'procedural', '#cf8cff', `RETO · NIV ${1 + Math.round((event.difficulty || 0) * 9)}`);
     for (const zone of exploration.combatZones) if (zone.type !== 'procedural' && zone.discovered) add(zone, zone.type, zone.type === 'meteors' ? '#ffae62' : '#6ec8ff', zone.type === 'meteors' ? 'CINTURÓN' : 'PORTAL DE COMBATE');
     for (const belt of hubState.zones) if (belt.discovered) add(belt, 'belt', '#ff9966', belt.cleared ? 'CINTURÓN DESPEJADO' : 'CINTURÓN');
-    return { planets: exploration.planets, cells: [...exploration.exploredCells], objects, stations: hubState.stations, ship: { x: nave.x, y: nave.y } };
+    return { planets: exploration.planets, cells: [...exploration.exploredCells], objects, stations: hubState.stations.filter(station => isPointExplored(station.x, station.y)), ship: { x: nave.x, y: nave.y } };
 });
 document.getElementById('btn-system-map')?.addEventListener('click', () => { if (gameState === 'EXPLORING') toggleSystemMap(); });
 let startBtnPressed = false;
@@ -2130,6 +2131,11 @@ function draw(currentTime){
     if(fxState.screenShake>0){ ctx.translate((Math.random()-0.5)*fxState.screenShake,(Math.random()-0.5)*fxState.screenShake); fxState.screenShake*=0.9; if(fxState.screenShake<0.5) fxState.screenShake=0; }
     if (superBossState.arena) {
         drawSuperArena(ctx, canvas, gameState);
+    } else if (activePlanet) {
+        // Cada mundo combate dentro de su propia atmósfera (color y clima).
+        const atmosphereTime = performance.now() / 1000;
+        drawPlanetAtmosphere(ctx, canvas, activePlanet, atmosphereTime);
+        drawPlanetForeground(ctx, canvas, activePlanet, atmosphereTime);
     } else {
         ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
         drawParallax(ctx, canvas, gameState);
@@ -2139,17 +2145,12 @@ function draw(currentTime){
     // Nave del menú (órbita idle / despegue) sobre el fondo animado
     drawMenuShip(ctx);
     if (gameState === 'PLAYING' && activePlanet) {
-        if (activePlanet.style === 'toxina') {
-            ctx.save(); ctx.globalAlpha=.2; ctx.fillStyle='#99df32';
-            ctx.beginPath();ctx.arc(canvas.width*.25,canvas.height*.32,110,0,Math.PI*2);ctx.fill();
-            ctx.beginPath();ctx.arc(canvas.width*.72,canvas.height*.68,125,0,Math.PI*2);ctx.fill();ctx.restore();
-        } else if (activePlanet.style === 'mecanis') {
-            ctx.save();ctx.globalAlpha=.28+.18*Math.sin(Date.now()/170);ctx.strokeStyle='#ff304e';ctx.lineWidth=5;
+        // Atmósfera ya aplicada en el fondo; aquí solo se mantiene el tinte
+        // de peligro de las arenas hostiles sobre las entidades.
+        if (activePlanet.style === 'mecanis') {
+            ctx.save();ctx.globalAlpha=.16+.12*Math.sin(Date.now()/170);ctx.strokeStyle='#ff304e';ctx.lineWidth=3;
             for(const y of [canvas.height*.34,canvas.height*.66]){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(canvas.width,y);ctx.stroke();}
             ctx.restore();
-        } else if (activePlanet.style === 'ignis') {
-            const heat=ctx.createRadialGradient(canvas.width/2,canvas.height/2,80,canvas.width/2,canvas.height/2,Math.max(canvas.width,canvas.height)*.7);
-            heat.addColorStop(.55,'rgba(255,70,15,0)');heat.addColorStop(1,'rgba(255,85,20,.14)');ctx.fillStyle=heat;ctx.fillRect(0,0,canvas.width,canvas.height);
         }
     }
     if(gameState==='PLAYING'||gameState==='PAUSED'||gameState==='CONTINUE'||gameState==='WIN'||gameState==='FREE_BOSS_DEATH'){
