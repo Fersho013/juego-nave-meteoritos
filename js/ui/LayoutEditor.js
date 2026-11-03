@@ -6,11 +6,14 @@ import { platform } from '../State.js';
 const STORAGE_KEY = 'jogo_layout_v2';
 const PANEL_STORAGE_KEY = 'jogo_panel_pos_v1';
 
-// 3 bloques HUD independientes (vida/parry/dash | score/bombas/arma | sector/kills)
+// Bloques HUD independientes (vida/parry/dash | score/bombas/arma | sector/kills |
+// exploración | minimapa)
 export const HUD_IDS = [
     'hud-block-score',   // Score / bombas / arma
     'hud-block-sector',  // contador kills + título sector
     'hud-block-vida',    // Vida / parry / dash
+    'hud-block-explore', // sector, zona, contacto y mejoras de exploración
+    'hud-block-minimap', // minimapa de exploración
     'boss-container'
 ];
 export const TOUCH_IDS = [
@@ -24,6 +27,23 @@ export const TOUCH_IDS = [
 ];
 // Compat: mantener EDITABLE_IDS para imports externos
 export const EDITABLE_IDS = [...HUD_IDS, ...TOUCH_IDS];
+
+const EDITOR_LABELS = {
+    'hud-block-score': 'Score / Bombas / Arma',
+    'hud-block-sector': 'Sector / Oleada / Mapa',
+    'hud-block-vida': 'Vida / Parry / Dash',
+    'hud-block-explore': 'Exploración / Mejoras',
+    'hud-block-minimap': 'Minimapa de exploración',
+    'boss-container': 'Barra de jefes',
+    'joy-base-l': 'Joystick izquierdo',
+    'joy-base-r': 'Joystick derecho',
+    'btn-triple': 'Botón Triple',
+    'btn-parry': 'Botón Parry',
+    'btn-bomb': 'Botón Bomba',
+    'btn-dash': 'Botón Dash',
+    'btn-pause-m': 'Botón Pausa'
+};
+function labelFor(id) { return EDITOR_LABELS[id] || id; }
 
 export function getEditableIds() {
     // PC: solo HUD (3 bloques). Móvil: HUD + controles táctiles
@@ -72,6 +92,8 @@ function captureDefaults() {
     if (!defaults['hud-block-score']) defaults['hud-block-score'] = { leftPct: 2, topPct: 2, scale:1, widthPx: 170, heightPx: 60 };
     if (!defaults['hud-block-sector']) defaults['hud-block-sector'] = { leftPct: 50, topPct: 2, scale:1, widthPx: 200, heightPx: 40 };
     if (!defaults['hud-block-vida']) defaults['hud-block-vida'] = { leftPct: 75, topPct: 2, scale:1, widthPx: 120, heightPx: 60 };
+    if (!defaults['hud-block-explore']) defaults['hud-block-explore'] = { leftPct: 2, topPct: 19, scale:1, widthPx: 250, heightPx: 74 };
+    if (!defaults['hud-block-minimap']) defaults['hud-block-minimap'] = { leftPct: 79, topPct: 19, scale:1, widthPx: 140, heightPx: 140 };
     if (!defaults['boss-container']) defaults['boss-container'] = { leftPct: 50, topPct: 10, scale:1, widthPx: 400, heightPx: 20 };
 }
 
@@ -208,6 +230,8 @@ function ensureLayoutEntry(id) {
                 if (id === 'hud-block-score') { left = 2; top = 2; }
                 else if (id === 'hud-block-sector') { left = 50; top = 2; }
                 else if (id === 'hud-block-vida') { left = 75; top = 2; }
+                else if (id === 'hud-block-explore') { left = 2; top = 19; }
+                else if (id === 'hud-block-minimap') { left = 79; top = 19; }
                 else if (id === 'boss-container') { left = 50; top = 10; }
                 else if (id.includes('joy-base-l')) { left = 3; top = 75; }
                 else if (id.includes('joy-base-r')) { left = 78; top = 75; }
@@ -292,7 +316,7 @@ function syncPanelControls() {
     if (sel) {
         // Reconstruir opciones según modo actual
         const ids = getEditableIds();
-        sel.innerHTML = ids.map(id => `<option value="${id}">${id}</option>`).join('');
+        sel.innerHTML = ids.map(id => `<option value="${id}">${labelFor(id)}</option>`).join('');
         if (selectedId && ids.includes(selectedId)) sel.value = selectedId;
         else if (ids.length) { selectedId = ids[0]; sel.value = selectedId; highlightSelection(); }
     }
@@ -324,7 +348,7 @@ function buildPanelIfNeeded() {
         <div id="layout-editor-body">
             <p id="editor-mode-hint" style="font-size:0.7rem; margin:4px 0 8px; padding:6px; border-radius:6px;"></p>
             <label style="font-size:0.75rem; color:#aaa;">Elemento</label>
-            <select id="editor-select" style="width:100%; margin:4px 0 8px;">${ids.map(id=>`<option value="${id}">${id}</option>`).join('')}</select>
+            <select id="editor-select" style="width:100%; margin:4px 0 8px;">${ids.map(id=>`<option value="${id}">${labelFor(id)}</option>`).join('')}</select>
             <div id="editor-pos-label" style="font-family:JetBrains Mono; font-size:0.7rem; color:var(--primary); margin-bottom:6px;">—</div>
             <label style="font-size:0.75rem; color:#aaa;">Tamaño <span id="editor-scale-val">1.00x</span></label>
             <input id="editor-scale" type="range" min="0.6" max="1.8" step="0.05" value="1" style="width:100%; accent-color:var(--primary);">
@@ -444,10 +468,10 @@ export function enterEditMode() {
     if (hint) {
         if (platform.isMobile) {
             hint.style.background = 'rgba(0,255,204,0.12)'; hint.style.border = '1px solid rgba(0,255,204,0.3)'; hint.style.color = '#00ffcc';
-            hint.innerText = '📱 Modo Móvil: puedes mover HUD (3 bloques) + controles táctiles.';
+            hint.innerText = '📱 Modo Móvil: puedes mover HUD (5 bloques) + controles táctiles.';
         } else {
             hint.style.background = 'rgba(30,144,255,0.12)'; hint.style.border = '1px solid rgba(30,144,255,0.3)'; hint.style.color = '#1e90ff';
-            hint.innerText = '🖥️ Modo PC: solo HUD (Score / Sector / Vida). Controles táctiles ocultos.';
+            hint.innerText = '🖥️ Modo PC: solo HUD (Score / Sector / Vida / Exploración / Minimapa). Controles táctiles ocultos.';
         }
     }
     highlightSelection();
@@ -470,6 +494,12 @@ export function exitEditMode(save = true) {
     HUD_IDS.forEach(id => {
         const el = getEl(id);
         if (el && id.startsWith('hud-block')) el.style.opacity = '';
+    });
+    // Los bloques de exploración solo se muestran dentro de la exploración:
+    // al cerrar el editor (pausa) se ocultan hasta reanudar la partida.
+    ['hud-block-explore', 'hud-block-minimap'].forEach(id => {
+        const el = getEl(id);
+        if (el) el.style.display = 'none';
     });
     dragState = null;
     // El editor se abre desde la pausa: al cerrarlo hay que volver a una

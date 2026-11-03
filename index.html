@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>SPACE MISSION: ECHELON (ULTRA)</title>
-    <link rel="stylesheet" href="./css/styles.css?v=20261102a">
+    <link rel="stylesheet" href="./css/styles.css?v=20261102b">
 </head>
 <body>
     <div id="game-container">
@@ -14,6 +14,23 @@
         <div id="hud-block-score" class="hud-block"><div class="stat-box">SCORE: <span id="val-score">0</span><br>BOMBS: <span id="val-bombs">3</span> [LB/SPACE]<br>CRÉDITOS: <span id="val-credits">0</span><br>ARMA: <span id="val-weapon" style="color:var(--primary)">NORMAL</span><br><span id="val-revive" style="display:none; color:#ffee88;">✨ 2ª OPORTUNIDAD LISTA</span></div></div>
         <div id="hud-block-sector" class="hud-block" style="text-align:center; pointer-events:none;"><div id="level-tag" style="color: var(--warning);">READY</div><div id="combo-display" style="display:none; font-size:1.1rem; font-family:'Orbitron',sans-serif; color:var(--warning); text-shadow:0 0 10px var(--warning); font-weight:bold;"></div><div id="wave-progress" style="display:none; font-size:0.72rem; font-family:'Orbitron',sans-serif; color:#aaa; margin-top:4px; min-width:140px;"></div><div id="bomb-alert" style="display:none; font-size:0.85rem; font-family:'Orbitron',sans-serif; font-weight:bold; margin-top:6px; padding:4px 8px; border:2px solid var(--warning); background:rgba(0,0,0,0.7);"></div><button id="btn-system-map" type="button" aria-label="Abrir mapa estelar">MAPA <kbd>M</kbd></button></div>
         <div id="hud-block-vida" class="hud-block"><div class="stat-box">VIDA: <span id="val-health-pct">100%</span><div id="health-bar-track" style="width:90px; height:9px; background:rgba(255,255,255,0.12); border:1px solid #555; border-radius:2px; margin:3px 0; overflow:hidden;"><div id="health-bar-fill" style="width:100%; height:100%; background:#33ff66; transition: width 0.2s linear, background 0.2s linear;"></div></div>PARRY: <span id="val-parry">READY</span><br>DASH: <span id="val-dash">READY</span></div></div>
+        <!-- Exploración: sector, estado de zona y mejoras, integrados en el HUD editable -->
+        <div id="hud-block-explore" class="hud-block">
+            <div class="stat-box explore-box">
+                <div id="explore-sector" class="explore-sector">SECTOR ALFA</div>
+                <div id="explore-zone" class="explore-zone">ZONA SEGURA · SIN DAÑO</div>
+                <div id="explore-contact" class="explore-contact" style="display:none;"></div>
+                <div id="explore-threat" class="explore-threat" style="display:none;"></div>
+                <div id="explore-upgrades-value" class="explore-upgrades">MEJORAS · MOTORES +0%</div>
+            </div>
+        </div>
+        <!-- Minimapa: canvas propio dentro de un bloque HUD editable -->
+        <div id="hud-block-minimap" class="hud-block" role="img" aria-label="Minimapa de exploración">
+            <div class="minimap-wrap">
+                <canvas id="minimap-canvas" width="280" height="280"></canvas>
+                <button id="btn-minimap" type="button" aria-label="Abrir mapa estelar" title="Abrir mapa estelar"></button>
+            </div>
+        </div>
         <div id="boss-container"></div>
 
         <div id="mobile-ui">
@@ -28,12 +45,8 @@
         </div>
 
         <div id="exploration-hud" aria-live="polite">
-            <div id="explore-ship-status">
-                <div id="explore-upgrades-value">MEJORAS · MOTORES +0%</div>
-            </div>
             <div id="explore-interact-prompt"></div>
         </div>
-        <button id="btn-minimap" type="button" aria-label="Abrir mapa estelar" title="Abrir mapa estelar"></button>
         <section id="system-map" role="dialog" aria-modal="true" aria-label="Mapa del sistema solar">
             <header class="system-map-header">
                 <div><strong>CARTA DEL SISTEMA SOLAR</strong><small>Arrastra para explorar · rueda / pellizco para zoom</small></div>
@@ -180,7 +193,7 @@
                         <div style="color:var(--success); font-family:'Orbitron', sans-serif; font-weight:bold; margin-bottom: 5px;">[MÓVIL / PANTALLA TÁCTIL]</div>
                         <div>• Pad Izq: Movimiento | Pad Der: Apuntar y Disparar</div>
                         <div>• Iconos: 🔱 Triple | 🛡️ Parry (Q) | 💣 Bomba | ⚡ Dash | E Interactuar</div>
-                        <div>• Minimapa (arriba a la derecha): toca para abrir el mapa completo</div>
+                        <div>• Minimapa (editable desde el layout): toca para abrir el mapa completo</div>
                         <div>• Caja naranja 🟧: Recoger para cambiar arma (S=Spread, L=Laser)</div>
                     </div>
                 </div>
@@ -376,6 +389,6 @@
         }
     })();
     </script>
-    <script type="module" src="./js/Main.js?v=20261102a"></script>
+    <script type="module" src="./js/Main.js?v=20261102b"></script>
 </body>
 </html>

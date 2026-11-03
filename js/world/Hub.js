@@ -447,7 +447,7 @@ function updateSalvage(dt, combatProjectiles = []) {
     }
 }
 
-export function updateHub(dt, navePosition, input, { nearZone = false, nearPlanet = null, zoneLabel = '', combatProjectiles = [] } = {}) {
+export function updateHub(dt, navePosition, input, { nearZone = false, nearPlanet = null, nearCache = false, zoneLabel = '', combatProjectiles = [], sector = '', inSafeZone = false, encounter = null, threatMessage = '', threatTimer = 0 } = {}) {
     const step = Math.max(0, Math.min(0.05, dt || 0));
     ensureProceduralBelts(navePosition);
     updateStationProximity(navePosition);
@@ -475,8 +475,14 @@ export function updateHub(dt, navePosition, input, { nearZone = false, nearPlane
         nearStation: hubState.nearStation,
         nearZone,
         nearPlanet,
+        nearCache,
         zoneLabel,
-        panelOpen: hubState.panelOpen
+        panelOpen: hubState.panelOpen,
+        sector,
+        inSafeZone,
+        encounter,
+        threatMessage,
+        threatTimer
     });
 }
 

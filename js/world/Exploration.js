@@ -23,6 +23,7 @@ export const exploration = {
     nearGate: false,
     gateDist: 0,
     sector: 'SECTOR ALFA',
+    inSafeZone: true,
     gate: null,
     combatZones: [],
     enteringZone: null,
@@ -493,6 +494,7 @@ export function updateExploration(dt, nave, input, canvas, combatProjectiles = [
 
     nave.x += nave.vx * step;
     nave.y += nave.vy * step;
+    exploration.inSafeZone = Math.hypot(nave.x - exploration.spawnX, nave.y - exploration.spawnY) <= SAFE_ZONE_RADIUS;
 
     const currentSpeed = Math.hypot(nave.vx, nave.vy);
     const aim = screenToWorld(input.aimX, input.aimY);
@@ -713,108 +715,266 @@ function drawGate(ctx, gate) {
 
 // Minimapa compacto: reutiliza la información del mapa grande (estaciones,
 // cinturones, zonas, retos, planetas, tráfico y nave) en una vista centrada en
-// el jugador. Los objetos lejanos se anclan al borde para no perder el rumbo.
-function miniMapLayout(canvas) {
-    const narrow = canvas.width <= 600;
-    return narrow
-        ? { radius: 50, centerX: canvas.width - 64, centerY: 152 }
-        : { radius: 60, centerX: canvas.width - 80, centerY: 176 };
-}
-function drawMiniMap(ctx, canvas, nave) {
-    const { radius, centerX, centerY } = miniMapLayout(canvas);
+// el jugador. Se dibuja en su propio canvas dentro de un bloque HUD editable.
+let lastMiniMapDraw = 0;
+function drawMiniMap(nave) {
+    const miniCanvas = document.getElementById('minimap-canvas');
+    if (!miniCanvas) return;
+    const now = performance.now();
+    if (now - lastMiniMapDraw < 33) return; // ~30 fps: suficiente y barato
+    lastMiniMapDraw = now;
+    const size = miniCanvas.clientWidth || 140;
+    if (size <= 0) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const backing = Math.max(2, Math.round(size * dpr));
+    if (miniCanvas.width !== backing || miniCanvas.height !== backing) {
+        miniCanvas.width = backing;
+        miniCanvas.height = backing;
+    }
+    const ctx = miniCanvas.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, size, size);
+
+    const centerX = size / 2, centerY = size / 2;
+    const radius = size / 2 - 2;
+    const plotRadius = radius - 7;
     const range = 6000;
     const project = (x, y) => {
         const dx = x - nave.x, dy = y - nave.y;
         const distance = Math.hypot(dx, dy);
-        const scaled = Math.min(radius - 7, (distance / range) * radius);
-        return { x: centerX + (distance ? dx / distance * scaled : 0), y: centerY + (distance ? dy / distance * scaled : 0), distance, angle: Math.atan2(dy, dx) };
+        const scaled = Math.min(plotRadius, (distance / range) * plotRadius);
+        return {
+            x: centerX + (distance ? dx / distance * scaled : 0),
+            y: centerY + (distance ? dy / distance * scaled : 0),
+            distance,
+            angle: Math.atan2(dy, dx)
+        };
     };
 
+    // Fondo circular con rejilla, anillos y barrido de radar.
     ctx.save();
-    ctx.fillStyle = 'rgba(3,9,20,0.82)';
-    ctx.beginPath(); ctx.arc(centerX, centerY, radius + 8, 0, Math.PI * 2); ctx.fill();
-    ctx.globalAlpha = 0.9;
-    ctx.strokeStyle = 'rgba(110,200,255,0.66)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(centerX, centerY, radius, 0, Math.PI * 2); ctx.stroke();
-    ctx.globalAlpha = 0.34;
-    for (const ring of [radius / 3, radius * 2 / 3]) { ctx.beginPath(); ctx.arc(centerX, centerY, ring, 0, Math.PI * 2); ctx.stroke(); }
-    ctx.beginPath(); ctx.moveTo(centerX - radius, centerY); ctx.lineTo(centerX + radius, centerY); ctx.moveTo(centerX, centerY - radius); ctx.lineTo(centerX, centerY + radius); ctx.stroke();
-    ctx.globalAlpha = 1;
+    ctx.beginPath(); ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    const bg = ctx.createRadialGradient(centerX, centerY, 2, centerX, centerY, radius);
+    bg.addColorStop(0, 'rgba(12,34,56,0.98)');
+    bg.addColorStop(0.7, 'rgba(4,13,26,0.98)');
+    bg.addColorStop(1, 'rgba(2,7,15,0.98)');
+    ctx.fillStyle = bg; ctx.fill();
+    ctx.clip();
 
-    // Anillo de la zona segura de Aegis Prime.
-    const basePoint = project(exploration.spawnX, exploration.spawnY);
-    const baseDistance = Math.hypot(exploration.spawnX - nave.x, exploration.spawnY - nave.y);
-    ctx.strokeStyle = 'rgba(86,216,255,0.55)'; ctx.setLineDash([2, 3]);
-    ctx.beginPath(); ctx.arc(centerX, centerY, Math.min(radius - 3, SAFE_ZONE_RADIUS / range * radius), 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(96,190,255,0.18)';
+    ctx.lineWidth = 1;
+    for (const ring of [plotRadius / 3, plotRadius * 2 / 3]) {
+        ctx.beginPath(); ctx.arc(centerX, centerY, ring, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.moveTo(centerX - plotRadius, centerY); ctx.lineTo(centerX + plotRadius, centerY);
+    ctx.moveTo(centerX, centerY - plotRadius); ctx.lineTo(centerX, centerY + plotRadius);
+    ctx.stroke();
+
+    const sweep = (now / 1500) % (Math.PI * 2);
+    ctx.strokeStyle = 'rgba(90,210,255,0.22)';
+    ctx.beginPath(); ctx.arc(centerX, centerY, plotRadius, sweep - 0.7, sweep); ctx.stroke();
+    ctx.strokeStyle = 'rgba(120,225,255,0.5)';
+    ctx.beginPath(); ctx.moveTo(centerX, centerY);
+    ctx.lineTo(centerX + Math.cos(sweep) * plotRadius, centerY + Math.sin(sweep) * plotRadius);
+    ctx.stroke();
+
+    // Zona segura de Aegis Prime.
+    ctx.strokeStyle = 'rgba(86,216,255,0.5)';
+    ctx.setLineDash([2, 3]);
+    ctx.beginPath(); ctx.arc(centerX, centerY, SAFE_ZONE_RADIUS / range * plotRadius, 0, Math.PI * 2); ctx.stroke();
     ctx.setLineDash([]);
+
+    // Rastro reciente de la nave.
+    for (const point of exploration.trail) {
+        const p = project(point.x, point.y);
+        ctx.globalAlpha = Math.max(0, point.life) * 0.22;
+        ctx.fillStyle = nave.color || '#6ec8ff';
+        ctx.fillRect(p.x - 0.8, p.y - 0.8, 1.6, 1.6);
+    }
+    ctx.globalAlpha = 1;
 
     const drawPlanetMarker = (planet) => {
         const p = project(planet.x, planet.y);
         const far = p.distance > range;
         ctx.save();
-        ctx.globalAlpha = planet.discovered ? 0.95 : 0.42;
-        ctx.translate(p.x, p.y); ctx.rotate(p.angle);
+        ctx.globalAlpha = planet.discovered ? 0.95 : 0.4;
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.angle);
         ctx.fillStyle = planet.color || '#8fd0ff';
-        if (far) { ctx.beginPath(); ctx.moveTo(4.5, 0); ctx.lineTo(-3.5, -3); ctx.lineTo(-3.5, 3); ctx.closePath(); ctx.fill(); }
-        else { ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI * 2); ctx.fill(); }
+        ctx.strokeStyle = planet.color || '#8fd0ff';
+        if (far) {
+            ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(-3.5, -3.5); ctx.lineTo(-3.5, 3.5); ctx.closePath(); ctx.fill();
+        } else {
+            ctx.beginPath(); ctx.arc(0, 0, 3.2, 0, Math.PI * 2); ctx.fill();
+            ctx.globalAlpha *= 0.55;
+            ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.stroke();
+        }
         ctx.restore();
     };
 
-    for (const target of hubState.stations) {
-        const p = project(target.x, target.y);
-        ctx.fillStyle = target.color || '#6ec8ff';
-        ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill();
+    // Estaciones y servicios.
+    for (const station of hubState.stations) {
+        const p = project(station.x, station.y);
+        const color = station.color || '#6ec8ff';
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.95;
+        ctx.beginPath(); ctx.arc(p.x, p.y, 2.6, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 0.45;
+        ctx.strokeStyle = color;
+        ctx.beginPath(); ctx.arc(p.x, p.y, 4.6, 0, Math.PI * 2); ctx.stroke();
     }
+    // Cinturones/zona del hub.
     for (const zone of hubState.zones) {
         const p = project(zone.x, zone.y);
-        ctx.fillStyle = zone.cleared ? 'rgba(255,153,102,0.35)' : '#ff9966';
-        ctx.beginPath(); ctx.arc(p.x, p.y, zone.cleared ? 2 : 2.4, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = zone.cleared ? 0.32 : 0.9;
+        ctx.fillStyle = '#ff9966';
+        ctx.beginPath(); ctx.arc(p.x, p.y, zone.cleared ? 2 : 2.5, 0, Math.PI * 2); ctx.fill();
     }
+    ctx.globalAlpha = 1;
+
+    // Portales de combate.
     for (const zone of exploration.combatZones) {
         const p = project(zone.x, zone.y);
-        ctx.fillStyle = zone.type === 'procedural' ? '#cf8cff' : zone.type === 'meteors' ? '#ffae62' : '#6ec8ff';
-        if (zone.type === 'procedural') { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(Math.PI / 4); ctx.fillRect(-2.8, -2.8, 5.6, 5.6); ctx.restore(); }
-        else { ctx.beginPath(); ctx.arc(p.x, p.y, 2.8, 0, Math.PI * 2); ctx.fill(); }
+        const color = zone.type === 'procedural' ? '#cf8cff' : zone.type === 'meteors' ? '#ffae62' : '#6ec8ff';
+        if (zone.type === 'procedural') {
+            ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(Math.PI / 4);
+            ctx.fillStyle = color; ctx.fillRect(-3, -3, 6, 6);
+            ctx.restore();
+        } else {
+            ctx.fillStyle = color;
+            ctx.beginPath(); ctx.arc(p.x, p.y, 2.6, 0, Math.PI * 2); ctx.fill();
+            ctx.globalAlpha = 0.5; ctx.strokeStyle = color;
+            ctx.beginPath(); ctx.arc(p.x, p.y, 4.4, 0, Math.PI * 2); ctx.stroke();
+            ctx.globalAlpha = 1;
+        }
     }
+    // Retos procedurales descubiertos.
     for (const event of exploration.proceduralEvents.values()) {
         if (!event?.discovered) continue;
         const p = project(event.x, event.y);
-        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(Math.PI / 4); ctx.fillStyle = '#cf8cff'; ctx.fillRect(-2.6, -2.6, 5.2, 5.2); ctx.restore();
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(Math.PI / 4);
+        ctx.fillStyle = '#cf8cff'; ctx.fillRect(-3, -3, 6, 6);
+        ctx.restore();
     }
     for (const planet of exploration.planets) drawPlanetMarker(planet);
+
+    // Cofre de datos: diamante dorado pulsante.
     if (exploration.cache) {
         const p = project(exploration.cache.x, exploration.cache.y);
-        ctx.fillStyle = '#ffe45c'; ctx.fillRect(p.x - 2.2, p.y - 2.2, 4.4, 4.4);
+        const pulse = 0.65 + Math.sin(now / 220) * 0.35;
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(Math.PI / 4);
+        ctx.fillStyle = '#ffe45c'; ctx.fillRect(-2.6, -2.6, 5.2, 5.2);
+        ctx.globalAlpha = pulse; ctx.strokeStyle = '#fff3a8';
+        ctx.strokeRect(-4.5, -4.5, 9, 9);
+        ctx.restore(); ctx.globalAlpha = 1;
     }
+    // Contacto hostil.
     if (exploration.encounter) {
         const p = project(exploration.encounter.x, exploration.encounter.y);
-        ctx.fillStyle = '#ff657a'; ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill();
+        const pulse = 0.55 + Math.sin(now / 180) * 0.45;
+        ctx.fillStyle = '#ff657a';
+        ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = pulse; ctx.strokeStyle = '#ff657a';
+        ctx.beginPath(); ctx.arc(p.x, p.y, 5.5, 0, Math.PI * 2); ctx.stroke();
+        ctx.globalAlpha = 1;
     }
+    // Jefes de caza: triángulos rojos con pulso.
     for (const boss of exploration.huntBosses) {
         const p = project(boss.x, boss.y);
-        ctx.fillStyle = '#ff3344'; ctx.beginPath(); ctx.moveTo(p.x, p.y - 4); ctx.lineTo(p.x + 3.5, p.y + 3); ctx.lineTo(p.x - 3.5, p.y + 3); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#ff3344';
+        ctx.beginPath(); ctx.moveTo(p.x, p.y - 4.5); ctx.lineTo(p.x + 3.8, p.y + 3.2); ctx.lineTo(p.x - 3.8, p.y + 3.2); ctx.closePath(); ctx.fill();
+        ctx.globalAlpha = 0.4 + Math.sin(now / 200) * 0.25; ctx.strokeStyle = '#ff3344';
+        ctx.beginPath(); ctx.arc(p.x, p.y, 6.5, 0, Math.PI * 2); ctx.stroke();
+        ctx.globalAlpha = 1;
     }
+    // Tráfico civil.
     ctx.fillStyle = 'rgba(190,210,230,0.7)';
     for (const ship of exploration.traffic) {
         const p = project(ship.x, ship.y);
         if (p.distance > range) continue;
-        ctx.fillRect(p.x - 1, p.y - 1, 2, 2);
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(ship.rot || 0);
+        ctx.fillRect(-1.4, -1.4, 2.8, 2.8);
+        ctx.restore();
     }
-    // Base y nave del jugador.
+    // Base.
+    const basePoint = project(exploration.spawnX, exploration.spawnY);
     ctx.fillStyle = '#56d8ff';
-    ctx.beginPath(); ctx.arc(basePoint.x, basePoint.y, 3.3, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath(); ctx.moveTo(centerX + 6, centerY); ctx.lineTo(centerX - 4, centerY - 3.5); ctx.lineTo(centerX - 2, centerY); ctx.lineTo(centerX - 4, centerY + 3.5); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.arc(basePoint.x, basePoint.y, 3.2, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(86,216,255,0.6)';
+    ctx.beginPath(); ctx.arc(basePoint.x, basePoint.y, 5.4, 0, Math.PI * 2); ctx.stroke();
 
+    // Brújula y escala dentro del radar.
     ctx.textAlign = 'center';
-    ctx.font = 'bold 8px Orbitron';
-    ctx.fillStyle = 'rgba(179,225,255,0.9)';
-    ctx.fillText('MINIMAPA', centerX, centerY - radius - 15);
-    ctx.font = '7px Orbitron';
-    ctx.fillStyle = 'rgba(138,180,210,0.85)';
-    ctx.fillText('TOCA PARA AMPLIAR', centerX, centerY + radius + 16);
-    ctx.textAlign = 'left';
+    ctx.font = 'bold 7px Orbitron';
+    ctx.fillStyle = 'rgba(180,230,255,0.8)';
+    ctx.fillText('N', centerX, centerY - plotRadius + 7);
+    ctx.font = '6px Orbitron';
+    ctx.fillStyle = 'rgba(150,190,220,0.65)';
+    ctx.fillText('6 km', centerX, centerY + plotRadius - 4);
+    ctx.restore();
+
+    // Aro exterior y marcas cada 30°.
+    ctx.save();
+    ctx.strokeStyle = 'rgba(110,200,255,0.7)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(centerX, centerY, radius, 0, Math.PI * 2); ctx.stroke();
+    for (let i = 0; i < 12; i++) {
+        const angle = i * Math.PI / 6;
+        const inner = i % 3 === 0 ? radius - 4.5 : radius - 2.5;
+        ctx.strokeStyle = i % 3 === 0 ? 'rgba(160,225,255,0.8)' : 'rgba(110,200,255,0.35)';
+        ctx.beginPath();
+        ctx.moveTo(centerX + Math.cos(angle) * inner, centerY + Math.sin(angle) * inner);
+        ctx.lineTo(centerX + Math.cos(angle) * radius, centerY + Math.sin(angle) * radius);
+        ctx.stroke();
+    }
+    ctx.restore();
+
+    // Nave del jugador: se desplaza ligeramente en el sentido de avance y
+    // apunta siempre hacia la misma dirección que la nave real.
+    const speed = Math.hypot(nave.vx || 0, nave.vy || 0);
+    const travelAngle = speed > 0.2 ? Math.atan2(nave.vy, nave.vx) : (nave.rot || 0);
+    const drift = Math.min(3.2, speed * 0.14);
+    const shipX = centerX + Math.cos(travelAngle) * drift;
+    const shipY = centerY + Math.sin(travelAngle) * drift;
+    const heading = nave.rot || 0;
+
+    ctx.save();
+    ctx.globalAlpha = 0.55;
+    ctx.strokeStyle = nave.color || '#6ec8ff';
+    ctx.setLineDash([2, 3]);
+    ctx.beginPath(); ctx.moveTo(shipX, shipY);
+    ctx.lineTo(shipX + Math.cos(heading) * plotRadius * 0.34, shipY + Math.sin(heading) * plotRadius * 0.34);
+    ctx.stroke();
+    ctx.restore();
+
+    if (speed > 2.4) {
+        ctx.save();
+        ctx.translate(shipX, shipY); ctx.rotate(heading);
+        ctx.globalAlpha = 0.45 + Math.random() * 0.35;
+        ctx.fillStyle = '#8fe8ff';
+        ctx.beginPath(); ctx.moveTo(-4, -1.8); ctx.lineTo(-10 - Math.random() * 3, 0); ctx.lineTo(-4, 1.8); ctx.closePath(); ctx.fill();
+        ctx.restore();
+    }
+
+    ctx.save();
+    ctx.translate(shipX, shipY);
+    ctx.rotate(heading);
+    drawGlow(ctx, 0, 0, 17, nave.color || '#6ec8ff', 0.42);
+    ctx.fillStyle = '#f2fbff';
+    ctx.beginPath();
+    ctx.moveTo(8, 0);
+    ctx.lineTo(-5, -5);
+    ctx.lineTo(-2.6, 0);
+    ctx.lineTo(-5, 5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = nave.color || '#6ec8ff';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = nave.color || '#6ec8ff';
+    ctx.beginPath(); ctx.arc(1.2, 0, 1.5, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
 }
 
@@ -958,26 +1118,10 @@ export function drawExploration(ctx, canvas, nave, input, combat = {}) {
     ctx.stroke();
     ctx.restore();
 
-    // HUD y radar permanecen anclados a la pantalla, no al mundo.
-    const gate = exploration.gate;
+    // HUD y radar permanecen anclados a la pantalla, no al mundo. El bloque de
+    // sector/zona/contacto vive ahora en el HUD editable (Hud.js).
     ctx.save();
     ctx.textBaseline = 'top';
-    ctx.font = 'bold 14px Orbitron';
-    ctx.fillStyle = '#6ec8ff';
-    ctx.fillText(exploration.sector, 18, 16);
-    ctx.font = '10px Orbitron';
-    ctx.fillStyle = 'rgba(138,160,184,0.9)';
-    const inSafeZone = Math.hypot(nave.x - exploration.spawnX, nave.y - exploration.spawnY) <= SAFE_ZONE_RADIUS;
-    ctx.fillText(inSafeZone ? 'ZONA SEGURA · SIN DAÑO' : 'EXPLORACIÓN LIBRE', 18, 36);
-    if (exploration.encounter?.retreating) {
-        ctx.fillStyle = '#a8ccdd'; ctx.fillText('CONTACTO HOSTIL RETIRÁNDOSE', 18, 52);
-    } else if (exploration.encounter && !inSafeZone) {
-        ctx.fillStyle = '#ff8c8c'; ctx.fillText(`CONTACTO: ${exploration.encounter.type.toUpperCase()} · DISPARA PARA DEFENDERTE`, 18, 52);
-    }
-    if (exploration.threatMessageTimer > 0) {
-        ctx.textAlign = 'left'; ctx.font = '9px Orbitron'; ctx.fillStyle = 'rgba(220,225,235,0.86)';
-        ctx.fillText(exploration.threatMessage, 18, canvas.height - 40);
-    }
     ctx.textAlign = 'left'; ctx.font = 'bold 12px Orbitron'; ctx.fillStyle = exploration.bombCooldown > 0 ? 'rgba(195,210,225,0.95)' : 'rgba(130,215,255,0.98)';
     ctx.fillText(exploration.bombCooldown > 0 ? `BOMBA · ${Math.ceil(exploration.bombCooldown)}s` : 'BOMBA · LISTA', 18, canvas.height - 23);
     if (exploration.statusMessageTimer > 0) {
@@ -985,8 +1129,8 @@ export function drawExploration(ctx, canvas, nave, input, combat = {}) {
         ctx.fillText(exploration.statusMessage, canvas.width / 2, canvas.height / 2 + 70);
     }
     ctx.restore();
-    // Radar y coordenadas trasladados al HUD con el mapa ampliable.
-    if (!hubState.panelOpen) drawMiniMap(ctx, canvas, nave);
+    // Minimapa propio dentro del HUD editable.
+    if (!hubState.panelOpen) drawMiniMap(nave);
     if (exploration.nearGate) {
         ctx.save();
         ctx.textAlign = 'center';

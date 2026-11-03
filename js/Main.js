@@ -1561,7 +1561,6 @@ function syncHud(force = false){
     const now = performance.now();
     if (!force && now - lastHudSync < 80) return;
     lastHudSync = now;
-    saveActiveRunProfile();
     savePlayerState(combatState, nave, progression);
     hudUpdate({ combatState, weaponState, progression, gameMode: { value: gameMode }});
     if (hasSuperModifierActive()) {
@@ -1729,6 +1728,11 @@ function update(dtMs){
             nearPlanet: exploration.nearPlanet,
             nearCache: exploration.nearCache,
             combatProjectiles: bullets,
+            sector: exploration.sector,
+            inSafeZone: exploration.inSafeZone,
+            encounter: exploration.encounter,
+            threatMessage: exploration.threatMessage,
+            threatTimer: exploration.threatMessageTimer,
             zoneLabel: exploration.enteringZone?.type === 'procedural'
                 ? `RETO ${exploration.enteringZone.kind} · ${exploration.enteringZone.enemyTotal} ENEMIGOS / ${exploration.enteringZone.bossTotal} JEFES`
                 : exploration.nearPlanet ? ''

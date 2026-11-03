@@ -48,12 +48,39 @@ export function updateHUD({ combatState, weaponState, progression, gameMode }) {
     if (rEl) { const v = combatState.hasRevive ? 'inline' : 'none'; if (rEl.style.display !== v) rEl.style.display = v; }
 }
 
-export function updateExplorationHUD({ active = true, credits = 0, health = 100, bombs = 3, hasRevive = false, accel = 0.9, nearStation = null, nearZone = false, nearPlanet = null, nearCache = false, zoneLabel = '', panelOpen = false } = {}) {
-    const balance = el('explore-credits');
-    if (balance) balance.style.display = 'none';
-    const status = el('explore-ship-status');
-    if (status) {
-        status.style.display = active ? 'block' : 'none';
+export function updateExplorationHUD({ active = true, credits = 0, health = 100, bombs = 3, hasRevive = false, accel = 0.9, nearStation = null, nearZone = false, nearPlanet = null, nearCache = false, zoneLabel = '', panelOpen = false, sector = '', inSafeZone = false, encounter = null, threatMessage = '', threatTimer = 0 } = {}) {
+    // La información de exploración vive en un bloque HUD más, así que se
+    // mueve y escala desde el editor de layout como Score / Sector / Vida.
+    const box = el('hud-block-explore');
+    if (box) box.style.display = active ? 'block' : 'none';
+    if (active) {
+        const sectorEl = el('explore-sector');
+        if (sectorEl && sector && sectorEl.textContent !== sector) sectorEl.textContent = sector;
+        const zoneEl = el('explore-zone');
+        if (zoneEl) {
+            const zoneText = inSafeZone ? 'ZONA SEGURA · SIN DAÑO' : 'EXPLORACIÓN LIBRE';
+            if (zoneEl.textContent !== zoneText) zoneEl.textContent = zoneText;
+        }
+        const contactEl = el('explore-contact');
+        if (contactEl) {
+            let contactText = '';
+            let contactColor = '#ff8c8c';
+            if (encounter?.retreating) {
+                contactText = 'CONTACTO HOSTIL RETIRÁNDOSE';
+                contactColor = '#a8ccdd';
+            } else if (encounter && !inSafeZone) {
+                contactText = `CONTACTO: ${String(encounter.type || '').toUpperCase()} · DEFIÉNDETE`;
+            }
+            contactEl.style.display = contactText ? 'block' : 'none';
+            if (contactText && contactEl.textContent !== contactText) contactEl.textContent = contactText;
+            if (contactText && contactEl.style.color !== contactColor) contactEl.style.color = contactColor;
+        }
+        const threatEl = el('explore-threat');
+        if (threatEl) {
+            const showThreat = Boolean(threatMessage) && threatTimer > 0;
+            threatEl.style.display = showThreat ? 'block' : 'none';
+            if (showThreat && threatEl.textContent !== threatMessage) threatEl.textContent = threatMessage;
+        }
         const upgrades = Math.max(0, Math.round((accel / 0.9 - 1) * 100));
         const upgradeLabel = el('explore-upgrades-value');
         const ship = typeof window.getShipUpgrades === 'function' ? window.getShipUpgrades() : {};
@@ -62,6 +89,8 @@ export function updateExplorationHUD({ active = true, credits = 0, health = 100,
     }
     const mapButton = el('btn-system-map');
     if (mapButton) mapButton.style.display = active ? 'block' : 'none';
+    const miniMapBlock = el('hud-block-minimap');
+    if (miniMapBlock) miniMapBlock.style.display = active && !panelOpen ? 'block' : 'none';
     const prompt = el('explore-interact-prompt');
     if (prompt) {
         prompt.style.display = active && !panelOpen ? 'block' : 'none';
@@ -79,8 +108,6 @@ export function updateExplorationHUD({ active = true, credits = 0, health = 100,
     }
     const touchButton = el('btn-interact');
     if (touchButton) touchButton.style.display = active && !panelOpen && Boolean(nearStation || nearZone || nearPlanet || nearCache) ? 'flex' : 'none';
-    const miniMapButton = el('btn-minimap');
-    if (miniMapButton) miniMapButton.style.display = active && !panelOpen ? 'block' : 'none';
 }
 
 // Resetea el combo y cancela cualquier temporizador pendiente.
