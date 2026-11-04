@@ -284,6 +284,7 @@ function applyOptions() {
     config.w = w; config.h = h;
     const prevW = canvas.width, prevH = canvas.height;
     canvas.width = config.w; canvas.height = config.h;
+    canvas.style.width = `${config.w}px`; canvas.style.height = `${config.h}px`;
     const container = document.getElementById('game-container');
     if (container) { container.style.width = config.w + 'px'; container.style.height = config.h + 'px'; }
     if (prevW && prevH && (prevW !== canvas.width || prevH !== canvas.height)) rescaleBackground(prevW, prevH);
@@ -298,10 +299,76 @@ function rescaleBackground(prevW, prevH) {
     if (!prevW || !prevH) return;
     const sx = canvas.width / prevW, sy = canvas.height / prevH;
     if (sx === 1 && sy === 1) return;
-    stars.forEach(s => { s.x *= sx; s.y *= sy; });
+    stars.forEach(s => { s.x *= sx; s.y *= sy; s.speed *= (sx + sy) / 2; });
+    [...nebulas, ...planets, ...superAsteroids].forEach(item => {
+        if (Number.isFinite(item.x)) item.x *= sx;
+        if (Number.isFinite(item.y)) item.y *= sy;
+        if (Number.isFinite(item.r)) item.r *= (sx + sy) / 2;
+        if (Number.isFinite(item.speed)) item.speed *= (sx + sy) / 2;
+    });
 }
 
-bindResize(config, canvas, nave, () => gameState, (prevW, prevH) => rescaleBackground(prevW, prevH));
+function shiftCombatObjects(dx, dy) {
+    const coordinateKeys = new Set(['x','y','targetX','targetY','startX','startY','homeX','homeY']);
+    const visited = new WeakSet();
+    const scaleNode = node => {
+        if (!node || typeof node !== 'object' || visited.has(node)) return;
+        visited.add(node);
+        for (const [key, value] of Object.entries(node)) {
+            if (typeof value === 'number' && coordinateKeys.has(key)) {
+                if (key.endsWith('X') || key === 'x') node[key] += dx;
+                else node[key] += dy;
+            }
+            else if (value && typeof value === 'object' && !['spec','pts','points','sprite','image','canvas'].includes(key)) scaleNode(value);
+        }
+    };
+    [enemies, bullets, enemyBullets, bosses, planetBosses, pickUps, weaponPowerUps,
+        particles, debrisChunks, floatingTexts, shipTrail, portals, droneState.drones, superBossState].forEach(scaleNode);
+}
+
+function setCombatCanvasZoom(zoom, scaleExisting = true) {
+    const safeZoom = Math.max(0.55, Math.min(1, Number(zoom) || 1));
+    const nextWidth = Math.max(1, Math.round(config.w / safeZoom));
+    const nextHeight = Math.max(1, Math.round(config.h / safeZoom));
+    const prevWidth = canvas.width, prevHeight = canvas.height;
+    if (prevWidth === nextWidth && prevHeight === nextHeight) return;
+    const sx = nextWidth / prevWidth, sy = nextHeight / prevHeight;
+    if (scaleExisting) {
+        // Traslada la escena para que la nave conserve su ubicación en pantalla;
+        // el nuevo bitmap aporta espacio jugable alrededor al reducirse por CSS.
+        const offsetX = nave.x * sx - nave.x, offsetY = nave.y * sy - nave.y;
+        shiftCombatObjects(offsetX, offsetY);
+        [stars, nebulas, planets, superAsteroids].forEach(items => items.forEach(item => {
+            if (Number.isFinite(item.x)) item.x += offsetX;
+            if (Number.isFinite(item.y)) item.y += offsetY;
+        }));
+        nave.x += offsetX; nave.y += offsetY;
+    }
+    input.aimX *= sx; input.aimY *= sy;
+    canvas.width = nextWidth; canvas.height = nextHeight;
+    // El bitmap interno se amplía, pero el elemento visible conserva el tamaño
+    // de pantalla; el navegador aplica el zoom al canvas completo, no a un área
+    // de juego encogida en el centro.
+    canvas.style.width = `${config.w}px`; canvas.style.height = `${config.h}px`;
+    const container = document.getElementById('game-container');
+    if (container) { container.style.width = `${config.w}px`; container.style.height = `${config.h}px`; }
+}
+
+function resetCombatCanvas() {
+    if (canvas.width === config.w && canvas.height === config.h) return;
+    const prevWidth = canvas.width, prevHeight = canvas.height;
+    canvas.width = config.w; canvas.height = config.h;
+    canvas.style.width = `${config.w}px`; canvas.style.height = `${config.h}px`;
+    const container = document.getElementById('game-container');
+    if (container) { container.style.width = `${config.w}px`; container.style.height = `${config.h}px`; }
+    rescaleBackground(prevWidth, prevHeight);
+}
+
+bindResize(config, canvas, nave, () => gameState, (prevW, prevH) => {
+    rescaleBackground(prevW, prevH);
+    canvas.style.width = `${config.w}px`; canvas.style.height = `${config.h}px`;
+    if (['PLAYING','PAUSED','CONTINUE','WIN'].includes(gameState) && world.zoom < 0.999) setCombatCanvasZoom(world.zoom, false);
+});
 
 function showScreenWrapper(id) { showScreen(id); }
 function togglePause() {
@@ -337,6 +404,7 @@ function cleanupAllBossTimers() { bosses.forEach(cleanupBossTimers); }
 
 function exitToMenu() {
     saveActiveRunProfile();
+    resetCombatCanvas();
     trainingRun = false;
     trainingSetup = false;
     planetSimulationTraining = false;
@@ -906,6 +974,7 @@ function returnToHub(fromPause = false) {
     const panel = document.getElementById('boss-checkpoint');
     if (panel) panel.style.display = 'none';
     fadeTransition(() => {
+        resetCombatCanvas();
         // Si la campaña empezó desde el menú clásico, crea un universo de
         // exploración para que la salida al taller también esté disponible.
         if (!exploreCheckpoint) {
@@ -962,7 +1031,7 @@ window.addEventListener('keydown', e => {
     if (e.code === 'KeyP') { togglePause(); keys[e.code] = false; }
 });
 window.addEventListener('keyup', e => keys[e.code] = false);
-canvas.addEventListener('mousemove', e => { if (isEditorActive()) return; const rect = canvas.getBoundingClientRect(); input.aimX = e.clientX - rect.left; input.aimY = e.clientY - rect.top; setUsingGamepad(false); });
+canvas.addEventListener('mousemove', e => { if (isEditorActive()) return; const rect = canvas.getBoundingClientRect(); input.aimX = (e.clientX - rect.left) * canvas.width / rect.width; input.aimY = (e.clientY - rect.top) * canvas.height / rect.height; setUsingGamepad(false); });
 canvas.addEventListener('mousedown', e => { if (isEditorActive()) return; initAudio(); if (e.button === 0) { mouseShootHeld = true; input.shoot = true; } if (e.button === 2) { mouseTripleHeld = true; input.triple = true; } });
 const releaseMouseButtons = e => { if (e.button === 0) { mouseShootHeld = false; input.shoot = false; } if (e.button === 2) { mouseTripleHeld = false; input.triple = false; } };
 canvas.addEventListener('mouseup', releaseMouseButtons);
@@ -980,7 +1049,13 @@ canvas.addEventListener('touchmove', event => {
     const zoomable = gameState === 'EXPLORING' || gameState === 'PLAYING' || (gameState === 'PAUSED' && pausedFrom === 'PLAYING');
     if (!zoomable || event.touches.length !== 2 || !explorePinchDistance) return;
     const [a,b] = event.touches; const next = Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY);
-    if (next > 0) world.zoom = Math.max(.55, Math.min(1, world.zoom * next / explorePinchDistance));
+    if (next > 0) {
+        const nextZoom = Math.max(.55, Math.min(1, world.zoom * next / explorePinchDistance));
+        if (Math.abs(nextZoom - world.zoom) > 0.002) {
+            world.zoom = nextZoom;
+            if (gameState === 'PLAYING' || (gameState === 'PAUSED' && pausedFrom === 'PLAYING')) setCombatCanvasZoom(nextZoom, true);
+        }
+    }
     explorePinchDistance = next; event.preventDefault();
 }, { passive:false });
 const endExplorePinch = event => { if (event.touches.length < 2) explorePinchDistance = 0; };
@@ -1173,6 +1248,7 @@ buildPlanetCustomMenu();
 
 function startExploration({ fresh = false, hard = false } = {}){
     if (gameState === 'MENU') { beginLaunch('explore', { fresh, hard }); return; }
+    resetCombatCanvas();
     initAudio();
     activateModeProfile(activeSlotKey('explore'), { fresh, hard });
     if (fresh) exploreCheckpoint = null;
@@ -1352,6 +1428,7 @@ function beginMission(mode, fromExploration = false, { fresh = false, hard = fal
     if (marketLoadout.spread) { weaponState.current = 'spread'; weaponState.timer = 1800; }
     if (targetProfile === 'explore' && enteringFromExploration) hubState.marketLoadout = { homing:false, spread:false };
     bullets.length=0; enemyBullets.length=0; enemies.length=0; planetBosses.length=0; cleanupAllBossTimers(); bosses.length=0; renderBossUI(); pickUps.length=0; clearParticles(); clearBlasts(); floatingTexts.length=0;
+    setCombatCanvasZoom(world.zoom, false);
     if (mode === 'progressive' && progression.awaitingBossReward) {
         pickUps.push({ x: canvas.width / 2, y: canvas.height / 2 - 90, type: progression.pendingBossRewardType || (combatState.hasRevive ? 'bomb' : 'revive'), bossReward: true });
         progression.pendingBossRewardType = null;
@@ -2672,7 +2749,6 @@ function draw(currentTime){
         if (superBossState.arena) drawSuperArena(ctx, canvas, gameState);
         else if (activePlanet) { const backgroundTime=performance.now()/1000; drawPlanetAtmosphere(ctx,canvas,activePlanet,backgroundTime); drawPlanetForeground(ctx,canvas,activePlanet,backgroundTime); }
         else drawParallax(ctx,canvas,gameState);
-        ctx.translate(canvas.width/2, canvas.height/2); ctx.scale(world.zoom, world.zoom); ctx.translate(-canvas.width/2, -canvas.height/2);
     }
     if(fxState.screenShake>0){ ctx.translate((Math.random()-0.5)*fxState.screenShake,(Math.random()-0.5)*fxState.screenShake); fxState.screenShake*=0.9; if(fxState.screenShake<0.5) fxState.screenShake=0; }
     if (superBossState.arena) {
