@@ -564,15 +564,18 @@ export function updateExploration(dt, nave, input, canvas, combatProjectiles = [
     }
 
     const cameraBlend = 1 - Math.exp(-24 * Math.max(0, dt));
-    const desiredCameraX = nave.x - camera.viewW / 2;
-    const desiredCameraY = nave.y - camera.viewH / 2;
+    // Main aplica el zoom visual alrededor del centro del canvas. La cámara
+    // debe conservar a la nave en el centro real de pantalla; usar viewW/H
+    // (que crecen al alejar el zoom) desplaza la nave hacia la derecha/abajo.
+    const desiredCameraX = nave.x - canvas.width / 2;
+    const desiredCameraY = nave.y - canvas.height / 2;
     world.cameraX += (desiredCameraX - world.cameraX) * cameraBlend;
     world.cameraY += (desiredCameraY - world.cameraY) * cameraBlend;
     const shipScreenX = nave.x - world.cameraX, shipScreenY = nave.y - world.cameraY;
-    if (shipScreenX < 52) world.cameraX = nave.x - 52;
-    else if (shipScreenX > camera.viewW - 52) world.cameraX = nave.x - (camera.viewW - 52);
-    if (shipScreenY < 52) world.cameraY = nave.y - 52;
-    else if (shipScreenY > camera.viewH - 52) world.cameraY = nave.y - (camera.viewH - 52);
+    if (shipScreenX < 52) world.cameraX = nave.x - canvas.width / 2;
+    else if (shipScreenX > canvas.width - 52) world.cameraX = nave.x - canvas.width / 2;
+    if (shipScreenY < 52) world.cameraY = nave.y - canvas.height / 2;
+    else if (shipScreenY > canvas.height - 52) world.cameraY = nave.y - canvas.height / 2;
     updateVisibleChunks();
     updateSpaceTraffic(dt, nave, combatProjectiles, parryActive);
     updateProceduralEvents(nave);

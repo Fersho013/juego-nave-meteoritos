@@ -64,7 +64,7 @@ const refreshPreview = MenuNS.refreshPreview || (() => {});
 import { stars, nebulas, planets, superAsteroids, initParallax, drawParallax, drawSuperArena } from './world/Parallax.js';
 import { drawPlanetAtmosphere, drawPlanetForeground } from './world/PlanetAtmosphere.js?v=20261103a';
 import { world, resetCamera, centerCamera } from './world/Camera.js';
-import { enterExploration, updateExploration, drawExploration, exploration, resetExplorationProgress, isPointExplored, markPlanetPurged } from './world/Exploration.js?v=20261104b';
+import { enterExploration, updateExploration, drawExploration, exploration, resetExplorationProgress, isPointExplored, markPlanetPurged } from './world/Exploration.js?v=20261104c';
 import { hubState, initHub, updateHub, closeStationPanel } from './world/Hub.js?v=20261103a';
 import { initSystemMap, isSystemMapOpen, toggleSystemMap, closeSystemMap, drawSystemMapFrame } from './ui/StarMap.js?v=20261103a';
 import { DASH } from './Data/Constants.js';
