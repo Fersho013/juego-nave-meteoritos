@@ -419,7 +419,11 @@ export function drawHostileShot(ctx, bullet) {
     ctx.fillStyle = bullet.color || '#ffffff';
     ctx.strokeStyle = 'rgba(255,255,255,0.8)';
     ctx.lineWidth = 1;
-    if (bullet.style === 'iceblock' || bullet.style === 'iceshard') {
+    if (bullet.style === 'flame') {
+        ctx.shadowColor = '#ff4a12'; ctx.shadowBlur = 15;
+        ctx.beginPath(); ctx.moveTo(12, 0); ctx.quadraticCurveTo(2, -9, -8, -5); ctx.quadraticCurveTo(-2, 0, -8, 5); ctx.quadraticCurveTo(4, 9, 12, 0); ctx.fill();
+        ctx.fillStyle = '#ffe39b'; ctx.beginPath(); ctx.ellipse(0, 0, 4, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+    } else if (bullet.style === 'iceblock' || bullet.style === 'iceshard') {
         const s = bullet.style === 'iceblock' ? 9 : 6;
         ctx.fillRect(-s, -s * 0.7, s * 2, s * 1.4);
         ctx.strokeRect(-s, -s * 0.7, s * 2, s * 1.4);
@@ -439,15 +443,19 @@ export function drawHostileShot(ctx, bullet) {
     } else if (bullet.style === 'gale' || bullet.style === 'windbolt' || bullet.style === 'hail') {
         ctx.beginPath(); ctx.moveTo(8, 0); ctx.quadraticCurveTo(0, -7, -8, 0); ctx.quadraticCurveTo(0, 7, 8, 0); ctx.fill();
     } else if (bullet.style === 'shell' || bullet.style === 'redbeam') {
-        ctx.fillRect(-8, -4, 16, 8);
+        ctx.shadowColor = bullet.color; ctx.shadowBlur = 12;
+        const shellSize = bullet.size || 8;
+        ctx.fillRect(-shellSize, -4, shellSize * 2, 8);
         ctx.fillStyle = '#ffd0d6'; ctx.fillRect(-3, -2, 6, 4);
     } else if (bullet.style === 'bubble' || bullet.style === 'jet') {
         ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 0.5; ctx.fill(); ctx.globalAlpha = 1;
-    } else if (bullet.style === 'acid' || bullet.style === 'toxin') {
+    } else if (bullet.style === 'acid' || bullet.style === 'toxin' || bullet.style === 'toxinbeam') {
+        ctx.shadowColor = '#a7ed35'; ctx.shadowBlur = 10;
         ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#eaffb2'; ctx.beginPath(); ctx.arc(-2, -2, 2, 0, Math.PI * 2); ctx.fill();
     } else if (bullet.style === 'prism' || bullet.style === 'refract') {
-        ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(0, -6); ctx.lineTo(-6, 0); ctx.lineTo(0, 6); ctx.closePath(); ctx.fill();
+        ctx.shadowColor = bullet.color; ctx.shadowBlur = 12;
+        ctx.beginPath(); ctx.moveTo(11, 0); ctx.lineTo(0, -8); ctx.lineTo(-9, 0); ctx.lineTo(0, 8); ctx.closePath(); ctx.fill(); ctx.stroke();
     } else if (bullet.style === 'tick' || bullet.style === 'chrono' || bullet.style === 'phase') {
         ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -5); ctx.moveTo(0, 0); ctx.lineTo(4, 2); ctx.stroke();
@@ -547,7 +555,8 @@ export function updatePlanetBoss(boss, { canvas, nave, enemyBullets, enemies, fl
         boss.y = boss.targetY + Math.sin(t * 1.8) * 18;
     }
     const color = boss.color || spec.color || '#ff3366';
-    const shotStyle = spec.shot || (isBoss ? 'magma' : 'shard');
+    const motifShots = { vine:'seed', fire:'flame', ice:'iceblock', gear:'goldbolt', void:'darkbeam', wind:'gale', machine:'redbeam', ocean:'bubble', toxic:'toxin', crystal:'prism', time:'chrono', imperial:'royal' };
+    const shotStyle = spec.shot || motifShots[spec.motif] || (isBoss ? 'magma' : 'shard');
     const fire = (angle, speed, style = shotStyle) => enemyBullets.push({
         x: boss.x, y: boss.y + 30,
         vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
@@ -559,7 +568,16 @@ export function updatePlanetBoss(boss, { canvas, nave, enemyBullets, enemies, fl
     const shotRate = isBoss ? (enraged ? 420 : 680) : (enraged ? 620 : 900);
     if (now - boss.lastShot > shotRate) {
         boss.lastShot = now;
-        if (isBoss) {
+        if (shotStyle === 'flame') {
+            const count = isBoss ? 7 : 3;
+            for (let i = 0; i < count; i++) fire(toPlayer + (i - (count - 1) / 2) * (isBoss ? 0.09 : 0.13), isBoss ? 7.2 : 5.8, 'flame');
+        } else if (shotStyle === 'iceblock' || shotStyle === 'prism' || shotStyle === 'redbeam') {
+            const count = isBoss ? 5 : 3;
+            for (let i = 0; i < count; i++) fire(toPlayer + (i - (count - 1) / 2) * 0.19, isBoss ? 6.1 : 4.8, shotStyle);
+        } else if (shotStyle === 'toxin' || shotStyle === 'darkbeam') {
+            fire(toPlayer, isBoss ? 5.8 : 4.5, shotStyle);
+            if (isBoss) for (let i = -1; i <= 1; i += 2) fire(toPlayer + i * 0.28, 4.8, shotStyle);
+        } else if (isBoss) {
             for (let i = -3; i <= 3; i++) fire(toPlayer + i * 0.13, 5.2);
             if (enraged) for (let i = 0; i < 6; i++) fire(now * 0.001 + i * Math.PI / 3, 3.6);
         } else {
@@ -569,7 +587,7 @@ export function updatePlanetBoss(boss, { canvas, nave, enemyBullets, enemies, fl
     // Ataque circular periódico
     if (now - boss.lastBurst > (isBoss ? 5200 : 7200)) {
         boss.lastBurst = now;
-        const arms = isBoss ? 14 : 10;
+        const arms = isBoss ? (shotStyle === 'chrono' ? 18 : 14) : (shotStyle === 'chrono' ? 12 : 10);
         for (let i = 0; i < arms; i++) fire(i / arms * Math.PI * 2, isBoss ? 4.0 : 3.4);
         if (floatingTexts) floatingTexts.push({ x: boss.x, y: boss.y - 70, text: isBoss ? '¡DESCARGA TOTAL!' : '¡RÁFAGA CIRCULAR!', life: 1.3, color: boss.accent || color });
         if (fxState) fxState.screenShake = Math.max(fxState.screenShake || 0, 8);

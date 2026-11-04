@@ -121,6 +121,9 @@ button:disabled:hover { color: #5e6c7c; background: rgba(15,20,26,0.7); box-shad
 .hud-block .stat-box { pointer-events: auto; }
 #hud-block-sector { pointer-events: auto; }
 .stat-box { font-size: 0.9rem; background: rgba(0,0,0,0.5); padding: 5px 10px; border-left: 3px solid var(--primary); }
+.planet-weapon-status { margin-top: 3px; width: 100%; min-width: 150px; font: 8px 'JetBrains Mono', monospace; letter-spacing: .06em; color: #ffd9a8; }
+.weapon-duration-track { height: 5px; margin-top: 2px; overflow: hidden; background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.3); border-radius: 4px; }
+#weapon-duration-fill { width: 100%; height: 100%; background: #ff9900; box-shadow: 0 0 7px currentColor; transition: width .12s linear; }
 /* compat: viejo #hud oculto (migrado) */
 #hud { display: none !important; }
 

@@ -300,7 +300,7 @@ export function updateSuperBoss({ canvas, nave, bullets, enemyBullets, enemies, 
             superBossState.themeShotAt = now;
             const motif = superBossState.theme?.motif || 'machine';
             const mob = superBossState.theme?.spawnMob ? getHostileMob(superBossState.theme.spawnMob) : null;
-            const style = mob?.shot || ({ ice:'iceblock', fire:'magma', void:'darkbeam', gear:'goldbolt', wind:'gale', ocean:'bubble', toxic:'acid', crystal:'prism', time:'chrono', vine:'spore', machine:'redbeam', imperial:'royal' }[motif] || 'bolt');
+            const style = motif === 'fire' ? 'flame' : mob?.shot || ({ ice:'iceblock', void:'darkbeam', gear:'goldbolt', wind:'gale', ocean:'bubble', toxic:'toxin', crystal:'prism', time:'chrono', vine:'spore', machine:'redbeam', imperial:'royal' }[motif] || 'bolt');
             const color = superBossState.theme?.color || superBossState.color;
             const aimed = Math.atan2(nave.y-superBossState.y,nave.x-superBossState.x);
             const pattern = motif === 'fire' ? { n:10, spread:Math.PI*2, base:now*.001 }

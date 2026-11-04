@@ -64,10 +64,21 @@ export function updateHUD({ combatState, weaponState, progression, gameMode }) {
     if (levelTag) { const v = `MODO: ${gameMode.value.toUpperCase()}${sectorLabel}`; if (levelTag.textContent !== v) levelTag.textContent = v; }
     const wEl = el('val-weapon');
     if (wEl) {
-        const v = weaponState.current === 'spread' ? 'SPREAD ★' : weaponState.current === 'laser' ? 'LASER ★' : 'NORMAL';
+        const isPlanetWeapon = weaponState.current?.startsWith('planet_');
+        const v = isPlanetWeapon ? 'EQUIPAMIENTO PLANETA' : weaponState.current === 'spread' ? 'SPREAD ★' : weaponState.current === 'laser' ? 'LASER ★' : 'NORMAL';
         if (wEl.textContent !== v) wEl.textContent = v;
-        const c = weaponState.current !== 'normal' ? '#ff9900' : 'var(--primary)';
+        const c = isPlanetWeapon ? (weaponState.color || '#ff9900') : weaponState.current !== 'normal' ? '#ff9900' : 'var(--primary)';
         if (wEl.style.color !== c) wEl.style.color = c;
+        const status = el('planet-weapon-status');
+        if (status) status.style.display = isPlanetWeapon ? 'block' : 'none';
+        const name = el('planet-weapon-name');
+        if (name) name.textContent = weaponState.label || 'EQUIPAMIENTO PLANETA';
+        const fill = el('weapon-duration-fill');
+        if (fill) {
+            const ratio = isPlanetWeapon ? Math.max(0, Math.min(1, weaponState.timer / Math.max(1, weaponState.duration || 720))) : 0;
+            fill.style.width = `${ratio * 100}%`;
+            fill.style.backgroundColor = weaponState.color || '#ff9900';
+        }
     }
     const rEl = el('val-revive');
     if (rEl) { const v = combatState.hasRevive ? 'inline' : 'none'; if (rEl.style.display !== v) rEl.style.display = v; }
