@@ -4,10 +4,10 @@ import { world } from './Camera.js';
 import { nave } from '../entities/Player.js';
 import { combatState, awardCredits, spendCredits } from '../system/Combat.js';
 import { platform } from '../State.js';
-import { updateExplorationHUD } from '../ui/Hud.js';
-import { savePlayerState } from '../system/Save.js';
+import { updateExplorationHUD } from '../ui/Hud.js?v=20261103a';
+import { savePlayerState } from '../system/Save.js?v=20261103a';
 import { progression } from '../system/Progression.js';
-import { hudState } from '../ui/Hud.js';
+import { hudState } from '../ui/Hud.js?v=20261103a';
 import { drawGlow } from '../system/Sprites.js';
 
 const INTERACTION_RANGE = 175;
@@ -169,6 +169,8 @@ function stationOptions(station) {
             { id: 'damage', label: `Daño +12% (nivel ${nave.damageLevel || 0}/5)`, cost: 100, disabled: (nave.damageLevel || 0) >= 5 },
             { id: 'dash', label: `Recarga de Dash -10% (nivel ${nave.dashLevel || 0}/5)`, cost: 90, disabled: (nave.dashLevel || 0) >= 5 },
             { id: 'shield', label: `Capacidad de escudo +15% (nivel ${nave.shieldLevel || 0}/5)`, cost: 90, disabled: (nave.shieldLevel || 0) >= 5 },
+            { id: 'shield_recharge', label: `Recarga de escudo (nivel ${nave.shieldRechargeLevel || 0}/5)`, cost: 110, disabled: (nave.shieldRechargeLevel || 0) >= 5 },
+            { id: 'shield_coverage', label: `Cobertura de escudo (nivel ${nave.shieldCoverageLevel || 0}/5)`, cost: 110, disabled: (nave.shieldCoverageLevel || 0) >= 5 },
             { id: 'bomb', label: 'Recargar bomba (+1)', cost: 45, disabled: combatState.bombs >= MAX_BOMBS }
         ];
     }
@@ -199,7 +201,7 @@ function refreshPanel() {
         let highScore = hudState.score;
         try { highScore = Math.max(Number(localStorage.getItem('space-mission-highscore')) || 0, hudState.score); } catch { /* Se muestra el score de esta sesión. */ }
         description.textContent = station?.type === 'shipyard'
-            ? 'Mejora permanente de velocidad, daño, Dash y capacidad del escudo.'
+            ? 'Mejora permanente de velocidad, daño, Dash y capacidad del escudo. También puedes mejorar la recarga y la cobertura del escudo de energía.'
             : station?.type === 'medical'
                 ? 'Reparación gradual: 2% de casco por 3 créditos cada segundo mientras permanezcas aquí.'
                     : station?.type === 'black_market'
@@ -250,11 +252,14 @@ function purchaseUpgrade(action) {
             nave.accel = Math.min(1.3, nave.accel + 0.08);
             hubState.thrusterLevel++;
         }
-    } else if (station.type === 'shipyard' && ['damage','dash','shield'].includes(action)) {
-        const levelKey = action === 'damage' ? 'damageLevel' : action === 'dash' ? 'dashLevel' : 'shieldLevel';
+    } else if (station.type === 'shipyard' && ['damage','dash','shield','shield_recharge','shield_coverage'].includes(action)) {
+        const levelKey = action === 'damage' ? 'damageLevel'
+            : action === 'dash' ? 'dashLevel'
+            : action === 'shield' ? 'shieldLevel'
+            : action === 'shield_recharge' ? 'shieldRechargeLevel' : 'shieldCoverageLevel';
         const max = 5;
         if ((nave[levelKey] || 0) >= max) return;
-        cost = action === 'damage' ? 100 : 90;
+        cost = action === 'damage' ? 100 : action === 'shield_recharge' || action === 'shield_coverage' ? 110 : 90;
         if (spendCredits(cost)) nave[levelKey] = (nave[levelKey] || 0) + 1;
     } else if (action === 'bomb' && station.type === 'shipyard') {
         cost = 45; if (combatState.bombs >= MAX_BOMBS) return;

@@ -21,7 +21,9 @@ export function loadPlayerSave() {
             ship: {
                 accel: clamp(ship.accel, 0.9, 1.3, 0.9),
                 damageLevel: clamp(ship.damageLevel, 0, 5, 0), dashLevel: clamp(ship.dashLevel, 0, 5, 0),
-                shieldLevel: clamp(ship.shieldLevel, 0, 5, 0), tripleLevel: clamp(ship.tripleLevel, 0, 1, 0)
+                shieldLevel: clamp(ship.shieldLevel, 0, 5, 0), tripleLevel: clamp(ship.tripleLevel, 0, 1, 0),
+                shieldRechargeLevel: clamp(ship.shieldRechargeLevel, 0, 5, 0),
+                shieldCoverageLevel: clamp(ship.shieldCoverageLevel, 0, 5, 0)
             },
             progression: {
                 currentWave: clamp(run.currentWave, 1, 4, 1),
@@ -55,7 +57,9 @@ export function savePlayerState(combatState, nave, progression) {
         ship: {
             accel: clamp(nave.accel, 0.9, 1.3, 0.9),
             damageLevel: clamp(nave.damageLevel, 0, 5, 0), dashLevel: clamp(nave.dashLevel, 0, 5, 0),
-            shieldLevel: clamp(nave.shieldLevel, 0, 5, 0), tripleLevel: clamp(nave.tripleLevel, 0, 1, 0)
+            shieldLevel: clamp(nave.shieldLevel, 0, 5, 0), tripleLevel: clamp(nave.tripleLevel, 0, 1, 0),
+            shieldRechargeLevel: clamp(nave.shieldRechargeLevel, 0, 5, 0),
+            shieldCoverageLevel: clamp(nave.shieldCoverageLevel, 0, 5, 0)
         },
         progression: {
             currentWave: clamp(progression.currentWave, 1, 4, 1),
@@ -88,6 +92,7 @@ export function clearPlayerSave() {
 function signature(combat, ship, progression) {
     return [combat.health, combat.bombs, combat.hasRevive ? 1 : 0, combat.credits,
         ship.accel, ship.damageLevel || 0, ship.dashLevel || 0, ship.shieldLevel || 0, ship.tripleLevel || 0,
+        ship.shieldRechargeLevel || 0, ship.shieldCoverageLevel || 0,
         progression.currentWave, progression.wavePhase, progression.waveKills,
         progression.waveKillTarget, progression.awaitingCheckpoint ? 1 : 0,
         progression.awaitingBossReward ? 1 : 0, progression.suspendedAdventure ? 1 : 0,

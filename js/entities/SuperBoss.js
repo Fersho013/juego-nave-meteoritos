@@ -2,6 +2,15 @@
 import * as EffectsNS from '../system/Effects.js';
 import { drawGlow } from '../system/Sprites.js';
 
+function rgbaTint(hex, alpha) {
+    const value = String(hex || '#6ec8ff').replace('#', '');
+    if (value.length !== 6) return `rgba(110,200,255,${alpha})`;
+    const r = parseInt(value.slice(0, 2), 16);
+    const g = parseInt(value.slice(2, 4), 16);
+    const b = parseInt(value.slice(4, 6), 16);
+    return `rgba(${r},${g},${b},${alpha})`;
+}
+
 export const superBossState = {
     active: false,
     arena: false,
@@ -17,7 +26,13 @@ export const superBossState = {
     destroyed: false,
     explosionTimer: 0,
     modifierPickup: null, // consumible verde para mejora permanente
-    greenPortal: null // {x,y,radius,pulse,active}
+    greenPortal: null, // {x,y,radius,pulse,active}
+    color: '#1e90ff',
+    name: 'NODRIZA',
+    planetFinal: false,
+    planetId: null,
+    purgeReady: false,
+    theme: null
 };
 
 export let hasSuperModifier = false; // permanente por run
@@ -26,32 +41,49 @@ export function grantSuperModifier() { hasSuperModifier = true; }
 export function hasSuperModifierActive() { return hasSuperModifier; }
 export function clearSuperModifier() { hasSuperModifier = false; }
 
-export function spawnSuperBoss(canvas) {
+export function spawnSuperBoss(canvas, options = {}) {
+    const {
+        color = '#1e90ff',
+        name = 'NODRIZA',
+        hp = 20000,
+        planetFinal = false,
+        planetId = null,
+        theme = null
+    } = options;
     superBossState.active = true;
-    superBossState.arena = true;
+    // Un jefe final planetario combate dentro de la atmósfera del mundo; no
+    // usa la arena espacial de la Nodriza.
+    superBossState.arena = !planetFinal;
     superBossState.phase = 1;
     superBossState.destroyed = false;
     superBossState.explosionTimer = 0;
     superBossState.x = canvas.width / 2;
     superBossState.y = 62;
-    superBossState.w = canvas.width - 12; // triple de largo: abarca toda la pantalla (antes 720 cap)
-    superBossState.h = 56;
-    superBossState.hp = 20000;
-    superBossState.maxHp = 20000;
+    superBossState.w = canvas.width - 12;
+    superBossState.h = planetFinal ? 70 : 56;
+    superBossState.hp = hp;
+    superBossState.maxHp = hp;
     superBossState.shield = true;
     superBossState.lasersActive = false;
     superBossState.laserTimer = 0;
     superBossState.shieldTimer = 0;
     superBossState.modifierPickup = null;
+    superBossState.color = color;
+    superBossState.name = name;
+    superBossState.planetFinal = planetFinal;
+    superBossState.planetId = planetId;
+    superBossState.theme = theme;
+    superBossState.purgeReady = false;
     // 3 cañones
     const spacing = superBossState.w / 4;
+    const cannonHp = Math.max(900, Math.round(hp * 0.12));
     superBossState.cannons = [];
     for (let i = 0; i < 3; i++) {
         superBossState.cannons.push({
             x: superBossState.x - spacing * 1.2 + i * spacing * 1.2,
             y: superBossState.y + 38,
-            hp: 2500,
-            maxHp: 2500,
+            hp: cannonHp,
+            maxHp: cannonHp,
             lastShot: 0,
             alive: true
         });
@@ -67,6 +99,10 @@ export function clearSuperBoss() {
     superBossState.gate = null;
     superBossState.modifierPickup = null;
     superBossState.greenPortal = null;
+    superBossState.planetFinal = false;
+    superBossState.planetId = null;
+    superBossState.purgeReady = false;
+    superBossState.theme = null;
 }
 
 function getCannonPositions() { return superBossState.cannons; }
@@ -80,17 +116,28 @@ export function updateSuperBoss({ canvas, nave, bullets, enemyBullets, enemies, 
     if (superBossState.hp <= 0 && !superBossState.destroyed) {
         superBossState.destroyed = true;
         superBossState.explosionTimer = 90;
-        // Consumible verde para mejora permanente (separado del portal)
-        superBossState.modifierPickup = { x: canvas.width / 2 + 70, y: canvas.height / 2, vy: 1.1, active: true, pulse: 0 };
-        // Portal verde de retorno a zona normal
-        superBossState.greenPortal = { x: canvas.width / 2 - 70, y: canvas.height / 2, radius: 24, pulse: 0, active: true };
-        createExplosion(superBossState.x, superBossState.y, '#00ff66', 60);
-        spawnDebris(superBossState.x, superBossState.y, '#00ff66', 8);
+        const tint = superBossState.color || '#00ff66';
+        createExplosion(superBossState.x, superBossState.y, tint, 60);
+        spawnDebris(superBossState.x, superBossState.y, tint, 8);
         fxState.screenShake = 34;
         fxState.hitStopFrames = 12;
-        if (floatingTexts) floatingTexts.push({ x: superBossState.x, y: superBossState.y - 70, text: '★ SUPER BOSS DESTRUIDO ★', life: 2.2, color: '#00ff66' });
-        if (floatingTexts) floatingTexts.push({ x: superBossState.greenPortal.x, y: superBossState.greenPortal.y - 36, text: 'PORTAL VERDE → SALIR', life: 4, color: '#00ff66' });
-        if (floatingTexts) floatingTexts.push({ x: superBossState.modifierPickup.x, y: superBossState.modifierPickup.y - 30, text: 'CONSUMIBLE VERDE', life: 4, color: '#00ff66' });
+        if (superBossState.planetFinal) {
+            // El jefe final de un planeta no deja portal: su destrucción lanza
+            // la secuencia de purga del mundo.
+            superBossState.purgeReady = true;
+            superBossState.modifierPickup = null;
+            superBossState.greenPortal = null;
+            if (floatingTexts) floatingTexts.push({ x: superBossState.x, y: superBossState.y - 70, text: '★ ESTRUCTURA PLANETARIA DESTRUIDA ★', life: 2.2, color: tint });
+            if (hudState) hudState.score += 20000;
+        } else {
+            // Consumible verde para mejora permanente (separado del portal)
+            superBossState.modifierPickup = { x: canvas.width / 2 + 70, y: canvas.height / 2, vy: 1.1, active: true, pulse: 0 };
+            // Portal verde de retorno a zona normal
+            superBossState.greenPortal = { x: canvas.width / 2 - 70, y: canvas.height / 2, radius: 24, pulse: 0, active: true };
+            if (floatingTexts) floatingTexts.push({ x: superBossState.x, y: superBossState.y - 70, text: '★ SUPER BOSS DESTRUIDO ★', life: 2.2, color: '#00ff66' });
+            if (floatingTexts) floatingTexts.push({ x: superBossState.greenPortal.x, y: superBossState.greenPortal.y - 36, text: 'PORTAL VERDE → SALIR', life: 4, color: '#00ff66' });
+            if (floatingTexts) floatingTexts.push({ x: superBossState.modifierPickup.x, y: superBossState.modifierPickup.y - 30, text: 'CONSUMIBLE VERDE', life: 4, color: '#00ff66' });
+        }
     }
     if (superBossState.destroyed) {
         // La animación de explosión dura 90 frames; evitar que siga
@@ -100,9 +147,10 @@ export function updateSuperBoss({ canvas, nave, bullets, enemyBullets, enemies, 
             if (superBossState.explosionTimer % 12 === 0) {
                 const rx = superBossState.x + (Math.random() - 0.5) * superBossState.w * 0.8;
                 const ry = superBossState.y + (Math.random() - 0.5) * 22;
-                createExplosion(rx, ry, '#ff6600', 10);
+                createExplosion(rx, ry, superBossState.planetFinal ? (superBossState.color || '#ff6600') : '#ff6600', 10);
             }
         }
+        if (superBossState.planetFinal) return;
         // Actualizar consumible flotante
         if (superBossState.modifierPickup?.active) {
             const mp = superBossState.modifierPickup;
@@ -163,7 +211,8 @@ export function updateSuperBoss({ canvas, nave, bullets, enemyBullets, enemies, 
                 x: superBossState.x,
                 y: superBossState.y + 26,
                 w: 120, h: 22,
-                hp: 6000, maxHp: 6000, // 1200*5
+                hp: Math.max(2400, Math.round(superBossState.maxHp * 0.30)),
+                maxHp: Math.max(2400, Math.round(superBossState.maxHp * 0.30)),
                 open: true,
                 lastSpawn: Date.now()
             };
@@ -198,11 +247,12 @@ export function updateSuperBoss({ canvas, nave, bullets, enemyBullets, enemies, 
             enemies.push({
                 x: nx, y: ny,
                 type: pick,
-                hp: hpMap[pick] || 30,
+                hp: Math.round((hpMap[pick] || 30) * (superBossState.planetFinal ? 1.8 : 1)),
                 vx: (Math.random() - 0.5) * 1.6,
                 vy: vyMap[pick] || 1.8,
                 shield: pick === 'special',
                 lastShot: 0,
+                planetColor: superBossState.planetFinal ? superBossState.color : null,
                 suicidal: pick === 'kamikaze' || pick === 'kamikaze_bomb',
                 isBombKamikaze: pick === 'kamikaze_bomb',
                 bombRadius: 42
@@ -339,17 +389,31 @@ export function drawSuperBoss(ctx, frameCount) {
 
     // Fondo nodriza: barra superior que abarca ancho
     ctx.save();
+    const tint = sb.color || '#1e90ff';
     // brillo (sprite) en lugar de shadowBlur
-    drawGlow(ctx, sb.x, sb.y, Math.max(sb.w, sb.h) * 0.8, sb.shield ? '#1e90ff' : '#ff3366', 0.5);
+    drawGlow(ctx, sb.x, sb.y, Math.max(sb.w, sb.h) * 0.8, sb.shield ? tint : '#ff3366', 0.5);
     // cuerpo principal
     const grad = ctx.createLinearGradient(sb.x - sb.w / 2, sb.y, sb.x + sb.w / 2, sb.y);
     grad.addColorStop(0, '#1a1a2e'); grad.addColorStop(0.5, '#2a2a4a'); grad.addColorStop(1, '#1a1a2e');
     ctx.fillStyle = grad;
     ctx.fillRect(sb.x - sb.w / 2, sb.y - sb.h / 2, sb.w, sb.h);
     // borde
-    ctx.strokeStyle = sb.shield ? '#1e90ff' : '#ff9900';
+    ctx.strokeStyle = sb.shield ? tint : '#ff9900';
     ctx.lineWidth = 2.5;
     ctx.strokeRect(sb.x - sb.w / 2, sb.y - sb.h / 2, sb.w, sb.h);
+    // Torres y armamento extra del jefe planetario.
+    if (sb.planetFinal) {
+        ctx.fillStyle = '#0c1420'; ctx.strokeStyle = tint; ctx.lineWidth = 1.5;
+        for (let i = 0; i < 6; i++) {
+            const tx = sb.x - sb.w * 0.42 + i * sb.w * 0.168;
+            const th = 12 + (i % 3) * 8;
+            ctx.fillRect(tx - 7, sb.y - sb.h / 2 - th, 14, th);
+            ctx.strokeRect(tx - 7, sb.y - sb.h / 2 - th, 14, th);
+            ctx.fillStyle = rgbaTint(tint, 0.85);
+            ctx.fillRect(tx - 2, sb.y - sb.h / 2 - th + 3, 4, 4);
+            ctx.fillStyle = '#0c1420';
+        }
+    }
     // líneas detalle
     ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1;
     for (let i = 1; i < 4; i++) {
@@ -359,10 +423,10 @@ export function drawSuperBoss(ctx, frameCount) {
     // escudo overlay
     if (sb.shield) {
         ctx.globalAlpha = 0.18 + Math.sin(frameCount * 0.12) * 0.07;
-        ctx.fillStyle = '#1e90ff';
+        ctx.fillStyle = tint;
         ctx.fillRect(sb.x - sb.w / 2 - 4, sb.y - sb.h / 2 - 4, sb.w + 8, sb.h + 8);
         ctx.globalAlpha = 0.55;
-        ctx.strokeStyle = '#6ec8ff'; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]);
+        ctx.strokeStyle = tint; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]);
         ctx.strokeRect(sb.x - sb.w / 2 - 6, sb.y - sb.h / 2 - 6, sb.w + 12, sb.h + 12);
         ctx.setLineDash([]);
     }
@@ -372,12 +436,13 @@ export function drawSuperBoss(ctx, frameCount) {
     const barX = sb.x - barW / 2;
     ctx.globalAlpha = 1;
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(barX, sb.y - sb.h / 2 - 14, barW, 8);
-    ctx.fillStyle = sb.shield ? '#1e90ff' : (sb.phase === 3 && sb.lasersActive ? '#00ff66' : '#ff3366');
+    ctx.fillStyle = sb.shield ? tint : (sb.phase === 3 && sb.lasersActive ? '#00ff66' : '#ff3366');
     ctx.fillRect(barX, sb.y - sb.h / 2 - 14, barW * hpPct, 8);
     ctx.strokeStyle = '#333'; ctx.strokeRect(barX, sb.y - sb.h / 2 - 14, barW, 8);
     // texto fase
     ctx.fillStyle = '#aaa'; ctx.font = '7px Orbitron'; ctx.textAlign = 'center';
-    ctx.fillText(`NODRIZA · FASE ${sb.phase} ${sb.shield ? '[ESCUDO]' : sb.lasersActive ? '[LÁSER]' : ''}`, sb.x, sb.y - sb.h / 2 - 18);
+    const bossTitle = sb.planetFinal ? sb.name : 'NODRIZA';
+    ctx.fillText(`${bossTitle} · FASE ${sb.phase} ${sb.shield ? '[ESCUDO]' : sb.lasersActive ? '[LÁSER]' : ''}`, sb.x, sb.y - sb.h / 2 - 18);
     ctx.restore();
 
     // Cañones fase 1

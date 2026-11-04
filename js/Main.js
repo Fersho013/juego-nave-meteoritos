@@ -42,11 +42,12 @@ const drawParticles = EffectsNS.drawParticles || ((c) => {
 import { drawGlow } from './system/Sprites.js';
 import { combatState, awardCredits, dropRevivePickup, playerHit as combatPlayerHit, triggerBomb as combatTriggerBomb, triggerRevive } from './system/Combat.js';
 import { progression, checkProgression, cancelWaveTransition, startWaveTransition } from './system/Progression.js';
-import { loadPlayerSave, savePlayerState, clearPlayerSave } from './system/Save.js';
-import { hudState, updateHUD as hudUpdate, updateWaveProgress, resetCombo, registerComboHit, registerComboHits } from './ui/Hud.js';
+import { loadPlayerSave, savePlayerState, clearPlayerSave } from './system/Save.js?v=20261103a';
+import { shieldState, configureShield, resetShield, absorbWithShield, updateShield, shieldIsFull, shieldPercent } from './system/Shield.js?v=20261103a';
+import { hudState, updateHUD as hudUpdate, updateWaveProgress, resetCombo, registerComboHit, registerComboHits } from './ui/Hud.js?v=20261103a';
 // Namespace + fallback: si GitHub Pages sirve un Hud.js antiguo (sin
 // resetWaveProgressUI) el juego sigue arrancando igual.
-import * as HudNS from './ui/Hud.js';
+import * as HudNS from './ui/Hud.js?v=20261103a';
 const resetWaveProgressUI = HudNS.resetWaveProgressUI || (() => {
     const wp = document.getElementById('wave-progress');
     if (wp) { wp.style.display = 'none'; wp.innerHTML = ''; }
@@ -61,20 +62,23 @@ const updateVolumeVisibility = MenuNS.updateVolumeVisibility;
 const initPreview = MenuNS.initPreview;
 const refreshPreview = MenuNS.refreshPreview || (() => {});
 import { stars, nebulas, planets, superAsteroids, initParallax, drawParallax, drawSuperArena } from './world/Parallax.js';
-import { drawPlanetAtmosphere, drawPlanetForeground } from './world/PlanetAtmosphere.js?v=20261102g';
+import { drawPlanetAtmosphere, drawPlanetForeground } from './world/PlanetAtmosphere.js?v=20261103a';
 import { world, resetCamera, centerCamera } from './world/Camera.js';
-import { enterExploration, updateExploration, drawExploration, exploration, resetExplorationProgress, isPointExplored } from './world/Exploration.js';
-import { hubState, initHub, updateHub, closeStationPanel } from './world/Hub.js';
-import { initSystemMap, isSystemMapOpen, toggleSystemMap, closeSystemMap, drawSystemMapFrame } from './ui/StarMap.js?v=20261102g';
+import { enterExploration, updateExploration, drawExploration, exploration, resetExplorationProgress, isPointExplored, markPlanetPurged } from './world/Exploration.js?v=20261103a';
+import { hubState, initHub, updateHub, closeStationPanel } from './world/Hub.js?v=20261103a';
+import { initSystemMap, isSystemMapOpen, toggleSystemMap, closeSystemMap, drawSystemMapFrame } from './ui/StarMap.js?v=20261103a';
 import { DASH } from './Data/Constants.js';
 import { initLayoutEditor, enterEditMode, exitEditMode, isEditorActive, setEditorExitHandler } from './ui/LayoutEditor.js';
 import { portals, spawnPortal, clearPortals, updatePortals, drawPortals } from './entities/Portal.js';
-import { superBossState, spawnSuperBoss, clearSuperBoss, updateSuperBoss, drawSuperBoss, canDamageSuperBoss, damageSuperBoss, damageCannon, damageGate, hasSuperModifierActive, grantSuperModifier, clearSuperModifier } from './entities/SuperBoss.js';
+import { superBossState, spawnSuperBoss, clearSuperBoss, updateSuperBoss, drawSuperBoss, canDamageSuperBoss, damageSuperBoss, damageCannon, damageGate, hasSuperModifierActive, grantSuperModifier, clearSuperModifier } from './entities/SuperBoss.js?v=20261103a';
 
 // El guardado global antiguo solo se usa para migrar la primera vez. Si ya
 // existen perfiles por modo, no debe resucitar datos borrados.
 const hasModeProfiles = (() => {
-    try { return Boolean(localStorage.getItem('space-mission-mode-profiles-v1')); } catch { return false; }
+    try {
+        return Boolean(localStorage.getItem('space-mission-save-slots-v1')
+            || localStorage.getItem('space-mission-mode-profiles-v1'));
+    } catch { return false; }
 })();
 const savedPlayerState = hasModeProfiles ? null : loadPlayerSave();
 if (savedPlayerState) {
@@ -403,18 +407,46 @@ let deathSequenceState = '';
 let activePlanet = null;
 let planetGimmickTimer = 0;
 let planetShipSnapshot = null;
+let purgeStartedAt = 0;
+let purgePlanetId = null;
+let purgeReturning = false;
 
 // Cada modo conserva su propio casco, recursos, mejoras, score y progresión.
 // El espacio libre es su propio perfil; los eventos que nacen de él (planetas
 // y retos opcionales) usan ese mismo perfil y al regresar lo recuperan intacto.
-const MODE_PROFILE_KEY = 'space-mission-mode-profiles-v1';
+// Hasta 3 ranuras independientes por modo.
+const MODE_PROFILE_KEY = 'space-mission-save-slots-v1';
+const LEGACY_PROFILE_KEY = 'space-mission-mode-profiles-v1';
+const ACTIVE_SLOTS_KEY = 'space-mission-active-slots-v1';
+const SLOT_COUNT = 3;
 let modeProfiles = {};
 let activeRunProfile = 'progressive';
 let activeRunStarted = false;
+const activeSlots = { explore: 0, progressive: 0, solo_boss: 0 };
+
+function slotProfileKey(base, index) { return index <= 0 ? base : `${base}#${index + 1}`; }
+function baseProfileKey(key) { return String(key || '').split('#')[0]; }
+function slotIndexOf(key) {
+    const raw = String(key || '').split('#')[1];
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 2 ? Math.min(SLOT_COUNT - 1, n - 1) : 0;
+}
+function isSlotMode(base) { return Object.prototype.hasOwnProperty.call(activeSlots, base); }
+function activeSlotKey(base) { return slotProfileKey(base, activeSlots[base] || 0); }
+function persistActiveSlots() {
+    try { localStorage.setItem(ACTIVE_SLOTS_KEY, JSON.stringify(activeSlots)); } catch { /* Sin almacenamiento. */ }
+}
+function normalizeActiveSlots(raw) {
+    if (!raw || typeof raw !== 'object') return;
+    for (const base of Object.keys(activeSlots)) {
+        const n = Number(raw[base]);
+        if (Number.isFinite(n)) activeSlots[base] = Math.max(0, Math.min(SLOT_COUNT - 1, Math.round(n)));
+    }
+}
 function freshRunProfile() {
     return {
         combat: { health: 100, maxHealth: 100, bombs: 3, hasRevive: false, credits: 0 },
-        ship: { accel: 0.9, damageLevel: 0, dashLevel: 0, shieldLevel: 0, tripleLevel: 0 },
+        ship: { accel: 0.9, damageLevel: 0, dashLevel: 0, shieldLevel: 0, tripleLevel: 0, shieldRechargeLevel: 0, shieldCoverageLevel: 0 },
         progression: { currentWave: 1, wavePhase: 1, waveKills: 0, waveKillTarget: parseInt(document.getElementById('opt-kills')?.value) || 50, awaitingCheckpoint: false, awaitingBossReward: false, suspendedAdventure: false, pendingBossRewardType: null },
         score: 0,
         started: false,
@@ -429,7 +461,7 @@ function profileHasProgress(profile) {
     return (Number(combat.credits) || 0) > 0
         || (Number(profile.score) || 0) > 0
         || (Number(ship.accel) || 0.9) > 0.9
-        || ['damageLevel', 'dashLevel', 'shieldLevel', 'tripleLevel'].some(key => (Number(ship[key]) || 0) > 0)
+        || ['damageLevel', 'dashLevel', 'shieldLevel', 'tripleLevel', 'shieldRechargeLevel', 'shieldCoverageLevel'].some(key => (Number(ship[key]) || 0) > 0)
         || (Number(run.currentWave) || 1) > 1
         || (Number(run.wavePhase) || 1) > 1
         || (Number(run.waveKills) || 0) > 0
@@ -440,7 +472,7 @@ function profileHasProgress(profile) {
 function captureRunProfile() {
     return {
         combat: { health: combatState.health, maxHealth: combatState.maxHealth, bombs: combatState.bombs, hasRevive: combatState.hasRevive, credits: combatState.credits },
-        ship: { accel: nave.accel, damageLevel: nave.damageLevel || 0, dashLevel: nave.dashLevel || 0, shieldLevel: nave.shieldLevel || 0, tripleLevel: nave.tripleLevel || 0 },
+        ship: { accel: nave.accel, damageLevel: nave.damageLevel || 0, dashLevel: nave.dashLevel || 0, shieldLevel: nave.shieldLevel || 0, tripleLevel: nave.tripleLevel || 0, shieldRechargeLevel: nave.shieldRechargeLevel || 0, shieldCoverageLevel: nave.shieldCoverageLevel || 0 },
         progression: { currentWave: progression.currentWave, wavePhase: progression.wavePhase, waveKills: progression.waveKills, waveKillTarget: progression.waveKillTarget, awaitingCheckpoint: progression.awaitingCheckpoint, awaitingBossReward: progression.awaitingBossReward, suspendedAdventure: progression.suspendedAdventure, pendingBossRewardType: progression.pendingBossRewardType },
         score: hudState.score,
         started: activeRunStarted,
@@ -463,6 +495,8 @@ function restoreRunProfile(profile) {
     nave.damageLevel = Math.max(0, Math.min(5, Number(ship.damageLevel) || 0));
     nave.dashLevel = Math.max(0, Math.min(5, Number(ship.dashLevel) || 0));
     nave.shieldLevel = Math.max(0, Math.min(5, Number(ship.shieldLevel) || 0));
+    nave.shieldRechargeLevel = Math.max(0, Math.min(5, Number(ship.shieldRechargeLevel) || 0));
+    nave.shieldCoverageLevel = Math.max(0, Math.min(5, Number(ship.shieldCoverageLevel) || 0));
     nave.tripleLevel = Math.max(0, Math.min(1, Number(ship.tripleLevel) || 0));
     progression.currentWave = Math.max(1, Math.min(4, Number(run.currentWave) || 1));
     progression.wavePhase = [1,2,3,4,5,6,7,8,9].includes(run.wavePhase) ? run.wavePhase : 1;
@@ -474,6 +508,7 @@ function restoreRunProfile(profile) {
     progression.pendingBossRewardType = ['bomb', 'revive'].includes(run.pendingBossRewardType) ? run.pendingBossRewardType : null;
     progression.waveTransition = false; progression.waveTransitionTimer = 0; progression.waveTransitionMsg = '';
     hudState.score = Math.max(0, Number(profile?.score) || 0);
+    configureShield({ rechargeLevel: nave.shieldRechargeLevel, coverageLevel: nave.shieldCoverageLevel, fill: true });
 }
 let lastModeProfilesSerialized = '';
 function storeModeProfiles() {
@@ -520,7 +555,7 @@ function activateModeProfile(key, { fresh = false, hard = false } = {}) {
         // Un reinicio conserva la nave comprada; una partida nueva desde el
         // gestor de partidas (hard) empieza realmente de cero.
         if (!hard && previousProfile?.ship) profile.ship = { ...profile.ship, ...previousProfile.ship };
-        if (!hard && key === 'explore' && previousProfile?.combat) profile.combat.credits = previousProfile.combat.credits;
+        if (!hard && baseProfileKey(key) === 'explore' && previousProfile?.combat) profile.combat.credits = previousProfile.combat.credits;
     } else {
         profile = previousProfile || freshRunProfile();
     }
@@ -531,13 +566,14 @@ function activateModeProfile(key, { fresh = false, hard = false } = {}) {
     persistModeProfiles();
 }
 function modeProfileFor(mode) {
-    if (mode === 'explore' || mode === 'procedural' || mode === 'planet' || mode === 'free_boss') return 'explore';
-    if (mode === 'solo_boss') return 'solo_boss';
+    if (mode === 'explore' || mode === 'procedural' || mode === 'planet' || mode === 'free_boss') return activeSlotKey('explore');
+    if (mode === 'solo_boss') return activeSlotKey('solo_boss');
     if (mode === 'custom') return trainingRun ? 'training' : 'custom';
-    return 'progressive';
+    return activeSlotKey('progressive');
 }
 
 const SAVE_SLOT_LABELS = { explore: 'Explorar Universo', progressive: 'Juego Progresivo', solo_boss: 'Solo Boss' };
+const SAVE_SLOT_SUBTITLES = { explore: 'ESPACIO ABIERTO', progressive: 'CAMPAÑA POR SECTORES', solo_boss: 'RUSH DE JEFES' };
 function formatSaveDate(timestamp) {
     const value = Number(timestamp);
     if (!value) return '';
@@ -545,92 +581,178 @@ function formatSaveDate(timestamp) {
         return new Date(value).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
     } catch { return ''; }
 }
-function saveSlotSummary(key) {
-    const profile = modeProfiles[key];
-    if (!profile?.started) return 'Sin partida guardada. "Nueva partida" creará un progreso desde cero.';
+function saveSlotSummary(profile, base) {
+    if (!profile?.started) return 'Sin partida guardada · "NUEVA" crea un progreso desde cero.';
     const combat = profile.combat || {};
     const ship = profile.ship || {};
     const run = profile.progression || {};
     const upgrades = ['damageLevel', 'dashLevel', 'shieldLevel', 'tripleLevel'].reduce((sum, stat) => sum + (Number(ship[stat]) || 0), 0);
+    const shieldLevels = (Number(ship.shieldRechargeLevel) || 0) + (Number(ship.shieldCoverageLevel) || 0);
     let summary;
-    if (key === 'explore') summary = `Créditos ${Number(combat.credits) || 0} · mejoras ${upgrades} · casco ${Math.round(Number(combat.health) || 0)}%`;
-    else if (key === 'progressive') summary = `Oleada ${Number(run.currentWave) || 1} · fase ${Number(run.wavePhase) || 1} · ${Number(run.waveKills) || 0}/${Number(run.waveKillTarget) || 50} bajas · score ${Number(profile.score) || 0}`;
+    if (base === 'explore') summary = `Créditos ${Number(combat.credits) || 0} · mejoras ${upgrades} · escudo +${shieldLevels} · casco ${Math.round(Number(combat.health) || 0)}%`;
+    else if (base === 'progressive') summary = `Oleada ${Number(run.currentWave) || 1} · fase ${Number(run.wavePhase) || 1} · ${Number(run.waveKills) || 0}/${Number(run.waveKillTarget) || 50} bajas · score ${Number(profile.score) || 0}`;
     else summary = `Score ${Number(profile.score) || 0} · créditos ${Number(combat.credits) || 0} · mejoras ${upgrades}`;
     const date = formatSaveDate(profile.updatedAt);
     return date ? `${summary} · ${date}` : summary;
 }
+function slotBaseAndIndex(base, slot) {
+    const index = slot === undefined || slot === null
+        ? (activeSlots[base] || 0)
+        : Math.max(0, Math.min(SLOT_COUNT - 1, Number(slot) || 0));
+    return { index, key: slotProfileKey(base, index) };
+}
+function anyStartedSlot(base) {
+    for (let i = 0; i < SLOT_COUNT; i++) {
+        if (modeProfiles[slotProfileKey(base, i)]?.started) return true;
+    }
+    return false;
+}
 function refreshModeSlots() {
-    for (const key of Object.keys(SAVE_SLOT_LABELS)) {
-        const profile = modeProfiles[key];
-        const started = Boolean(profile?.started);
-        const status = document.getElementById(`slot-${key}-status`);
-        if (status) {
-            const text = saveSlotSummary(key);
-            if (status.textContent !== text) status.textContent = text;
-            status.classList.toggle('has-save', started);
-        }
-        const continueButton = document.getElementById(`slot-${key}-continue`);
-        if (continueButton) {
+    const root = document.getElementById('save-slots');
+    if (!root) return;
+    if (!root.dataset.bound) {
+        root.dataset.bound = '1';
+        root.addEventListener('click', (event) => {
+            const button = event.target?.closest?.('button[data-slot-action]');
+            if (!button) return;
+            const base = button.dataset.mode;
+            const index = Number(button.dataset.slot) || 0;
+            const action = button.dataset.slotAction;
+            if (action === 'continue') window.continueMode(base, index);
+            else if (action === 'new') window.newGameMode(base, index);
+            else if (action === 'delete') window.deleteModeProfile(base, index);
+        });
+    }
+    root.textContent = '';
+    for (const base of Object.keys(SAVE_SLOT_LABELS)) {
+        const group = document.createElement('section');
+        group.className = 'save-mode-group';
+        const title = document.createElement('div');
+        title.className = 'save-mode-title';
+        const strong = document.createElement('strong');
+        strong.textContent = SAVE_SLOT_LABELS[base].toUpperCase();
+        const subtitle = document.createElement('span');
+        subtitle.textContent = SAVE_SLOT_SUBTITLES[base] || '';
+        title.append(strong, subtitle);
+        group.append(title);
+        for (let i = 0; i < SLOT_COUNT; i++) {
+            const key = slotProfileKey(base, i);
+            const profile = modeProfiles[key];
+            const started = Boolean(profile?.started);
+            const isActive = (activeSlots[base] || 0) === i;
+            const card = document.createElement('div');
+            card.className = 'save-slot' + (started ? ' has-save' : '') + (isActive ? ' is-active' : '');
+            card.dataset.mode = base;
+            card.dataset.slot = String(i);
+            const head = document.createElement('div');
+            head.className = 'save-slot-head';
+            const name = document.createElement('strong');
+            name.textContent = `RANURA ${i + 1}`;
+            const badge = document.createElement('span');
+            badge.className = started ? 'has-save' : '';
+            badge.textContent = isActive ? 'ACTIVA' : started ? 'GUARDADA' : 'VACÍA';
+            head.append(name, badge);
+            const status = document.createElement('p');
+            status.className = 'save-slot-status' + (started ? ' has-save' : '');
+            status.textContent = saveSlotSummary(profile, base);
+            const actions = document.createElement('div');
+            actions.className = 'save-slot-actions';
+            const makeButton = (action, label, extraClass = '') => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.dataset.mode = base;
+                button.dataset.slot = String(i);
+                button.dataset.slotAction = action;
+                if (extraClass) button.className = extraClass;
+                button.textContent = label;
+                return button;
+            };
+            const continueButton = makeButton('continue', started ? 'CONTINUAR' : 'SIN PARTIDA');
             continueButton.disabled = !started;
-            const label = started ? 'CONTINUAR' : 'SIN PARTIDA';
-            if (continueButton.textContent !== label) continueButton.textContent = label;
+            const newButton = makeButton('new', started ? 'REINICIAR' : 'NUEVA');
+            const deleteButton = makeButton('delete', 'BORRAR', 'btn-danger');
+            deleteButton.disabled = !started;
+            actions.append(continueButton, newButton, deleteButton);
+            card.append(head, status, actions);
+            group.append(card);
         }
-        const deleteButton = document.getElementById(`slot-${key}-delete`);
-        if (deleteButton) deleteButton.disabled = !started;
+        root.append(group);
     }
 }
-function startModeFromSlots(key, { fresh = false, hard = false } = {}) {
+function startModeFromSlots(base, slot, { fresh = false, hard = false } = {}) {
+    if (!isSlotMode(base)) base = 'progressive';
+    const { index } = slotBaseAndIndex(base, slot);
+    activeSlots[base] = index;
+    persistActiveSlots();
     closeStationPanel();
     closeSystemMap();
-    if (key === 'explore') startExploration({ fresh, hard });
-    else startMission(key, { fresh, hard });
+    if (base === 'explore') startExploration({ fresh, hard });
+    else startMission(base, { fresh, hard });
 }
-window.continueMode = (key) => {
-    if (!modeProfiles[key]?.started) { window.newGameMode(key); return; }
-    startModeFromSlots(key);
+window.continueMode = (base, slot) => {
+    if (!isSlotMode(base)) return;
+    const { index, key } = slotBaseAndIndex(base, slot);
+    if (!modeProfiles[key]?.started) { window.newGameMode(base, index); return; }
+    startModeFromSlots(base, index);
 };
-window.newGameMode = (key) => {
-    if (!modeProfiles[key]?.started || window.confirm(`¿Empezar una partida nueva de ${SAVE_SLOT_LABELS[key] || key}? Se perderá el progreso guardado de este modo.`)) {
-        startModeFromSlots(key, { fresh: true, hard: true });
+window.newGameMode = (base, slot) => {
+    if (!isSlotMode(base)) return;
+    const { index, key } = slotBaseAndIndex(base, slot);
+    const label = `${SAVE_SLOT_LABELS[base]} · ranura ${index + 1}`;
+    if (!modeProfiles[key]?.started || window.confirm(`¿Empezar una partida nueva en ${label}? Se perderá su progreso guardado.`)) {
+        startModeFromSlots(base, index, { fresh: true, hard: true });
     }
 };
-window.deleteModeProfile = (key) => {
+window.deleteModeProfile = (base, slot) => {
+    if (!isSlotMode(base)) return;
+    const { index, key } = slotBaseAndIndex(base, slot);
     if (!modeProfiles[key]?.started) return;
-    if (!window.confirm(`¿Borrar la partida de ${SAVE_SLOT_LABELS[key] || key}? Esta acción no se puede deshacer.`)) return;
+    if (!window.confirm(`¿Borrar la partida de ${SAVE_SLOT_LABELS[base]} · ranura ${index + 1}? Esta acción no se puede deshacer.`)) return;
     modeProfiles[key] = freshRunProfile();
     if (activeRunProfile === key) {
         restoreRunProfile(modeProfiles[key]);
         activeRunStarted = false;
         resetModeTransientState();
     }
-    if (key === 'progressive') clearPlayerSave();
-    if (key === 'explore') resetExplorationProgress();
+    if (base === 'progressive' && !anyStartedSlot('progressive')) clearPlayerSave();
+    if (base === 'explore' && !anyStartedSlot('explore')) resetExplorationProgress();
     storeModeProfiles();
     refreshModeSlots();
 };
 window.deleteAllSaves = () => {
     if (!window.confirm('¿Borrar TODOS los datos de juego (partidas, universo y récord)? Esta acción no se puede deshacer.')) return;
-    try { localStorage.removeItem('space-mission-highscore'); } catch { /* Sin almacenamiento disponible. */ }
+    try {
+        localStorage.removeItem('space-mission-highscore');
+        localStorage.removeItem(ACTIVE_SLOTS_KEY);
+    } catch { /* Sin almacenamiento disponible. */ }
     clearPlayerSave();
     resetExplorationProgress();
-    modeProfiles = {
-        progressive: freshRunProfile(),
-        explore: freshRunProfile(),
-        solo_boss: freshRunProfile(),
-        custom: freshRunProfile(),
-        training: freshRunProfile()
-    };
-    activeRunProfile = 'progressive';
+    modeProfiles = {};
+    for (const base of Object.keys(SAVE_SLOT_LABELS)) {
+        for (let i = 0; i < SLOT_COUNT; i++) modeProfiles[slotProfileKey(base, i)] = freshRunProfile();
+    }
+    modeProfiles.custom = freshRunProfile();
+    modeProfiles.training = freshRunProfile();
+    for (const base of Object.keys(activeSlots)) activeSlots[base] = 0;
+    persistActiveSlots();
+    activeRunProfile = activeSlotKey('progressive');
     activeRunStarted = false;
-    restoreRunProfile(modeProfiles.progressive);
+    restoreRunProfile(modeProfiles[activeRunProfile]);
     resetModeTransientState();
     lastModeProfilesSerialized = '';
     storeModeProfiles();
     refreshModeSlots();
     showScreen('menu-main');
 };
+// Carga de ranuras: primero la clave nueva y, si no existe, los perfiles
+// antiguos (que pasan a ocupar la ranura 1 de cada modo).
 try {
-    const parsedProfiles = JSON.parse(localStorage.getItem(MODE_PROFILE_KEY) || '{}');
+    normalizeActiveSlots(JSON.parse(localStorage.getItem(ACTIVE_SLOTS_KEY) || 'null'));
+} catch { /* Ranuras activas por defecto. */ }
+try {
+    const parsedProfiles = JSON.parse(localStorage.getItem(MODE_PROFILE_KEY)
+        || localStorage.getItem(LEGACY_PROFILE_KEY)
+        || '{}');
     if (parsedProfiles && typeof parsedProfiles === 'object') modeProfiles = parsedProfiles;
 } catch { modeProfiles = {}; }
 // Migración: los perfiles antiguos no tenían `started`. Se deduce del progreso
@@ -642,16 +764,33 @@ for (const key of Object.keys(modeProfiles)) {
         profile.updatedAt = profile.updatedAt || 0;
     }
 }
-if (modeProfiles.progressive) restoreRunProfile(modeProfiles.progressive);
-else {
-    modeProfiles.progressive = captureRunProfile(); // Migra el guardado antiguo al perfil Progressive.
-    modeProfiles.progressive.started = Boolean(savedPlayerState) || profileHasProgress(modeProfiles.progressive);
+for (const base of Object.keys(SAVE_SLOT_LABELS)) {
+    for (let i = 0; i < SLOT_COUNT; i++) {
+        const key = slotProfileKey(base, i);
+        modeProfiles[key] ||= freshRunProfile();
+    }
 }
-modeProfiles.explore ||= freshRunProfile();
-modeProfiles.solo_boss ||= freshRunProfile();
 modeProfiles.custom ||= freshRunProfile();
 modeProfiles.training ||= freshRunProfile();
-activeRunStarted = Boolean(modeProfiles.progressive.started);
+// Si la ranura activa está vacía pero otra tiene progreso (migración desde la
+// clave antigua), se selecciona automáticamente la primera con partida.
+for (const base of Object.keys(activeSlots)) {
+    if (modeProfiles[activeSlotKey(base)]?.started) continue;
+    for (let i = 0; i < SLOT_COUNT; i++) {
+        if (modeProfiles[slotProfileKey(base, i)]?.started) { activeSlots[base] = i; break; }
+    }
+}
+persistActiveSlots();
+if (savedPlayerState) {
+    // El guardado global antiguo se convierte en la ranura 1 de Progressive.
+    const migrated = captureRunProfile();
+    migrated.started = true;
+    migrated.updatedAt = Date.now();
+    modeProfiles.progressive = migrated;
+}
+activeRunProfile = activeSlotKey('progressive');
+restoreRunProfile(modeProfiles[activeRunProfile]);
+activeRunStarted = Boolean(modeProfiles[activeRunProfile]?.started);
 persistModeProfiles();
 const dashCooldownMs = () => DASH.COOLDOWN * Math.max(0.5, 1 - (nave.dashLevel || 0) * 0.1);
 const parryCooldownMs = () => 2000 * Math.max(0.5, 1 - (nave.shieldLevel || 0) * 0.1);
@@ -773,7 +912,7 @@ function returnToHub(fromPause = false) {
         if (planetShipSnapshot) { nave.accel = planetShipSnapshot.accel; nave.fric = planetShipSnapshot.fric; planetShipSnapshot = null; }
         activePlanet = null;
         if (gameMode === 'free_boss') { freeBossCombat = null; exploration.huntBosses.length = 0; }
-        activateModeProfile('explore');
+        activateModeProfile(activeSlotKey('explore'));
         nave.x = exploreCheckpoint.x; nave.y = exploreCheckpoint.y;
         nave.vx = 0; nave.vy = 0;
         centerCamera(nave.x, nave.y);
@@ -967,7 +1106,7 @@ function startCustom(){
 function startExploration({ fresh = false, hard = false } = {}){
     if (gameState === 'MENU') { beginLaunch('explore', { fresh, hard }); return; }
     initAudio();
-    activateModeProfile('explore', { fresh, hard });
+    activateModeProfile(activeSlotKey('explore'), { fresh, hard });
     if (fresh) exploreCheckpoint = null;
     trainingRun = false;
     trainingSetup = false;
@@ -1108,7 +1247,7 @@ function beginMission(mode, fromExploration = false, { fresh = false, hard = fal
     const targetProfile = modeProfileFor(mode);
     if (bossTypes) pendingFreeBossTypes = [...bossTypes];
     activateModeProfile(targetProfile, { fresh, hard });
-    const marketLoadout = targetProfile === 'explore' && enteringFromExploration ? { ...hubState.marketLoadout } : { homing:false, spread:false };
+    const marketLoadout = baseProfileKey(targetProfile) === 'explore' && enteringFromExploration ? { ...hubState.marketLoadout } : { homing:false, spread:false };
     initAudio(); gameMode=mode; gameState='PLAYING';
     if (mode === 'planet') {
         planetShipSnapshot = { accel: nave.accel, fric: nave.fric };
@@ -1179,9 +1318,17 @@ function beginMission(mode, fromExploration = false, { fresh = false, hard = fal
     }
     if (mode === 'procedural' || mode === 'planet') {
         const event = exploration.enteringZone?.type === 'procedural' ? exploration.enteringZone : exploration.gate;
-        proceduralRun = event ? { event, stageIndex: 0, groupIndex: 0, groupRemaining: event.stages[0]?.groups[0]?.count || 0, spawnTimer: 0, bossesSpawned: false } : null;
+        proceduralRun = event ? { event, stageIndex: 0, groupIndex: 0, groupRemaining: event.stages[0]?.groups[0]?.count || 0, spawnTimer: 0, bossesSpawned: false, superBossSpawned: false } : null;
         if (mode === 'planet' && event) {
             event.cleared = false;
+            // Un planeta purgado se puede reintentar desde la órbita: la purga
+            // se revierte y el mundo vuelve a empezar por la fase 1.
+            if (event.purged) {
+                event.purged = false;
+                event.purgeAt = 0;
+                markPlanetPurged(event.id, false);
+            }
+            event.planetPhase = 1;
             activePlanet = event;
             planetGimmickTimer = 0;
             floatingTexts.push({ x: canvas.width / 2, y: 105, text: `ÓRBITA DE ${event.name.toUpperCase()} · ${event.gimmick.toUpperCase()}`, life: 3.4, color: event.color });
@@ -1242,6 +1389,14 @@ function updateProceduralChallenge() {
             const strength = 1 + (run.event.difficulty || 0) * 0.65;
             enemy.hp = Math.ceil(enemy.hp * strength);
         }
+        // Escalado temático por fase del planeta: cada descenso es más duro.
+        if (gameMode === 'planet' && enemies.length > enemyCountBeforeSpawn) {
+            const enemy = enemies[enemies.length - 1];
+            const phaseScale = 1 + ((stage.phase || 1) - 1) * 0.3;
+            enemy.hp = Math.ceil(enemy.hp * phaseScale);
+            enemy.planetColor = run.event.color;
+            enemy.vy = (enemy.vy || 1.8) * (1 + ((stage.phase || 1) - 1) * 0.12);
+        }
         if (activePlanet?.style === 'krono' && enemies.length > enemyCountBeforeSpawn) enemies[enemies.length - 1].hp = Math.max(1, Math.round(enemies[enemies.length - 1].hp * 0.68));
         run.groupRemaining--;
         spawned++;
@@ -1254,7 +1409,7 @@ function updateProceduralChallenge() {
 
     const groupsFinished = run.groupIndex >= stage.groups.length;
     if (!groupsFinished || enemies.length > 0) return;
-    if (!run.bossesSpawned && stage.bosses.length) {
+    if (!run.bossesSpawned && (stage.bosses.length || stage.superBoss)) {
         run.bossesSpawned = true;
         stage.bosses.forEach((type, index) => {
             const id = `EVENT_${run.event.cellX}_${run.event.cellY}_${run.stageIndex}_${index}`;
@@ -1265,12 +1420,30 @@ function updateProceduralChallenge() {
                 boss.maxHp = Math.ceil(boss.maxHp * strength);
                 boss.hp = boss.maxHp;
                 updateBossHP(boss);
+            } else if (gameMode === 'planet') {
+                // Los jefes de fase 2 y 3 son más agresivos y resistentes.
+                const phaseScale = 1 + ((stage.phase || 1) - 1) * 0.5;
+                boss.maxHp = Math.ceil(boss.maxHp * phaseScale);
+                boss.hp = boss.maxHp;
+                boss.enraged = true;
+                updateBossHP(boss);
             }
             boss.x = canvas.width * (index + 1) / (stage.bosses.length + 1);
             boss.y = -90 - index * 70;
             boss.targetY = 120 + index * 24;
         });
-        if (stage.superBoss && !run.superBossSpawned) { spawnSuperBoss(canvas); run.superBossSpawned = true; }
+        if (stage.superBoss && !run.superBossSpawned) {
+            const finalHp = 16000 + (run.stageIndex || 0) * 2500;
+            spawnSuperBoss(canvas, gameMode === 'planet' ? {
+                color: run.event.color,
+                name: run.event.bossName || 'NÚCLEO PLANETARIO',
+                hp: finalHp,
+                planetFinal: true,
+                planetId: run.event.id,
+                theme: run.event.theme
+            } : {});
+            run.superBossSpawned = true;
+        }
         floatingTexts.push({ x: canvas.width / 2, y: 105, text: stage.bosses.length > 1 ? '¡DOBLE JEFE!' : '¡JEFE DETECTADO!', life: 2.2, color: '#ff6688' });
         return;
     }
@@ -1280,7 +1453,18 @@ function updateProceduralChallenge() {
     run.groupIndex = 0;
     run.groupRemaining = run.event.stages[run.stageIndex]?.groups[0]?.count || 0;
     run.bossesSpawned = false;
+    run.superBossSpawned = false;
     run.spawnTimer = 1.2;
+    if (gameMode === 'planet') {
+        const nextStage = run.event.stages[run.stageIndex];
+        if (nextStage) {
+            run.event.planetPhase = nextStage.phase || Math.min(3, run.stageIndex + 1);
+            floatingTexts.push({ x: canvas.width / 2, y: canvas.height * 0.45, text: `FASE ${run.event.planetPhase} · ${nextStage.phaseName || ''}`, life: 2.6, color: run.event.color });
+            if (run.event.planetPhase === 3) {
+                floatingTexts.push({ x: canvas.width / 2, y: canvas.height * 0.45 + 26, text: 'ESTRUCTURA FINAL DETECTADA', life: 3, color: '#ff6688' });
+            }
+        }
+    }
 }
 
 function updatePlanetGimmick(dt) {
@@ -1510,16 +1694,80 @@ function beginFreeBossDeath() {
     beginDeathSequence('FREE_BOSS_DEATH');
 }
 
+const DEATH_REVIVE_SECONDS = 5;
+let deathOverlayReviveAt = 0;
+function deathContextText(state) {
+    if (state === 'TRAINING_DEATH') return 'Has caído en el entrenamiento. Volviendo a Aegis Prime...';
+    if (state === 'PLANET_DEATH') return `Has caído en ${activePlanet?.name || 'el planeta'}. Revives en la superficie.`;
+    if (state === 'FREE_BOSS_DEATH') return 'Has caído ante el jefe hostil. Reapareces en zona segura.';
+    return 'Has caído en el vacío. Reapareces en la zona segura.';
+}
+function setDeathOverlayVisible(visible) {
+    const overlay = document.getElementById('death-overlay');
+    if (!overlay) return;
+    overlay.classList.toggle('active', visible);
+    overlay.setAttribute('aria-hidden', visible ? 'false' : 'true');
+}
+function updateDeathOverlay(countdown) {
+    const count = document.getElementById('death-countdown');
+    if (count && count.textContent !== String(countdown)) count.textContent = String(countdown);
+    const context = document.getElementById('death-context');
+    if (context) {
+        const text = deathContextText(deathSequenceState);
+        if (context.textContent !== text) context.textContent = text;
+    }
+    const shieldText = document.getElementById('death-shield');
+    if (shieldText) {
+        const text = `El escudo volverá al 100% · refuerzo ${Math.round((nave.shieldRechargeLevel || 0) + (nave.shieldCoverageLevel || 0))}/10`;
+        if (shieldText.textContent !== text) shieldText.textContent = text;
+    }
+}
 function beginDeathSequence(state) {
-    if (['FREE_BOSS_DEATH', 'EXPLORATION_DEATH', 'TRAINING_DEATH'].includes(gameState)) return;
+    if (['FREE_BOSS_DEATH', 'EXPLORATION_DEATH', 'TRAINING_DEATH', 'PLANET_DEATH'].includes(gameState)) return;
     gameState = state;
     deathSequenceState = state;
     freeBossDeathStartedAt = performance.now();
+    deathOverlayReviveAt = freeBossDeathStartedAt + DEATH_REVIVE_SECONDS * 1000;
     setHudVisible(false);
     showScreen('none');
+    const mu = document.getElementById('mobile-ui'); if (mu) mu.style.display = 'none';
     input.moveX = input.moveY = 0; input.shoot = input.triple = input.bomb = input.dash = input.parry = false;
-    enemies.length = 0; bullets.length = 0; enemyBullets.length = 0; bosses.length = 0; renderBossUI();
-    pickUps.length = 0;
+    enemies.length = 0; bullets.length = 0; enemyBullets.length = 0;
+    // En un planeta no se borran los jefes: la pelea se retoma al revivir.
+    if (gameMode !== 'planet') { bosses.length = 0; renderBossUI(); pickUps.length = 0; }
+    fxState.screenShake = 24;
+    updateDeathOverlay(DEATH_REVIVE_SECONDS);
+    setDeathOverlayVisible(true);
+}
+function reviveAfterDeath() {
+    if (!deathSequenceState) return;
+    const state = deathSequenceState;
+    deathSequenceState = '';
+    deathOverlayReviveAt = 0;
+    setDeathOverlayVisible(false);
+    combatState.health = 100;
+    resetShield(true);
+    clearImmunity();
+    if (state === 'TRAINING_DEATH') {
+        gameState = 'CHECKPOINT';
+        trainingRun = false;
+        trainingSetup = false;
+        returnToHub();
+        return;
+    }
+    if (state === 'PLANET_DEATH') {
+        enemies.length = 0; bullets.length = 0; enemyBullets.length = 0; pickUps.length = 0;
+        nave.x = canvas.width / 2; nave.y = canvas.height * 0.76; nave.vx = nave.vy = 0;
+        gameMode = 'planet'; gameState = 'PLAYING'; pausedFrom = 'PLAYING';
+        setHudVisible(true); showScreen('none');
+        const mobile = document.getElementById('mobile-ui');
+        if (mobile) mobile.style.display = (platform.isMobile && !platform.isTouchUIHidden) ? 'block' : 'none';
+        grantImmunity(3000);
+        syncHud(true);
+        return;
+    }
+    gameState = 'TRANSITION';
+    fadeTransition(respawnExplorationAtSafeZone);
 }
 
 function respawnExplorationAtSafeZone() {
@@ -1527,6 +1775,7 @@ function respawnExplorationAtSafeZone() {
     exploration.huntBosses.length = 0;
     freeBossCombat = null; pendingFreeBossTypes = [];
     combatState.health = 100;
+    resetShield(true);
     enemies.length = 0; bullets.length = 0; enemyBullets.length = 0; bosses.length = 0; pickUps.length = 0;
     clearImmunity();
     nave.x = exploration.spawnX; nave.y = exploration.spawnY; nave.vx = nave.vy = 0;
@@ -1540,19 +1789,66 @@ function respawnExplorationAtSafeZone() {
 }
 
 function updateFreeBossDeath() {
-    const elapsed = performance.now() - freeBossDeathStartedAt;
-    if (elapsed < 7000 || transitionBusy) return;
-    exploration.bombDetonations = 0;
-    if (deathSequenceState === 'TRAINING_DEATH') {
-        gameState = 'CHECKPOINT';
-        trainingRun = false;
-        trainingSetup = false;
-        combatState.health = 100;
-        returnToHub();
-    } else {
-        gameState = 'TRANSITION';
-        fadeTransition(respawnExplorationAtSafeZone);
+    if (!deathSequenceState) return;
+    const elapsed = (performance.now() - freeBossDeathStartedAt) / 1000;
+    const remaining = Math.max(0, Math.ceil(DEATH_REVIVE_SECONDS - elapsed));
+    updateDeathOverlay(remaining);
+    if (remaining <= 0 && !transitionBusy) reviveAfterDeath();
+}
+
+// --- Purga de un planeta ---
+// Al destruir la estructura final se desata una explosión global, se muestra
+// "Has limpiado al planeta" y la nave vuelve al espacio con el mundo cuarteado.
+function beginPurgeSequence() {
+    if (gameState !== 'PLAYING' || !activePlanet || purgePlanetId) return;
+    const planet = activePlanet;
+    purgePlanetId = planet.id;
+    purgeReturning = false;
+    purgeStartedAt = performance.now();
+    gameState = 'PURGE';
+    planet.purged = true;
+    planet.purgeAt = Date.now();
+    planet.cleared = true;
+    markPlanetPurged(planet.id, true);
+    enemies.length = 0; bullets.length = 0; enemyBullets.length = 0;
+    bosses.length = 0; renderBossUI(); pickUps.length = 0; floatingTexts.length = 0;
+    clearPortals();
+    setHudVisible(false);
+    const mu = document.getElementById('mobile-ui'); if (mu) mu.style.display = 'none';
+    const overlay = document.getElementById('purge-overlay');
+    const nameEl = document.getElementById('purge-planet');
+    if (nameEl) nameEl.textContent = planet.name.toUpperCase();
+    if (overlay) { overlay.classList.add('active'); overlay.setAttribute('aria-hidden', 'false'); }
+    fxState.screenShake = 40;
+    for (let i = 0; i < 26; i++) {
+        createExplosion(Math.random() * canvas.width, Math.random() * canvas.height, planet.color, 16 + Math.random() * 20);
     }
+    spawnDebris(canvas.width / 2, canvas.height / 2, planet.color, 16);
+    saveActiveRunProfile();
+}
+function updatePurgeSequence() {
+    if (!purgePlanetId || purgeReturning) return;
+    updateParticles();
+    updateBlasts();
+    if (performance.now() - purgeStartedAt < 3600) {
+        if (Math.random() < 0.2) {
+            createExplosion(Math.random() * canvas.width, Math.random() * canvas.height, activePlanet?.color || '#59ce70', 14);
+        }
+        return;
+    }
+    purgeReturning = true;
+    const planetName = activePlanet?.name || '';
+    const overlay = document.getElementById('purge-overlay');
+    if (overlay) { overlay.classList.remove('active'); overlay.setAttribute('aria-hidden', 'true'); }
+    purgePlanetId = null;
+    clearSuperBoss();
+    proceduralRun = null;
+    gameState = 'CHECKPOINT';
+    returnToHub();
+    exploration.statusMessage = planetName
+        ? `PLANETA PURGADO: ${planetName.toUpperCase()} · PULSA E PARA REINTENTAR`
+        : 'PLANETA PURGADO · PULSA E PARA REINTENTAR';
+    exploration.statusMessageTimer = 6;
 }
 
 let lastHudSync = 0;
@@ -1640,16 +1936,29 @@ function triggerBomb(isPlayer, origin){
 function doPlayerHit(heavy=false){
     if(nave.inmune) return;
     sfx.hit(); fxState.hitStopFrames = heavy?7:4;
-    combatState.health -= heavy? combatState.damagePerHit*2 : combatState.damagePerHit;
-    combatState.health=Math.max(0,combatState.health); fxState.screenShake=heavy?30:15; grantImmunity(2000); createExplosion(nave.x,nave.y,'#ff0000', heavy?40:25); syncHud();
+    // El escudo de energía absorbe el impacto antes que el casco. Cada golpe
+    // normal consume un 25% y los pesados un 50%.
+    const shieldBefore = shieldPercent();
+    const absorbed = absorbWithShield(heavy);
+    if (absorbed) {
+        const spent = Math.max(0, Math.round(shieldBefore - shieldPercent()));
+        createExplosion(nave.x,nave.y,'#35d9ff', heavy?30:18);
+        floatingTexts.push({ x:nave.x, y:nave.y-42, text:`ESCUDO -${spent}%`, life:1.1, color:'#7fdcff' });
+    } else {
+        combatState.health -= heavy? combatState.damagePerHit*2 : combatState.damagePerHit;
+        combatState.health=Math.max(0,combatState.health);
+        createExplosion(nave.x,nave.y,'#ff0000', heavy?40:25);
+    }
+    fxState.screenShake=heavy?30:15; grantImmunity(2000); syncHud();
     // Si el golpe mata, triggerRevive/acceptContinue dan 3 s: el token invalida
     // el timer de 2 s que se acaba de programar. El grant extra cubre también
     // el caso de caché mixta (Main nuevo + Combat.js antiguo en Pages).
     if(combatState.health<=0){
-        if(combatState.hasRevive){ triggerRevive({updateHUD:syncHud}); grantImmunity(3000); }
+        if(combatState.hasRevive){ triggerRevive({updateHUD:syncHud}); resetShield(true); grantImmunity(3000); }
         else if(gameMode==='free_boss') beginFreeBossDeath();
         else if (trainingRun) beginDeathSequence('TRAINING_DEATH');
         else if (gameState === 'EXPLORING') beginDeathSequence('EXPLORATION_DEATH');
+        else if (gameMode === 'planet') beginDeathSequence('PLANET_DEATH');
         else promptContinue();
     }
 }
@@ -1668,7 +1977,8 @@ window.getExplorationStats = () => {
 };
 window.getShipUpgrades = () => ({
     damage: nave.damageLevel || 0, dash: nave.dashLevel || 0,
-    shield: nave.shieldLevel || 0, triple: nave.tripleLevel || 0
+    shield: nave.shieldLevel || 0, triple: nave.tripleLevel || 0,
+    shieldCoverage: nave.shieldCoverageLevel || 0, shieldRecharge: nave.shieldRechargeLevel || 0
 });
 window.claimExplorationCache = () => {
     if (Math.random() < 0.42) {
@@ -1706,10 +2016,11 @@ function findHomingTarget(fromX, fromY) {
 function update(dtMs){
     const dt = Math.min(0.05, (dtMs || 1000 / 60) / 1000);
     pollInput();
-    if (gameState === 'PLAYING' || gameState === 'EXPLORING') maybeAutosaveProfile();
+    if (gameState === 'PLAYING' || gameState === 'EXPLORING') { maybeAutosaveProfile(); updateShield(); }
     if (gameState === 'MENU') { updateMenuIdle(dt); return; }
     if (gameState === 'LAUNCHING') { updateLaunch(dt); return; }
-    if (['FREE_BOSS_DEATH', 'EXPLORATION_DEATH', 'TRAINING_DEATH'].includes(gameState)) { updateFreeBossDeath(); return; }
+    if (gameState === 'PURGE') { updatePurgeSequence(); return; }
+    if (['FREE_BOSS_DEATH', 'EXPLORATION_DEATH', 'TRAINING_DEATH', 'PLANET_DEATH'].includes(gameState)) { updateFreeBossDeath(); return; }
     if (gameState === 'EXPLORING') {
         if (isSystemMapOpen()) { syncHud(); return; }
         if (!hubState.panelOpen) {
@@ -1765,6 +2076,11 @@ function update(dtMs){
     // Super Boss update tiene prioridad y pausa progresión normal en arena
     if (superBossState.active) {
         updateSuperBoss({ canvas, nave, bullets, enemyBullets, enemies, particles, floatingTexts, fxState, createExplosion, spawnDebris, hudState, combatState, frameCount: fxState.frameCount });
+        // El jefe final planetario, al destruirse, desata la purga del mundo.
+        if (superBossState.planetFinal && superBossState.destroyed && gameMode === 'planet' && gameState === 'PLAYING') {
+            beginPurgeSequence();
+            return;
+        }
         // Si está activo, no procesar oleadas normales
         if (superBossState.arena) { /* saltar checkProgression */ } else if (gameMode === 'procedural' || gameMode === 'planet') updateProceduralChallenge(); else { checkProgression({ gameMode:{value:gameMode}, currentWaveRef:{canvas}, customSelection, frameCount: fxState.frameCount, winGame, onBossDefeated }); if(gameMode==='progressive') updateWaveProgress({gameMode:{value:gameMode}, progression, bosses}); }
     } else {
@@ -2223,26 +2539,22 @@ function draw(currentTime){
         if(progression.waveTransition && progression.waveTransitionMsg){ const progress=1-(progression.waveTransitionTimer/150); const alpha=progress<0.2?progress/0.2:progress>0.8?(1-progress)/0.2:1; ctx.globalAlpha=alpha*0.85; ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.globalAlpha=alpha; ctx.textAlign='center'; ctx.font='bold 14px Orbitron'; ctx.fillStyle='#666'; ctx.fillText('— PREPARATE —',canvas.width/2,canvas.height/2-50); ctx.font='bold 40px Orbitron'; ctx.fillStyle=waveGradient(); ctx.shadowBlur=20; ctx.shadowColor='#fff'; ctx.fillText(progression.waveTransitionMsg,canvas.width/2,canvas.height/2+10); ctx.shadowBlur=0; ctx.font='13px Orbitron'; ctx.fillStyle='#aaa'; const waveLabel=['SECTOR 1','BOSS 1','SECTOR 2','BOSS 2','SECTOR 3','BOSS 3','SECTOR 4','JEFE FINAL','FIN'][progression.wavePhase-1]||''; ctx.fillText(`SIGUIENTE: ${waveLabel}`,canvas.width/2,canvas.height/2+55); ctx.globalAlpha=1; ctx.textAlign='left'; if(progression.waveTransitionTimer>0) progression.waveTransitionTimer--; }
         if(nave.inmune && !dashActive){ ensureVignettes(); const pulse=Math.abs(Math.sin(fxState.frameCount*0.18)); ctx.globalAlpha=0.35*pulse; ctx.drawImage(immuneVignette,0,0); ctx.globalAlpha=1; }
     }
-    if (['FREE_BOSS_DEATH', 'EXPLORATION_DEATH', 'TRAINING_DEATH'].includes(gameState)) {
-        const elapsed = performance.now() - freeBossDeathStartedAt;
-        ctx.fillStyle = 'rgba(0,0,0,0.82)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.textAlign = 'center'; ctx.fillStyle = '#ff4058'; ctx.font = 'bold 42px Orbitron';
-        ctx.globalAlpha = Math.min(1, elapsed / 1400); ctx.fillText('HAS MUERTO', canvas.width / 2, canvas.height / 2 - 18); ctx.globalAlpha = 1;
-        if (elapsed >= 2000) {
-            const count = Math.max(0, 5 - Math.floor((elapsed - 2000) / 1000));
-            ctx.fillStyle = '#dce8f5'; ctx.font = canvas.width < 600 ? '10px Orbitron' : '15px Orbitron';
-            if (deathSequenceState === 'TRAINING_DEATH') {
-                ctx.fillText('Has muerto en el entrenamiento,', canvas.width / 2, canvas.height / 2 + 23);
-                ctx.fillText('saliendo de sala de entrenamiento', canvas.width / 2, canvas.height / 2 + 40);
-            } else ctx.fillText('Reapareciendo en zona segura...', canvas.width / 2, canvas.height / 2 + 25);
-            ctx.fillStyle = '#6ec8ff'; ctx.font = 'bold 32px Orbitron'; ctx.fillText(String(count), canvas.width / 2, canvas.height / 2 + 82);
-        }
-        ctx.textAlign = 'left';
+    if (['FREE_BOSS_DEATH', 'EXPLORATION_DEATH', 'TRAINING_DEATH', 'PLANET_DEATH'].includes(gameState)) {
+        // El texto y el contador viven en el overlay HTML (#death-overlay).
+        ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    if (gameState === 'PURGE') {
+        ctx.fillStyle = 'rgba(2,10,6,0.28)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        drawBlasts(ctx); drawParticles(ctx); ctx.globalAlpha = 1;
     }
     ctx.restore(); update(deltaTime);
     adaptParticleBudget(deltaTime, performance.now()-workStart);
 }
 
+// Revivir manualmente desde el overlay de muerte.
+document.getElementById('death-revive')?.addEventListener('click', () => {
+    if (deathSequenceState) reviveAfterDeath();
+});
 // El canvas HTML nace en 300×150: si se inicializa el parallax antes de
 // applyOptions(), las estrellas quedan medidas para 300×150 y el resto del
 // fondo aparece vacío. Primero se fija el tamaño real y luego se reparte.

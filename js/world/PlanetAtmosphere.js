@@ -128,10 +128,149 @@ function drawCloudBands(ctx, w, h, color, time, alpha = 0.06) {
     }
 }
 
+// Fase 2: descenso a los cielos. Sol lejano, montañas, ciudades y ruinas
+// tintadas con el color del mundo.
+function drawDescentLayers(ctx, w, h, color, style, time, phase) {
+    // Sol/astro lejano.
+    const sunX = w * (0.72 + Math.sin(time * 0.04) * 0.02);
+    const sunY = h * 0.22;
+    const sunR = Math.min(w, h) * 0.11;
+    const sunGlow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, sunR * 3.2);
+    sunGlow.addColorStop(0, rgba(color, 0.95));
+    sunGlow.addColorStop(0.18, rgba(color, 0.42));
+    sunGlow.addColorStop(1, rgba(color, 0));
+    ctx.fillStyle = sunGlow;
+    ctx.beginPath(); ctx.arc(sunX, sunY, sunR * 3.2, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#fff6e8';
+    ctx.beginPath(); ctx.arc(sunX, sunY, sunR, 0, TAU); ctx.fill();
+
+    // Capas de montañas con parallax lento.
+    for (let layer = 0; layer < 3; layer++) {
+        const baseY = h * (0.5 + layer * 0.13);
+        const amp = h * (0.16 - layer * 0.035);
+        const speed = 8 + layer * 13;
+        ctx.beginPath();
+        ctx.moveTo(0, h);
+        for (let x = 0; x <= w + 40; x += 40) {
+            const px = x + (time * speed) % 40;
+            const peak = baseY + Math.sin((px * 0.011) + layer * 2.1 + time * 0.03) * amp
+                + Math.sin((px * 0.031) + layer) * amp * 0.32;
+            ctx.lineTo(px, peak);
+        }
+        ctx.lineTo(w, h); ctx.closePath();
+        ctx.fillStyle = layer === 2 ? 'rgba(3,8,16,0.94)' : rgba(color, 0.1 + layer * 0.07);
+        ctx.fill();
+    }
+
+    // Ciudad/ruinas lejanas en la línea del horizonte.
+    const cityY = h * 0.55;
+    const scroll = (time * 14) % 90;
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = 'rgba(4,10,20,0.95)';
+    for (let x = -90 + scroll; x < w + 90; x += 42) {
+        const tower = 18 + hash(Math.floor((x + time * 14) / 42) + 7) * 62;
+        ctx.fillRect(x, cityY - tower, 26, tower);
+        if (style === 'toxic' || style === 'toxina') {
+            ctx.fillStyle = rgba(color, 0.28);
+            ctx.fillRect(x + 6, cityY - tower + 6, 4, 4);
+            ctx.fillStyle = 'rgba(4,10,20,0.95)';
+        }
+    }
+    ctx.restore();
+
+    // Ruinas: arcos y columnas quebradas.
+    ctx.strokeStyle = rgba(color, 0.26);
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 5; i++) {
+        const x = w * (0.08 + i * 0.2) + Math.sin(time * 0.05 + i) * 14;
+        const y = h * 0.66;
+        ctx.beginPath(); ctx.arc(x, y, 18 + i * 4, Math.PI, TAU); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x - 22, y); ctx.lineTo(x - 22, y + 20); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x + 22, y); ctx.lineTo(x + 22, y + 26); ctx.stroke();
+    }
+
+    // Estelas de descenso a toda velocidad.
+    ctx.strokeStyle = rgba(color, phase === 3 ? 0.32 : 0.18);
+    ctx.lineWidth = 1.4;
+    for (let i = 0; i < 14; i++) {
+        const x = ((i * 97 + time * (phase === 3 ? 320 : 120)) % (w + 80)) - 40;
+        const y = h * (0.12 + hash(i + 31) * 0.6);
+        const len = 18 + hash(i + 9) * 36;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - len, y + len * 0.25); ctx.stroke();
+    }
+}
+
+// Fase 3: superficie con edificios futuristas pasando a toda velocidad.
+function drawSurfaceLayers(ctx, w, h, color, style, time) {
+    const horizon = h * 0.52;
+    const sky = ctx.createLinearGradient(0, 0, 0, horizon);
+    sky.addColorStop(0, 'rgba(2,6,14,0.92)');
+    sky.addColorStop(0.7, rgba(color, 0.13));
+    sky.addColorStop(1, rgba(color, 0.34));
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, w, horizon);
+
+    // Suelo.
+    const ground = ctx.createLinearGradient(0, horizon, 0, h);
+    ground.addColorStop(0, rgba(color, 0.30));
+    ground.addColorStop(0.25, 'rgba(4,10,18,0.96)');
+    ground.addColorStop(1, 'rgba(1,3,8,1)');
+    ctx.fillStyle = ground;
+    ctx.fillRect(0, horizon, w, h - horizon);
+
+    // Rejilla de la superficie en perspectiva.
+    ctx.strokeStyle = rgba(color, 0.22);
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 9; i++) {
+        const x = w * (i / 8);
+        ctx.beginPath(); ctx.moveTo(w * 0.5 + (x - w * 0.5) * 0.25, horizon); ctx.lineTo(x, h); ctx.stroke();
+    }
+    for (let i = 0; i < 6; i++) {
+        const y = horizon + Math.pow(i / 6, 1.8) * (h - horizon) + ((time * 90) % (h - horizon)) * 0.15;
+        if (y > h) continue;
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    }
+
+    // Edificios futuristas en dos capas de scroll rápido.
+    for (let layer = 0; layer < 2; layer++) {
+        const scroll = (time * (layer ? 300 : 160)) % (w + 160);
+        const baseY = horizon + (layer ? 8 : -4);
+        const alpha = layer ? 0.95 : 0.62;
+        for (let i = -1; i < 9; i++) {
+            const x = i * 150 - scroll;
+            const bh = h * (layer ? 0.2 : 0.3) * (0.55 + hash(i + layer * 17) * 0.8);
+            const bw = 46 + hash(i + layer * 5) * 46;
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = layer ? '#050b14' : 'rgba(5,12,22,0.9)';
+            ctx.fillRect(x, baseY - bh, bw, bh + 6);
+            ctx.strokeStyle = rgba(color, layer ? 0.85 : 0.4);
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(x, baseY - bh, bw, bh + 6);
+            // Ventanas encendidas del color del planeta.
+            ctx.fillStyle = rgba(color, 0.55 + 0.3 * Math.sin(time * 2 + i));
+            for (let wy = baseY - bh + 10; wy < baseY - 6; wy += 13) {
+                for (let wx = x + 7; wx < x + bw - 8; wx += 12) {
+                    if (hash(wx * 0.3 + wy * 0.7 + Math.floor(time * 2)) > 0.45) ctx.fillRect(wx, wy, 5, 4);
+                }
+            }
+            if (layer) {
+                ctx.fillStyle = rgba(color, 0.9);
+                ctx.fillRect(x + bw * 0.5 - 1, baseY - bh - 16, 2, 16);
+            }
+        }
+    }
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = rgba(color, 0.55);
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0, horizon); ctx.lineTo(w, horizon); ctx.stroke();
+}
+
 // Fondo de la arena: cielo del planeta, halo atmosférico y clima.
 export function drawPlanetAtmosphere(ctx, canvas, planet, time) {
     const style = planet?.style || 'terra';
     const color = planet?.color || '#6ec8ff';
+    const phase = Math.max(1, Math.min(3, planet?.planetPhase || 1));
     const w = canvas.width, h = canvas.height;
     if (!w || !h) return;
 
@@ -173,6 +312,12 @@ export function drawPlanetAtmosphere(ctx, canvas, planet, time) {
         ctx.fillRect(x, y, 1.4, 1.4);
     }
     ctx.globalAlpha = 1;
+
+    // Fases planetarias: descenso a los cielos y superficie futurista.
+    if (phase >= 2) {
+        drawDescentLayers(ctx, w, h, color, style, time, phase);
+        if (phase === 3) drawSurfaceLayers(ctx, w, h, color, style, time);
+    }
 
     // Fenómenos propios de cada mundo.
     if (style === 'ignis') {

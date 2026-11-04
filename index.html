@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>SPACE MISSION: ECHELON (ULTRA)</title>
-    <link rel="stylesheet" href="./css/styles.css?v=20261102h">
+    <link rel="stylesheet" href="./css/styles.css?v=20261103a">
 </head>
 <body>
     <div id="game-container">
@@ -13,7 +13,7 @@
         <!-- HUD: 3 bloques independientes (Score | Sector/Kills | Vida) posicionables libres -->
         <div id="hud-block-score" class="hud-block"><div class="stat-box">SCORE: <span id="val-score">0</span><br>BOMBS: <span id="val-bombs">3</span> [LB/SPACE]<br>CRÉDITOS: <span id="val-credits">0</span><br>ARMA: <span id="val-weapon" style="color:var(--primary)">NORMAL</span><br><span id="val-revive" style="display:none; color:#ffee88;">✨ 2ª OPORTUNIDAD LISTA</span></div></div>
         <div id="hud-block-sector" class="hud-block" style="text-align:center; pointer-events:none;"><div id="level-tag" style="color: var(--warning);">READY</div><div id="combo-display" style="display:none; font-size:1.1rem; font-family:'Orbitron',sans-serif; color:var(--warning); text-shadow:0 0 10px var(--warning); font-weight:bold;"></div><div id="wave-progress" style="display:none; font-size:0.72rem; font-family:'Orbitron',sans-serif; color:#aaa; margin-top:4px; min-width:140px;"></div><div id="bomb-alert" style="display:none; font-size:0.85rem; font-family:'Orbitron',sans-serif; font-weight:bold; margin-top:6px; padding:4px 8px; border:2px solid var(--warning); background:rgba(0,0,0,0.7);"></div><button id="btn-system-map" type="button" aria-label="Abrir mapa estelar">MAPA <kbd>M</kbd></button></div>
-        <div id="hud-block-vida" class="hud-block"><div class="stat-box">VIDA: <span id="val-health-pct">100%</span><div id="health-bar-track" style="width:90px; height:9px; background:rgba(255,255,255,0.12); border:1px solid #555; border-radius:2px; margin:3px 0; overflow:hidden;"><div id="health-bar-fill" style="width:100%; height:100%; background:#33ff66; transition: width 0.2s linear, background 0.2s linear;"></div></div>PARRY: <span id="val-parry">READY</span><br>DASH: <span id="val-dash">READY</span></div></div>
+        <div id="hud-block-vida" class="hud-block"><div class="stat-box">VIDA: <span id="val-health-pct">100%</span><div id="health-bar-track" style="width:90px; height:9px; background:rgba(255,255,255,0.12); border:1px solid #555; border-radius:2px; margin:3px 0; overflow:hidden;"><div id="health-bar-fill" style="width:100%; height:100%; background:#33ff66; transition: width 0.2s linear, background 0.2s linear;"></div></div>ESCUDO: <span id="val-shield-pct">100%</span><div id="shield-bar-track"><div id="shield-bar-fill"></div></div><span id="val-shield-status" class="shield-status">ESCUDO 100% · LISTO</span><br>PARRY: <span id="val-parry">READY</span><br>DASH: <span id="val-dash">READY</span></div></div>
         <!-- Exploración: sector, estado de zona y mejoras, integrados en el HUD editable -->
         <div id="hud-block-explore" class="hud-block">
             <div class="stat-box explore-box">
@@ -78,6 +78,27 @@
         </section>
         <div id="transition-fade" aria-hidden="true"></div>
 
+        <!-- Muerte con contador: exploración y planetas (sin "MISIÓN FALLIDA"). -->
+        <div id="death-overlay" role="dialog" aria-modal="true" aria-hidden="true">
+            <div class="death-card">
+                <h1>HAS MUERTO</h1>
+                <p id="death-context">Reapareciendo en zona segura...</p>
+                <div id="death-countdown">5</div>
+                <p id="death-shield" class="death-shield">El escudo se recarga al revivir</p>
+                <button id="death-revive" type="button">REVIVIR AHORA</button>
+            </div>
+        </div>
+
+        <!-- Purga de un planeta: se muestra al destruir su estructura final. -->
+        <div id="purge-overlay" aria-hidden="true">
+            <div class="purge-card">
+                <span class="purge-kicker">PURGA COMPLETADA</span>
+                <h1>Has limpiado al planeta</h1>
+                <p id="purge-planet"></p>
+                <div class="purge-loading"><span></span><span></span><span></span></div>
+            </div>
+        </div>
+
         <div id="menu-main" class="ui-screen active">
             <div class="menu-card">
                 <h1>SPACE MISSION</h1>
@@ -115,36 +136,8 @@
             <div class="menu-card menu-card-saves">
                 <button class="btn-back" onclick="window.showScreen('menu-main')">←</button>
                 <h1>PARTIDAS</h1>
-                <p class="save-hint">Continúa una partida guardada o empieza una nueva. Cada modo conserva su propio progreso.</p>
-                <div class="save-slots">
-                    <section class="save-slot" data-mode="explore">
-                        <div class="save-slot-head"><strong>EXPLORAR UNIVERSO</strong><span>ESPACIO ABIERTO</span></div>
-                        <p id="slot-explore-status" class="save-slot-status">Sin partida guardada</p>
-                        <div class="save-slot-actions">
-                            <button id="slot-explore-continue" type="button" onclick="window.continueMode('explore')">CONTINUAR</button>
-                            <button id="slot-explore-new" type="button" onclick="window.newGameMode('explore')">NUEVA PARTIDA</button>
-                            <button id="slot-explore-delete" type="button" class="btn-danger" onclick="window.deleteModeProfile('explore')">BORRAR</button>
-                        </div>
-                    </section>
-                    <section class="save-slot" data-mode="progressive">
-                        <div class="save-slot-head"><strong>JUEGO PROGRESIVO</strong><span>CAMPAÑA POR SECTORES</span></div>
-                        <p id="slot-progressive-status" class="save-slot-status">Sin partida guardada</p>
-                        <div class="save-slot-actions">
-                            <button id="slot-progressive-continue" type="button" onclick="window.continueMode('progressive')">CONTINUAR</button>
-                            <button id="slot-progressive-new" type="button" onclick="window.newGameMode('progressive')">NUEVA PARTIDA</button>
-                            <button id="slot-progressive-delete" type="button" class="btn-danger" onclick="window.deleteModeProfile('progressive')">BORRAR</button>
-                        </div>
-                    </section>
-                    <section class="save-slot" data-mode="solo_boss">
-                        <div class="save-slot-head"><strong>SOLO BOSS</strong><span>RUSH DE JEFES</span></div>
-                        <p id="slot-solo_boss-status" class="save-slot-status">Sin partida guardada</p>
-                        <div class="save-slot-actions">
-                            <button id="slot-solo_boss-continue" type="button" onclick="window.continueMode('solo_boss')">CONTINUAR</button>
-                            <button id="slot-solo_boss-new" type="button" onclick="window.newGameMode('solo_boss')">NUEVA PARTIDA</button>
-                            <button id="slot-solo_boss-delete" type="button" class="btn-danger" onclick="window.deleteModeProfile('solo_boss')">BORRAR</button>
-                        </div>
-                    </section>
-                </div>
+                <p class="save-hint">Hasta 3 partidas por modo. Continúa una, empieza una nueva o borra la ranura que quieras. Cada modo conserva su propio progreso.</p>
+                <div id="save-slots" class="save-slots"></div>
                 <div class="btn-group save-extra-actions">
                     <button onclick="window.showScreen('menu-custom')">Juego Personalizado</button>
                     <button onclick="window.deleteAllSaves()" class="btn-danger">BORRAR TODOS LOS DATOS</button>
@@ -390,6 +383,6 @@
         }
     })();
     </script>
-    <script type="module" src="./js/Main.js?v=20261102h"></script>
+    <script type="module" src="./js/Main.js?v=20261103a"></script>
 </body>
 </html>

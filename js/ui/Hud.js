@@ -1,4 +1,5 @@
 // js/ui/Hud.js — HUD, combo y progreso de oleada
+import { shieldState, updateShield, shieldPercent, shieldNextChargeIn } from '../system/Shield.js?v=20261103a';
 
 export const hudState = { score: 0, comboCount: 0, comboMultiplier: 1, comboResetTimer: null };
 
@@ -34,6 +35,30 @@ export function updateHUD({ combatState, weaponState, progression, gameMode }) {
         }
     }
     if (healthPctEl) { const v = Math.round(hpPct) + '%'; if (healthPctEl.textContent !== v) healthPctEl.textContent = v; }
+    // Escudo de energía: barra independiente de la vida.
+    updateShield();
+    const shieldPct = Math.round(shieldPercent());
+    const shieldFill = el('shield-bar-fill');
+    if (shieldFill) {
+        const w = shieldPct + '%';
+        if (shieldFill.style.width !== w) {
+            shieldFill.style.width = w;
+            shieldFill.style.background = shieldPct > 50 ? '#35d9ff' : shieldPct > 0 ? '#ffcc00' : '#ff5566';
+        }
+    }
+    const shieldPctEl = el('val-shield-pct');
+    if (shieldPctEl) { const v = shieldPct + '%'; if (shieldPctEl.textContent !== v) shieldPctEl.textContent = v; }
+    const shieldStatus = el('val-shield-status');
+    if (shieldStatus) {
+        let text;
+        if (shieldPct >= 100) text = 'ESCUDO 100% · LISTO';
+        else {
+            const wait = shieldNextChargeIn();
+            text = shieldPct <= 0 ? `ESCUDO ROTO · RECARGA ${wait.toFixed(1)}s` : `ESCUDO ${shieldPct}% · +25% EN ${wait.toFixed(1)}s`;
+        }
+        if (shieldStatus.textContent !== text) shieldStatus.textContent = text;
+        shieldStatus.classList.toggle('is-empty', shieldPct <= 0);
+    }
     const sectorLabel = gameMode.value === 'progressive' ? ` — SECTOR ${progression.currentWave}` : '';
     const levelTag = el('level-tag');
     if (levelTag) { const v = `MODO: ${gameMode.value.toUpperCase()}${sectorLabel}`; if (levelTag.textContent !== v) levelTag.textContent = v; }
@@ -84,7 +109,7 @@ export function updateExplorationHUD({ active = true, credits = 0, health = 100,
         const upgrades = Math.max(0, Math.round((accel / 0.9 - 1) * 100));
         const upgradeLabel = el('explore-upgrades-value');
         const ship = typeof window.getShipUpgrades === 'function' ? window.getShipUpgrades() : {};
-        const upgradeText = `MEJORAS · MOTORES +${upgrades}% · DAÑO +${(ship.damage || 0) * 12}% · DASH -${(ship.dash || 0) * 10}% · ESCUDO +${(ship.shield || 0) * 15}%${ship.triple ? ' · TRIPLE' : ''}`;
+        const upgradeText = `MEJORAS · MOTORES +${upgrades}% · DAÑO +${(ship.damage || 0) * 12}% · DASH -${(ship.dash || 0) * 10}% · ESCUDO COBERTURA ${ship.shieldCoverage || 0} · RECARGA ${ship.shieldRecharge || 0}${ship.triple ? ' · TRIPLE' : ''}`;
         if (upgradeLabel && upgradeLabel.textContent !== upgradeText) upgradeLabel.textContent = upgradeText;
     }
     const mapButton = el('btn-system-map');

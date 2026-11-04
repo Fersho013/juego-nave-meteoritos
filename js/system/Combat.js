@@ -8,7 +8,7 @@ import { enemyBullets, pickUps } from '../entities/Projectile.js';
 import * as EffectsNS from './Effects.js';
 import { floatingTexts, fxState, createExplosion } from './Effects.js';
 const pushParticle = EffectsNS.pushParticle || ((p) => { if (EffectsNS.particles.length < (EffectsNS.MAX_PARTICLES || 400)) { EffectsNS.particles.push(p); return true; } return false; });
-import { registerComboHits } from '../ui/Hud.js';
+import { registerComboHits } from '../ui/Hud.js?v=20261103a';
 
 export const combatState = { health: 100, maxHealth: 100, damagePerHit: 20, bombs: 3, hasRevive: false, credits: 0 };
 

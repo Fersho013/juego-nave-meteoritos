@@ -5,9 +5,9 @@
 import { world, camera, setViewport, screenToWorld } from './Camera.js';
 import { drawParallax } from './Parallax.js';
 import { drawGlow, getGlowSprite } from '../system/Sprites.js';
-import { drawHub, hubState } from './Hub.js';
-import { createPlanets, drawPlanet } from './Planets.js?v=20261102g';
-import { getWaypoint, clearWaypoint } from '../ui/StarMap.js?v=20261102g';
+import { drawHub, hubState } from './Hub.js?v=20261103a';
+import { createPlanets, drawPlanet } from './Planets.js?v=20261103a';
+import { getWaypoint, clearWaypoint } from '../ui/StarMap.js?v=20261103a';
 
 const CHUNK_SIZE = 900;
 const CHUNK_MARGIN = 1;
@@ -273,6 +273,7 @@ export function resetExplorationProgress() {
         localStorage.removeItem('space-mission-world-seed');
         localStorage.removeItem('space-mission-explored-cells');
         localStorage.removeItem('space-mission-planets');
+        localStorage.removeItem('space-mission-purged-planets');
     } catch { /* Sin almacenamiento disponible. */ }
     exploration.initialized = false;
     exploration.proceduralEvents.clear();
@@ -283,6 +284,17 @@ export function resetExplorationProgress() {
     clearWaypoint();
 }
 
+// Persistencia de mundos purgados: el planeta sigue visible desde el espacio
+// con las grietas y la etiqueta PURGADO hasta que se reintenta.
+export function markPlanetPurged(planetId, purged = true) {
+    if (!planetId) return;
+    try {
+        const set = new Set(JSON.parse(localStorage.getItem('space-mission-purged-planets') || '[]'));
+        if (purged) set.add(planetId); else set.delete(planetId);
+        localStorage.setItem('space-mission-purged-planets', JSON.stringify([...set]));
+    } catch { /* Sin almacenamiento disponible. */ }
+}
+
 export function enterExploration(nave, canvas, { fresh = false } = {}) {
     try {
         if (fresh) {
@@ -291,6 +303,7 @@ export function enterExploration(nave, canvas, { fresh = false } = {}) {
             localStorage.setItem('space-mission-world-seed', String(world.seed));
             localStorage.removeItem('space-mission-explored-cells');
             localStorage.removeItem('space-mission-planets');
+            localStorage.removeItem('space-mission-purged-planets');
         } else {
             const savedSeed = Number(localStorage.getItem('space-mission-world-seed'));
             world.seed = Number.isFinite(savedSeed) && savedSeed > 0 ? savedSeed >>> 0 : Date.now() >>> 0;
@@ -306,6 +319,15 @@ export function enterExploration(nave, canvas, { fresh = false } = {}) {
         const discovered = fresh ? new Set() : new Set(JSON.parse(localStorage.getItem('space-mission-planets') || '[]'));
         exploration.planets.forEach(planet => { planet.discovered ||= discovered.has(planet.id); });
     } catch { /* El universo continúa sin progreso guardado. */ }
+    try {
+        const purged = new Set(JSON.parse(localStorage.getItem('space-mission-purged-planets') || '[]'));
+        exploration.planets.forEach(planet => {
+            if (!purged.has(planet.id)) return;
+            planet.purged = true;
+            planet.cleared = true;
+            planet.discovered = true;
+        });
+    } catch { /* Los planetas siguen jugables si no hay almacenamiento. */ }
     exploration.planets.forEach(planet => world.zones.push(planet));
     exploration.proceduralEvents.clear();
     exploration.bombDetonations = 0;
@@ -1215,7 +1237,7 @@ export function drawExploration(ctx, canvas, nave, input, combat = {}) {
             ctx.fillStyle = '#cf8cff'; ctx.font = 'bold 9px Orbitron';
             ctx.fillText('E / BOTÓN INTERACTUAR: ACEPTAR RETO', canvas.width / 2, cardY + 44);
         } else {
-            ctx.fillText('PULSA E / BOTÓN INTERACTUAR PARA ENTRAR', canvas.width / 2, canvas.height - 48);
+            ctx.fillText(event?.purged ? 'PLANETA PURGADO · PULSA E PARA REINTENTAR' : 'PULSA E / BOTÓN INTERACTUAR PARA ENTRAR', canvas.width / 2, canvas.height - 48);
         }
         ctx.restore();
     }

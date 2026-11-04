@@ -43,26 +43,65 @@ select, input { width: 100%; background: #111; border: 1px solid #444; color: wh
 .custom-list input { width: auto; margin-right: 10px; }
 
 /* --- PARTIDAS GUARDADAS --- */
-.menu-card-saves { width: 640px; }
+.menu-card-saves { width: 680px; }
 .save-hint { margin: -8px 0 16px; color: #93a8bd; font: 11px/1.5 'JetBrains Mono', monospace; }
-.save-slots { display: grid; gap: 10px; text-align: left; }
-.save-slot { padding: 12px 14px; border: 1px solid rgba(110,200,255,0.3); border-radius: 7px; background: rgba(4,12,22,0.72); }
+.save-slots { display: grid; gap: 14px; text-align: left; }
+.save-mode-group { display: grid; gap: 7px; }
+.save-mode-title { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 0 2px; }
+.save-mode-title strong { color: #9deaff; font-size: 13px; letter-spacing: 0.08em; }
+.save-mode-title span { color: #6d879c; font: 8px 'JetBrains Mono', monospace; letter-spacing: 0.08em; }
+.save-slot { padding: 10px 12px; border: 1px solid rgba(110,200,255,0.3); border-radius: 7px; background: rgba(4,12,22,0.72); }
+.save-slot.has-save { border-color: rgba(110,255,190,0.45); box-shadow: inset 0 0 18px rgba(30,120,90,0.12); }
+.save-slot.is-active { border-color: rgba(255,216,74,0.7); box-shadow: inset 0 0 18px rgba(255,216,74,0.10); }
 .save-slot-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-.save-slot-head strong { color: #9deaff; font-size: 13px; letter-spacing: 0.06em; }
+.save-slot-head strong { color: #9deaff; font-size: 11px; letter-spacing: 0.06em; }
 .save-slot-head span { color: #6d879c; font: 8px 'JetBrains Mono', monospace; letter-spacing: 0.08em; }
-.save-slot-status { margin: 6px 0 10px; color: #c3d3e4; font: 10px/1.5 'JetBrains Mono', monospace; min-height: 15px; }
+.save-slot-head span.has-save { color: #7dffc4; }
+.save-slot-status { margin: 5px 0 8px; color: #93a8bd; font: 10px/1.45 'JetBrains Mono', monospace; min-height: 14px; }
 .save-slot-status.has-save { color: #d9ecff; }
 .save-slot-actions { display: grid; grid-template-columns: 1.2fr 1fr 0.8fr; gap: 7px; }
-.save-slot-actions button { min-height: 36px; padding: 7px; font-size: 9px; border-radius: 4px; }
+.save-slot-actions button { min-height: 32px; padding: 6px; font-size: 8.5px; border-radius: 4px; }
 button:disabled { color: #5e6c7c; border-color: #2d3946; background: rgba(15,20,26,0.7); cursor: not-allowed; box-shadow: none; }
 button:disabled:hover { color: #5e6c7c; background: rgba(15,20,26,0.7); box-shadow: none; }
 .save-extra-actions { margin-top: 14px; }
 @media (max-width: 600px) {
   .menu-card-saves { width: 96vw; padding: 22px 14px; }
+  .save-mode-title { flex-direction: column; gap: 2px; }
   .save-slot-head { flex-direction: column; gap: 2px; }
   .save-slot-actions { grid-template-columns: 1fr 1fr; }
   .save-slot-actions .btn-danger { grid-column: span 2; }
 }
+
+/* --- ESCUDO DE ENERGÍA --- */
+#shield-bar-track { width: 90px; height: 7px; margin: 3px 0; background: rgba(255,255,255,0.12); border: 1px solid #4a7a9a; border-radius: 2px; overflow: hidden; }
+#shield-bar-fill { width: 100%; height: 100%; background: #35d9ff; transition: width 0.16s linear, background 0.2s linear; }
+#hud-block-vida .shield-status { display: block; font: 8px 'JetBrains Mono', monospace; color: #7fdcff; letter-spacing: 0.04em; }
+#hud-block-vida .shield-status.is-empty { color: #ff8c9c; }
+
+/* --- MUERTE CON CONTADOR --- */
+#death-overlay { position: absolute; inset: 0; z-index: 260; display: none; align-items: center; justify-content: center; padding: 20px; background: radial-gradient(circle at 50% 45%, rgba(40,0,10,0.55), rgba(0,0,0,0.9)); text-align: center; }
+#death-overlay.active { display: flex; }
+.death-card { width: min(420px, 92%); padding: 30px 24px 24px; border: 1px solid rgba(255,64,88,0.65); border-radius: 12px; background: rgba(8,6,14,0.94); box-shadow: 0 0 44px rgba(255,40,70,0.28); }
+.death-card h1 { margin: 0 0 8px; color: #ff4058; font-size: clamp(24px, 7vw, 42px); letter-spacing: 0.12em; text-shadow: 0 0 18px rgba(255,40,70,0.65); animation: deathPulse 1.4s ease-in-out infinite; }
+.death-card p { margin: 0 0 10px; color: #b9c9da; font: 11px/1.5 'JetBrains Mono', monospace; }
+#death-countdown { margin: 6px auto 10px; color: #6ec8ff; font: bold clamp(40px, 13vw, 68px) 'Orbitron', sans-serif; text-shadow: 0 0 22px rgba(110,200,255,0.55); }
+.death-card .death-shield { color: #7fdcff; font-size: 10px; }
+#death-revive { width: 100%; min-height: 46px; margin-top: 8px; border: 1px solid #7dffc4; border-radius: 6px; color: #b9ffd9; background: rgba(20,90,55,0.3); font: bold 12px 'Orbitron', sans-serif; letter-spacing: 0.08em; cursor: pointer; }
+#death-revive:hover { background: rgba(30,150,90,0.42); box-shadow: 0 0 18px rgba(80,255,160,0.25); }
+@keyframes deathPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.62; } }
+
+/* --- PURGA DEL PLANETA --- */
+#purge-overlay { position: absolute; inset: 0; z-index: 255; display: none; align-items: center; justify-content: center; padding: 20px; background: radial-gradient(circle at 50% 50%, rgba(20,70,50,0.5), rgba(0,0,0,0.92)); text-align: center; }
+#purge-overlay.active { display: flex; }
+.purge-card { width: min(460px, 94%); padding: 30px 24px; border: 1px solid rgba(89,206,112,0.65); border-radius: 12px; background: rgba(4,14,10,0.95); box-shadow: 0 0 50px rgba(60,255,130,0.22); }
+.purge-kicker { color: #59ce70; font: 9px 'JetBrains Mono', monospace; letter-spacing: 0.28em; }
+.purge-card h1 { margin: 10px 0 12px; color: #b9ffcd; font-size: clamp(20px, 6vw, 34px); text-shadow: 0 0 20px rgba(89,206,112,0.6); }
+.purge-card p { margin: 0 0 18px; color: #9ecfae; font: 12px 'JetBrains Mono', monospace; letter-spacing: 0.16em; }
+.purge-loading { display: flex; justify-content: center; gap: 8px; }
+.purge-loading span { width: 8px; height: 8px; border-radius: 50%; background: #59ce70; animation: purgeDot 1s ease-in-out infinite; }
+.purge-loading span:nth-child(2) { animation-delay: 0.15s; }
+.purge-loading span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes purgeDot { 0%,100% { opacity: 0.25; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-5px); } }
 
 /* --- HUD (3 bloques independientes, libres) --- */
 .hud-block { position: absolute; z-index: 50; pointer-events: none; display: none; }
