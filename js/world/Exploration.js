@@ -1046,11 +1046,13 @@ export function drawExploration(ctx, canvas, nave, input, combat = {}) {
     if (!exploration.initialized) initExploration();
     setViewport(canvas.width, canvas.height);
     updateVisibleChunks();
-    // Comparte exactamente las estrellas, nebulosas y planetas animados del
-    // gameplay para que la entrada al espacio no cambie a un fondo distinto.
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    drawParallax(ctx, canvas, 'PLAYING');
+    // Cuando Main escala el mundo, el fondo se pinta fuera de la transformación
+    // para cubrir los márgenes y evitar que queden píxeles de cuadros previos.
+    if (combat.background !== false) {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        drawParallax(ctx, canvas, 'PLAYING');
+    }
     ctx.save();
     ctx.globalAlpha = exploration.mapReveal;
     drawChunkNebulas(ctx, canvas);

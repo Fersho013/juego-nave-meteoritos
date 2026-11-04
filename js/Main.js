@@ -64,7 +64,7 @@ const refreshPreview = MenuNS.refreshPreview || (() => {});
 import { stars, nebulas, planets, superAsteroids, initParallax, drawParallax, drawSuperArena } from './world/Parallax.js';
 import { drawPlanetAtmosphere, drawPlanetForeground } from './world/PlanetAtmosphere.js?v=20261103a';
 import { world, resetCamera, centerCamera } from './world/Camera.js';
-import { enterExploration, updateExploration, drawExploration, exploration, resetExplorationProgress, isPointExplored, markPlanetPurged } from './world/Exploration.js?v=20261104a';
+import { enterExploration, updateExploration, drawExploration, exploration, resetExplorationProgress, isPointExplored, markPlanetPurged } from './world/Exploration.js?v=20261104b';
 import { hubState, initHub, updateHub, closeStationPanel } from './world/Hub.js?v=20261103a';
 import { initSystemMap, isSystemMapOpen, toggleSystemMap, closeSystemMap, drawSystemMapFrame } from './ui/StarMap.js?v=20261103a';
 import { DASH } from './Data/Constants.js';
@@ -2648,8 +2648,12 @@ function draw(currentTime){
     }
     if (gameState === 'EXPLORING' || (gameState === 'PAUSED' && pausedFrom === 'EXPLORING')) {
         const exploreZoom = Math.max(.55, Math.min(1, world.zoom || 1));
+        // Mantén el fondo cubriendo el canvas completo: el zoom solo afecta al
+        // mundo. Escalar también el fondo deja restos de cuadros anteriores.
+        ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        drawParallax(ctx, canvas, 'PLAYING');
         ctx.save(); ctx.translate(canvas.width/2, canvas.height/2); ctx.scale(exploreZoom, exploreZoom); ctx.translate(-canvas.width/2, -canvas.height/2);
-        drawExploration(ctx, canvas, nave, input, { enemies, bullets, enemyBullets, parryActive });
+        drawExploration(ctx, canvas, nave, input, { enemies, bullets, enemyBullets, parryActive, background:false });
         if (platform.isMobile) {
             ctx.save();ctx.fillStyle='rgba(175,225,255,.7)';ctx.font='9px Orbitron';ctx.textAlign='left';
             ctx.fillText(`PELLIZCA PARA ALEJAR · ${Math.round(exploreZoom*100)}%`,16,canvas.height-54);ctx.restore();
