@@ -20,11 +20,8 @@ export function toggleTouchUI() {
     platform.isTouchUIHidden = !platform.isTouchUIHidden;
     const mobileUi = document.getElementById('mobile-ui');
     if (!mobileUi) return;
-    if (platform.isTouchUIHidden) {
-        mobileUi.style.display = 'none';
-    } else if (platform.isMobile) {
-        mobileUi.style.display = 'block';
-    }
+    mobileUi.classList.toggle('touch-ui-hidden', platform.isTouchUIHidden);
+    mobileUi.style.display = platform.isMobile ? 'block' : 'none';
 }
 
 export function setTouchMove(x, y) {

@@ -1,6 +1,7 @@
 // js/entities/SuperBoss.js — Super Boss Nodriza (3 fases) + modifier permanente
 import * as EffectsNS from '../system/Effects.js';
 import { drawGlow } from '../system/Sprites.js';
+import { drawPlanetMotif, getHostileMob } from './PlanetHostiles.js';
 
 function rgbaTint(hex, alpha) {
     const value = String(hex || '#6ec8ff').replace('#', '');
@@ -32,7 +33,8 @@ export const superBossState = {
     planetFinal: false,
     planetId: null,
     purgeReady: false,
-    theme: null
+    theme: null,
+    themeShotAt: 0
 };
 
 export let hasSuperModifier = false; // permanente por run
@@ -73,6 +75,7 @@ export function spawnSuperBoss(canvas, options = {}) {
     superBossState.planetFinal = planetFinal;
     superBossState.planetId = planetId;
     superBossState.theme = theme;
+    superBossState.themeShotAt = 0;
     superBossState.purgeReady = false;
     // 3 cañones
     const spacing = superBossState.w / 4;
@@ -238,8 +241,9 @@ export function updateSuperBoss({ canvas, nave, bullets, enemyBullets, enemies, 
         // spawn doble tasa (antes 850 -> 425)
         if (Date.now() - g.lastSpawn > 425) {
             g.lastSpawn = Date.now();
+            const themedMob = superBossState.planetFinal && superBossState.theme?.spawnMob ? getHostileMob(superBossState.theme.spawnMob) : null;
             const types = ['common', 'special', 'elite', 'kamikaze', 'kamikaze_bomb'];
-            const pick = types[Math.floor(Math.random() * types.length)];
+            const pick = themedMob?.id || types[Math.floor(Math.random() * types.length)];
             const nx = g.x + (Math.random() - 0.5) * (g.w - 10);
             const ny = g.y + 12;
             const hpMap = { common: 30, special: 60, elite: 120, kamikaze: 25, kamikaze_bomb: 35 };
@@ -247,7 +251,7 @@ export function updateSuperBoss({ canvas, nave, bullets, enemyBullets, enemies, 
             enemies.push({
                 x: nx, y: ny,
                 type: pick,
-                hp: Math.round((hpMap[pick] || 30) * (superBossState.planetFinal ? 1.8 : 1)),
+                hp: Math.round((themedMob?.hp || hpMap[pick] || 30) * (superBossState.planetFinal ? 1.8 : 1)),
                 vx: (Math.random() - 0.5) * 1.6,
                 vy: vyMap[pick] || 1.8,
                 shield: pick === 'special',
@@ -255,7 +259,8 @@ export function updateSuperBoss({ canvas, nave, bullets, enemyBullets, enemies, 
                 planetColor: superBossState.planetFinal ? superBossState.color : null,
                 suicidal: pick === 'kamikaze' || pick === 'kamikaze_bomb',
                 isBombKamikaze: pick === 'kamikaze_bomb',
-                bombRadius: 42
+                bombRadius: 42,
+                ...(themedMob ? { hostileSpec:themedMob, color:themedMob.color, shield:themedMob.role==='shielder', shotTimer:1 } : {})
             });
         }
     } else if (superBossState.phase === 3) {
@@ -289,6 +294,25 @@ export function updateSuperBoss({ canvas, nave, bullets, enemyBullets, enemies, 
                 superBossState.shield = false;
                 superBossState.laserTimer = now;
                 superBossState.shieldTimer = now;
+            }
+        }
+        if (superBossState.planetFinal && now - (superBossState.themeShotAt || 0) > 1050) {
+            superBossState.themeShotAt = now;
+            const motif = superBossState.theme?.motif || 'machine';
+            const mob = superBossState.theme?.spawnMob ? getHostileMob(superBossState.theme.spawnMob) : null;
+            const style = mob?.shot || ({ ice:'iceblock', fire:'magma', void:'darkbeam', gear:'goldbolt', wind:'gale', ocean:'bubble', toxic:'acid', crystal:'prism', time:'chrono', vine:'spore', machine:'redbeam', imperial:'royal' }[motif] || 'bolt');
+            const color = superBossState.theme?.color || superBossState.color;
+            const aimed = Math.atan2(nave.y-superBossState.y,nave.x-superBossState.x);
+            const pattern = motif === 'fire' ? { n:10, spread:Math.PI*2, base:now*.001 }
+                : motif === 'void' ? { n:7, spread:Math.PI*2, base:now*.002 }
+                : motif === 'ice' || motif === 'crystal' ? { n:7, spread:.95, base:aimed }
+                : motif === 'time' ? { n:3, spread:.32, base:aimed+Math.sin(now*.003)*.7 }
+                : motif === 'ocean' ? { n:5, spread:.62, base:aimed+Math.sin(now*.002)*.35 }
+                : { n:5, spread:.75, base:aimed+Math.sin(now*.0015)*.25 };
+            for (let i=0;i<pattern.n;i++) {
+                const angle = pattern.base + (pattern.n===1?0:(i/(pattern.n-1)-.5)*pattern.spread);
+                const speed = motif==='ice'?4.3:motif==='time'?6.4:motif==='wind'?5.8:4.8;
+                enemyBullets.push({ x:superBossState.x, y:superBossState.y+20, vx:Math.cos(angle)*speed, vy:Math.sin(angle)*speed, color, style, hostileShot:true, life:440, planetPattern:motif });
             }
         }
     }
@@ -403,6 +427,13 @@ export function drawSuperBoss(ctx, frameCount) {
     ctx.strokeRect(sb.x - sb.w / 2, sb.y - sb.h / 2, sb.w, sb.h);
     // Torres y armamento extra del jefe planetario.
     if (sb.planetFinal) {
+        const motifSize = Math.max(26, Math.min(68, sb.h * 0.82));
+        ctx.save(); ctx.translate(sb.x, sb.y); ctx.rotate(frameCount * 0.002);
+        ctx.globalAlpha = 0.24; ctx.fillStyle = tint; drawPlanetMotif(ctx, sb.theme?.motif || 'machine', motifSize, frameCount * 0.03); ctx.fill();
+        ctx.globalAlpha = 0.95; ctx.strokeStyle = tint; ctx.lineWidth = 3; drawPlanetMotif(ctx, sb.theme?.motif || 'machine', motifSize, frameCount * 0.03); ctx.stroke();
+        ctx.fillStyle = '#070b13'; ctx.beginPath(); ctx.arc(0,0,motifSize*.34,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle = tint; ctx.globalAlpha = .8; ctx.beginPath(); ctx.arc(0,0,motifSize*(.15+Math.abs(Math.sin(frameCount*.08))*.1),0,Math.PI*2); ctx.fill();
+        ctx.restore(); ctx.globalAlpha=1;
         ctx.fillStyle = '#0c1420'; ctx.strokeStyle = tint; ctx.lineWidth = 1.5;
         for (let i = 0; i < 6; i++) {
             const tx = sb.x - sb.w * 0.42 + i * sb.w * 0.168;

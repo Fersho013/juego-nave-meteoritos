@@ -4,6 +4,7 @@
 export const world = {
     cameraX: 0,
     cameraY: 0,
+    zoom: 1,
     seed: Date.now() >>> 0,
     chunks: new Map(),
     zones: []
@@ -19,8 +20,9 @@ export const camera = {
 };
 
 export function setViewport(w, h) {
-    camera.viewW = Math.max(1, w || 1);
-    camera.viewH = Math.max(1, h || 1);
+    const zoom = Math.max(0.55, Math.min(1, Number(world.zoom) || 1));
+    camera.viewW = Math.max(1, (w || 1) / zoom);
+    camera.viewH = Math.max(1, (h || 1) / zoom);
 }
 
 export function centerCamera(x, y) {
@@ -38,11 +40,15 @@ export function followCamera(dt, x, y, leadX = 0, leadY = 0, smooth = 9) {
 }
 
 export function worldToScreen(x, y) {
-    return { x: x - camera.x, y: y - camera.y };
+    const zoom = Math.max(0.55, Math.min(1, Number(world.zoom) || 1));
+    return { x: camera.viewW * zoom / 2 + (x - camera.x - camera.viewW / 2) * zoom,
+        y: camera.viewH * zoom / 2 + (y - camera.y - camera.viewH / 2) * zoom };
 }
 
 export function screenToWorld(x, y) {
-    return { x: x + camera.x, y: y + camera.y };
+    const zoom = Math.max(0.55, Math.min(1, Number(world.zoom) || 1));
+    return { x: camera.x + camera.viewW / 2 + (x - camera.viewW * zoom / 2) / zoom,
+        y: camera.y + camera.viewH / 2 + (y - camera.viewH * zoom / 2) / zoom };
 }
 
 export function resetCamera() {

@@ -3,23 +3,11 @@
 // Cada mundo se combate en 3 fases: atmósfera, descenso y superficie, con un
 // jefe temático por fase y una estructura final destruible por partes.
 import { drawGlow } from '../system/Sprites.js';
+import { PLANET_HOSTILES, getPlanetHostiles, buildPlanetStages } from '../entities/PlanetHostiles.js';
 
-// Enemigos y jefes propios de cada mundo. Los colores salen del planeta para
-// que la arena y los hostiles siempre compartan la misma identidad visual.
-const THEMES = {
-    terra:     { enemies: ['common', 'shield', 'elite', 'special'], bosses: ['moving', 'hunter'], motif: 'organic' },
-    ignis:     { enemies: ['kamikaze', 'kamikaze_bomb', 'special', 'elite'], bosses: ['berserker', 'berserker'], motif: 'fire' },
-    glacia:    { enemies: ['shield', 'special', 'common', 'elite'], bosses: ['moving', 'hunter'], motif: 'ice' },
-    aurum:     { enemies: ['elite', 'shield', 'common', 'special'], bosses: ['static', 'moving'], motif: 'industrial' },
-    umbra:     { enemies: ['special', 'kamikaze', 'common', 'elite'], bosses: ['hunter', 'berserker'], motif: 'void' },
-    caelum:    { enemies: ['elite', 'special', 'common', 'kamikaze'], bosses: ['berserker', 'hunter'], motif: 'sky' },
-    mecanis:   { enemies: ['shield', 'elite', 'special', 'kamikaze_bomb'], bosses: ['static', 'moving'], motif: 'machine' },
-    aquamar:   { enemies: ['common', 'special', 'elite', 'shield'], bosses: ['hunter', 'static'], motif: 'ocean' },
-    toxina:    { enemies: ['kamikaze_bomb', 'special', 'kamikaze', 'elite'], bosses: ['berserker', 'hunter'], motif: 'toxic' },
-    cristalia: { enemies: ['elite', 'shield', 'special', 'common'], bosses: ['moving', 'hunter'], motif: 'crystal' },
-    krono:     { enemies: ['kamikaze', 'elite', 'special', 'common'], bosses: ['berserker', 'moving'], motif: 'time' },
-    echelon:   { enemies: ['elite', 'kamikaze_bomb', 'shield', 'special'], bosses: ['doppel', 'hunter'], motif: 'imperial' }
-};
+// Enemigos y jefes propios de cada mundo (definidos en PlanetHostiles.js).
+// Los colores salen del planeta para que la arena y los hostiles compartan
+// siempre la misma identidad visual.
 
 export const PLANET_CATALOG = [
     { id:'terranova', name:'Terranova', distance:15000, radius:270, color:'#59ce70', style:'terra', gimmick:'Formaciones en V y enemigos comunes; zona segura para farmear.' },
@@ -39,36 +27,13 @@ export const PLANET_CATALOG = [
 const PHASE_NAMES = ['ATMÓSFERA', 'DESCENSO', 'SUPERFICIE'];
 
 function buildStages(spec, index) {
-    const theme = THEMES[spec.style] || THEMES.terra;
-    const [e0, e1 = e0, e2 = e1, e3 = e2] = theme.enemies;
-    const [b0, b1 = b0] = theme.bosses;
-    const tier = 1 + index * 0.08;
-    const count = base => Math.round(base * tier);
-    return [
-        {
-            phase: 1,
-            phaseName: PHASE_NAMES[0],
-            groups: [{ type: e0, count: count(14) }, { type: e1, count: count(8) }],
-            bosses: [b0]
-        },
-        {
-            phase: 2,
-            phaseName: PHASE_NAMES[1],
-            groups: [{ type: e1, count: count(16) }, { type: e2, count: count(10) }, { type: e3, count: count(6) }],
-            bosses: [b1]
-        },
-        {
-            phase: 3,
-            phaseName: PHASE_NAMES[2],
-            groups: [{ type: e2, count: count(18) }, { type: e3, count: count(12) }, { type: e1, count: count(8) }],
-            bosses: [],
-            superBoss: true
-        }
-    ];
+    // Cada mundo usa exclusivamente sus hostiles temáticos (nuevos), no los
+    // tipos clásicos. buildPlanetStages añade mini jefe, jefe y jefe final.
+    return buildPlanetStages(spec.style, index);
 }
 
 export function planetTheme(planet) {
-    return THEMES[planet?.style] || THEMES.terra;
+    return getPlanetHostiles(planet?.style);
 }
 
 export function planetPhaseName(planet) {
@@ -77,21 +42,16 @@ export function planetPhaseName(planet) {
 }
 
 export function planetBossName(planet) {
-    const names = {
-        terra: 'GUARDIÁN SELVÁTICO', ignis: 'TITÁN ÍGNEO', glacia: 'COLOSO GLACIAL',
-        aurum: 'CENTINELA DORADO', umbra: 'ESPECTRO DEL VACÍO', caelum: 'DEVORADOR DE CIELOS',
-        mecanis: 'FORTALEZA MECANIS', aquamar: 'LEVIATÁN ABISAL', toxina: 'BESTIA ÁCIDA',
-        cristalia: 'PRISMA MADRE', krono: 'SEÑOR DEL TIEMPO', echelon: 'NÚCLEO IMPERIAL'
-    };
-    return names[planet?.style] || 'ESTRUCTURA PLANETARIA';
+    return getPlanetHostiles(planet?.style).boss.name;
 }
 
 export function createPlanets(seed) {
     return PLANET_CATALOG.map((spec, index) => {
         const angle = ((seed >>> (index % 24)) * 0.0000001 + index * 2.3999632297) % (Math.PI * 2);
+        const hostileTheme = getPlanetHostiles(spec.style);
         return { ...spec, type:'planet', x:Math.cos(angle)*spec.distance, y:Math.sin(angle)*spec.distance,
             activationRadius:Math.max(400, spec.radius + 150), discovered:index < 3, cleared:false,
-            purged:false, planetPhase:1, theme:THEMES[spec.style] || THEMES.terra,
+            purged:false, planetPhase:1, theme:hostileTheme,
             phaseNames:[...PHASE_NAMES], bossName:planetBossName(spec),
             stages:buildStages(spec, index) };
     });
@@ -159,6 +119,15 @@ function drawPurgedOverlay(ctx, planet, time) {
     ctx.restore();
 }
 
+function drawTeleporterBeacon(ctx, x, y, radius, time) {
+    ctx.save(); ctx.translate(x, y - radius - 52); ctx.globalAlpha=.75+Math.sin(time*3)*.18;
+    drawGlow(ctx,0,0,34,'#52f4ff',.8); ctx.strokeStyle='#52f4ff';ctx.lineWidth=3;
+    ctx.beginPath();ctx.ellipse(0,0,17,25,time*.25,0,Math.PI*2);ctx.stroke();
+    ctx.strokeStyle='#d8ffff';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(0,22);ctx.lineTo(0,50);ctx.stroke();
+    ctx.fillStyle='#bfffff';ctx.beginPath();ctx.arc(0,-29,3+Math.sin(time*4)*1.3,0,Math.PI*2);ctx.fill();
+    ctx.restore();
+}
+
 export function drawPlanet(ctx, planet, time) {
     const {x,y,radius:r,style,color}=planet;
     ctx.save(); ctx.translate(x,y);
@@ -169,8 +138,12 @@ export function drawPlanet(ctx, planet, time) {
     ctx.fillStyle=gradient;
     if (style==='caelum') {
         const gas=ctx.createRadialGradient(0,0,r*.1,0,0,r*1.15); gas.addColorStop(0,'rgba(45,100,255,.52)'); gas.addColorStop(.55,'rgba(45,100,255,.18)'); gas.addColorStop(1,'rgba(45,100,255,0)');
-        ctx.fillStyle=gas; ctx.beginPath(); ctx.arc(0,0,r*1.15,0,Math.PI*2); ctx.fill(); ctx.restore();
-        ctx.save();ctx.textAlign='center';ctx.font='bold 14px Orbitron';ctx.fillStyle=color;drawGlow(ctx,0,-r-16,80,color,0.35);ctx.fillText(planet.name,0,-r-16);ctx.restore();return;
+        ctx.fillStyle=gas; ctx.beginPath(); ctx.arc(0,0,r*1.15,0,Math.PI*2); ctx.fill();
+        if (planet.purged) drawPurgedOverlay(ctx, planet, time);
+        ctx.restore();
+        ctx.save();ctx.textAlign='center';ctx.font='bold 14px Orbitron';ctx.fillStyle=planet.purged?'#b9ffcd':color;drawGlow(ctx,x,y-r-16,80,planet.purged?'#59ce70':color,0.35);ctx.fillText(planet.name,x,y-r-16);
+        if (planet.purged) { ctx.font='bold 10px Orbitron';ctx.fillStyle='#59ce70';ctx.fillText('PURGADO',x,y-r+2);drawTeleporterBeacon(ctx,x,y,r,time); }
+        ctx.restore();return;
     }
     if (style==='mecanis') polygon(ctx,r,8,.025,time);
     else if (style==='ignis') polygon(ctx,r,36,.085,time*.3);
@@ -208,6 +181,8 @@ export function drawPlanet(ctx, planet, time) {
     if (planet.purged) {
         ctx.font='bold 10px Orbitron'; ctx.fillStyle='#59ce70';
         ctx.fillText('PURGADO · PULSA E PARA REINTENTAR', x, y - r + 2);
+        // Baliza dejada por el piloto al abandonar el planeta purgado.
+        drawTeleporterBeacon(ctx,x,y,r,time);
     }
     ctx.restore();
 }

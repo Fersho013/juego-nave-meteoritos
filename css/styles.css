@@ -101,6 +101,16 @@ button:disabled:hover { color: #5e6c7c; background: rgba(15,20,26,0.7); box-shad
 .purge-loading span { width: 8px; height: 8px; border-radius: 50%; background: #59ce70; animation: purgeDot 1s ease-in-out infinite; }
 .purge-loading span:nth-child(2) { animation-delay: 0.15s; }
 .purge-loading span:nth-child(3) { animation-delay: 0.3s; }
+.purge-exit-scene { position:relative; height:118px; margin:8px 0 4px; overflow:hidden; border-radius:10px; background:radial-gradient(ellipse at 50% 130%,rgba(40,120,170,.25),transparent 65%); }
+.purge-world { position:absolute; left:50%; bottom:-65px; width:164px; height:164px; transform:translateX(-50%); border-radius:50%; background:radial-gradient(circle at 35% 25%,#a4f7ff 0,#347e9c 22%,#101c30 68%); box-shadow:0 0 38px rgba(82,244,255,.42); animation:purgeWorldBreak 3.6s ease-in forwards; }
+.purge-beacon { position:absolute; left:50%; top:40px; width:23px; height:34px; border:2px solid #52f4ff; border-radius:50%; box-shadow:0 0 18px #52f4ff; animation:purgeBeaconDrop 1s .8s ease-out both; }
+.purge-ship { position:absolute; left:calc(50% - 9px); top:67px; color:#fff; text-shadow:0 0 14px #fff; animation:purgeShipEscape 2.5s 1s cubic-bezier(.2,.75,.3,1) forwards; }
+.purge-exit-scene i { position:absolute; left:50%; top:86px; height:0; border-left:2px solid #8ffcff; box-shadow:0 0 12px #52f4ff; animation:purgeBeam 1s .8s ease-out both; }
+.purge-exit-caption { margin:0 0 14px!important; color:#7deeff!important; font-size:9px!important; }
+@keyframes purgeWorldBreak { 35% { filter:brightness(2.4); } 100% { transform:translateX(-50%) scale(.62); opacity:.34; } }
+@keyframes purgeBeaconDrop { from { opacity:0; transform:translate(-50%,-30px) scale(.5); } to { opacity:1; transform:translate(-50%,0) scale(1); } }
+@keyframes purgeShipEscape { 0% { opacity:0; transform:translateY(28px) scale(.7); } 18% { opacity:1; } 100% { opacity:0; transform:translateY(-85px) scale(.42); } }
+@keyframes purgeBeam { from { height:0; opacity:0; } to { height:24px; opacity:.9; } }
 @keyframes purgeDot { 0%,100% { opacity: 0.25; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-5px); } }
 
 /* --- HUD (3 bloques independientes, libres) --- */
@@ -124,6 +134,7 @@ button:disabled:hover { color: #5e6c7c; background: rgba(15,20,26,0.7); box-shad
 
 /* --- MOBILE CONTROLS --- */
 #mobile-ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; pointer-events: none; z-index: 60; }
+.touch-ui-hidden > :not(#btn-pause-m) { display: none !important; }
 .touch-zone { position: absolute; border-radius: 50%; background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.2); pointer-events: auto; touch-action: none;}
 .joy-stick-inner { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 45px; height: 45px; border-radius: 50%; pointer-events: none; }
 

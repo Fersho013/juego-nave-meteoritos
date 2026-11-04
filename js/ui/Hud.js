@@ -122,7 +122,7 @@ export function updateExplorationHUD({ active = true, credits = 0, health = 100,
         const message = nearStation
             ? `PRESIONA [E] (O TOCA) PARA INTERACTUAR · ${nearStation.label}`
             : nearPlanet
-                ? `PRESIONA [E] PARA ENTRAR A LA ÓRBITA DE ${nearPlanet.name}`
+                ? nearPlanet.purged ? `PRESIONA [E] PARA REGRESAR A AEGIS PRIME` : `PRESIONA [E] PARA ENTRAR A LA ÓRBITA DE ${nearPlanet.name}`
             : nearCache
                 ? 'PRESIONA [E] PARA EXAMINAR EL COFRE DE DATOS'
             : nearZone

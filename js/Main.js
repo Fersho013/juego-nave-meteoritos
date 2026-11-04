@@ -2,7 +2,7 @@
 
 import { config } from './Core/Config.js';
 import { initAudio, toggleVolume, sfx } from './Core/Audio.js';
-import { platform, toggleTouchUI, setTouchMove, setRightJoyActive, setUsingGamepad, toggleDeviceMode, bindResize } from './State.js';
+import { platform, toggleTouchUI, setTouchMove, setRightJoyActive, setUsingGamepad, toggleDeviceMode, bindResize } from './State.js?v=20261104a';
 import { nave, changeNaveColor as changeColor } from './entities/Player.js';
 import { enemies, spawnEnemy, spawnFormation } from './entities/Enemy.js';
 import { bosses, createBoss, renderBossUI, updateBossHP } from './entities/Boss.js';
@@ -44,10 +44,10 @@ import { combatState, awardCredits, dropRevivePickup, playerHit as combatPlayerH
 import { progression, checkProgression, cancelWaveTransition, startWaveTransition } from './system/Progression.js';
 import { loadPlayerSave, savePlayerState, clearPlayerSave } from './system/Save.js?v=20261103a';
 import { shieldState, configureShield, resetShield, absorbWithShield, updateShield, shieldIsFull, shieldPercent } from './system/Shield.js?v=20261103a';
-import { hudState, updateHUD as hudUpdate, updateWaveProgress, resetCombo, registerComboHit, registerComboHits } from './ui/Hud.js?v=20261103a';
+import { hudState, updateHUD as hudUpdate, updateWaveProgress, resetCombo, registerComboHit, registerComboHits } from './ui/Hud.js?v=20261104a';
 // Namespace + fallback: si GitHub Pages sirve un Hud.js antiguo (sin
 // resetWaveProgressUI) el juego sigue arrancando igual.
-import * as HudNS from './ui/Hud.js?v=20261103a';
+import * as HudNS from './ui/Hud.js?v=20261104a';
 const resetWaveProgressUI = HudNS.resetWaveProgressUI || (() => {
     const wp = document.getElementById('wave-progress');
     if (wp) { wp.style.display = 'none'; wp.innerHTML = ''; }
@@ -64,13 +64,15 @@ const refreshPreview = MenuNS.refreshPreview || (() => {});
 import { stars, nebulas, planets, superAsteroids, initParallax, drawParallax, drawSuperArena } from './world/Parallax.js';
 import { drawPlanetAtmosphere, drawPlanetForeground } from './world/PlanetAtmosphere.js?v=20261103a';
 import { world, resetCamera, centerCamera } from './world/Camera.js';
-import { enterExploration, updateExploration, drawExploration, exploration, resetExplorationProgress, isPointExplored, markPlanetPurged } from './world/Exploration.js?v=20261103a';
+import { enterExploration, updateExploration, drawExploration, exploration, resetExplorationProgress, isPointExplored, markPlanetPurged } from './world/Exploration.js?v=20261104a';
 import { hubState, initHub, updateHub, closeStationPanel } from './world/Hub.js?v=20261103a';
 import { initSystemMap, isSystemMapOpen, toggleSystemMap, closeSystemMap, drawSystemMapFrame } from './ui/StarMap.js?v=20261103a';
 import { DASH } from './Data/Constants.js';
 import { initLayoutEditor, enterEditMode, exitEditMode, isEditorActive, setEditorExitHandler } from './ui/LayoutEditor.js';
 import { portals, spawnPortal, clearPortals, updatePortals, drawPortals } from './entities/Portal.js';
 import { superBossState, spawnSuperBoss, clearSuperBoss, updateSuperBoss, drawSuperBoss, canDamageSuperBoss, damageSuperBoss, damageCannon, damageGate, hasSuperModifierActive, grantSuperModifier, clearSuperModifier } from './entities/SuperBoss.js?v=20261103a';
+import { getPlanetHostiles, buildCustomPlanetStages, drawPlanetEnemy, drawPlanetBoss, drawHostileShot, updateThemedEnemy, updatePlanetBoss } from './entities/PlanetHostiles.js?v=20261103a';
+import { PLANET_CATALOG } from './world/Planets.js?v=20261103a';
 
 // El guardado global antiguo solo se usa para migrar la primera vez. Si ya
 // existen perfiles por modo, no debe resucitar datos borrados.
@@ -133,6 +135,12 @@ function ensureVignettes() {
 let gameState = 'MENU';
 let gameMode = 'progressive';
 let customSelection = [];
+let customPlanetConfig = null;
+let teleportAnimation = null;
+const planetBosses = [];
+let planetMenuBuilt = false;
+let planetSimulationTraining = false;
+const isPlanetCombat = () => gameMode === 'planet' || planetSimulationTraining;
 let pausedFrom = 'PLAYING'; // estado al que vuelve el menú de pausa
 window.__getGameState = () => gameState;
 window.__getGameMode = () => gameMode;
@@ -198,6 +206,7 @@ window.startMission = startMission;
 window.restartCurrentMode = restartCurrentMode;
 window.startExploration = startExploration;
 window.startCustom = startCustom;
+window.startPlanetTeleport = startPlanetTeleport;
 window.exitCustomScreen = () => {
     if (trainingSetup) {
         trainingSetup = false;
@@ -330,6 +339,7 @@ function exitToMenu() {
     saveActiveRunProfile();
     trainingRun = false;
     trainingSetup = false;
+    planetSimulationTraining = false;
     exploreCheckpoint = null;
     closeSystemMap();
     if (planetShipSnapshot) { nave.accel = planetShipSnapshot.accel; nave.fric = planetShipSnapshot.fric; planetShipSnapshot = null; }
@@ -352,6 +362,7 @@ function exitToMenu() {
     cleanupAllBossTimers();
     resetCombo();
     bosses.length = 0; renderBossUI();
+    planetBosses.length = 0;
     clearPortals(); clearSuperBoss(); clearSuperModifier();
     progression.awaitingCheckpoint = false;
     progression.awaitingBossReward = false;
@@ -375,7 +386,7 @@ function acceptContinue() {
     initAudio(); combatState.health = 100; gameState = 'PLAYING'; showScreen('none');
     setHudVisible(true);
     renderBossUI();
-    if (platform.isMobile && !platform.isTouchUIHidden) { const mu = document.getElementById('mobile-ui'); if (mu) mu.style.display = 'block'; }
+    if (platform.isMobile) { const mu = document.getElementById('mobile-ui'); if (mu) mu.style.display = 'block'; }
     enemyBullets.length = 0; grantImmunity(3000); syncHud(true);
 }
 function winGame() {
@@ -853,7 +864,7 @@ function continueCheckpoint() {
     gameState = 'PLAYING';
     setHudVisible(true);
     const mobile = document.getElementById('mobile-ui');
-    if (mobile) mobile.style.display = (platform.isMobile && !platform.isTouchUIHidden) ? 'block' : 'none';
+    if (mobile) mobile.style.display = (platform.isMobile) ? 'block' : 'none';
     const phase = progression.wavePhase;
     progression.awaitingCheckpoint = false;
     progression.awaitingBossReward = false;
@@ -908,15 +919,17 @@ function returnToHub(fromPause = false) {
         pickUps.length = 0; clearParticles(); clearBlasts(); floatingTexts.length = 0;
         clearPortals(); clearSuperBoss(); clearSuperModifier();
         cancelWaveTransition();
-        if (gameMode === 'procedural' || gameMode === 'planet') proceduralRun = null;
+        if (gameMode === 'procedural' || isPlanetCombat()) proceduralRun = null;
         if (planetShipSnapshot) { nave.accel = planetShipSnapshot.accel; nave.fric = planetShipSnapshot.fric; planetShipSnapshot = null; }
         activePlanet = null;
         if (gameMode === 'free_boss') { freeBossCombat = null; exploration.huntBosses.length = 0; }
+        planetBosses.length = 0;
         activateModeProfile(activeSlotKey('explore'));
         nave.x = exploreCheckpoint.x; nave.y = exploreCheckpoint.y;
         nave.vx = 0; nave.vy = 0;
         centerCamera(nave.x, nave.y);
         gameMode = 'explore';
+        trainingRun = false; trainingSetup = false; planetSimulationTraining = false;
         gameState = 'EXPLORING';
         pausedFrom = 'EXPLORING';
         setHudVisible(true);
@@ -924,7 +937,7 @@ function returnToHub(fromPause = false) {
         syncHud(true);
         savePlayerState(combatState, nave, progression);
         const mobile = document.getElementById('mobile-ui');
-        if (mobile) mobile.style.display = (platform.isMobile && !platform.isTouchUIHidden) ? 'block' : 'none';
+        if (mobile) mobile.style.display = (platform.isMobile) ? 'block' : 'none';
         showScreen('none');
     });
 }
@@ -956,6 +969,23 @@ canvas.addEventListener('mouseup', releaseMouseButtons);
 // También al soltar fuera del canvas, para no dejar el disparo trabado.
 window.addEventListener('mouseup', releaseMouseButtons);
 canvas.addEventListener('contextmenu', e => e.preventDefault());
+let explorePinchDistance = 0;
+canvas.addEventListener('touchstart', event => {
+    const zoomable = gameState === 'EXPLORING' || gameState === 'PLAYING' || (gameState === 'PAUSED' && pausedFrom === 'PLAYING');
+    if (!zoomable || event.touches.length !== 2) return;
+    const [a,b] = event.touches; explorePinchDistance = Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY);
+    event.preventDefault();
+}, { passive:false });
+canvas.addEventListener('touchmove', event => {
+    const zoomable = gameState === 'EXPLORING' || gameState === 'PLAYING' || (gameState === 'PAUSED' && pausedFrom === 'PLAYING');
+    if (!zoomable || event.touches.length !== 2 || !explorePinchDistance) return;
+    const [a,b] = event.touches; const next = Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY);
+    if (next > 0) world.zoom = Math.max(.55, Math.min(1, world.zoom * next / explorePinchDistance));
+    explorePinchDistance = next; event.preventDefault();
+}, { passive:false });
+const endExplorePinch = event => { if (event.touches.length < 2) explorePinchDistance = 0; };
+canvas.addEventListener('touchend', endExplorePinch, { passive:true });
+canvas.addEventListener('touchcancel', endExplorePinch, { passive:true });
 
 function setupJoystick(baseId, stickId, type) {
     const base = document.getElementById(baseId);
@@ -1089,9 +1119,12 @@ function pollInput() {
 }
 
 function startCustom(){
+    const planetId = document.getElementById('custom-planet-select')?.value || '';
+    customPlanetConfig = planetId ? { planetId, mobs:[...document.querySelectorAll('#planet-custom-hostiles input[data-kind="mob"]:checked')].map(el=>el.value), mini:!!document.querySelector('#planet-custom-hostiles [data-kind="mini"]:checked'), boss:!!document.querySelector('#planet-custom-hostiles [data-kind="boss"]:checked'), final:!!document.querySelector('#planet-custom-hostiles [data-kind="final"]:checked') } : null;
     const cbs=document.querySelectorAll('#custom-checkboxes input:checked');
     customSelection=Array.from(cbs).map(cb=>cb.value);
-    if(customSelection.length===0) return alert("Selecciona al menos un objetivo.");
+    if(customPlanetConfig && !customPlanetConfig.mobs.length && !customPlanetConfig.mini && !customPlanetConfig.boss && !customPlanetConfig.final) return alert('Selecciona al menos un objetivo del planeta.');
+    if(!customPlanetConfig && customSelection.length===0) return alert("Selecciona al menos un objetivo.");
     if (trainingSetup) {
         trainingSetup = false;
         trainingRun = true;
@@ -1099,9 +1132,44 @@ function startCustom(){
         exploreCheckpoint = { x: nave.x, y: nave.y, vx: nave.vx, vy: nave.vy };
         exploration.enteringZone = null;
         closeStationPanel();
-    } else trainingRun = false;
+    } else trainingRun = Boolean(customPlanetConfig);
     startMission('custom', { fresh: true, hard: true });
 }
+
+function buildPlanetCustomMenu(){
+    if (planetMenuBuilt) return;
+    const anchor = document.getElementById('custom-checkboxes');
+    if (!anchor) return;
+    planetMenuBuilt = true;
+    const section = document.createElement('section');
+    section.id = 'planet-custom-section';
+    section.innerHTML = '<hr style="border-color:#6ec8ff"><h2>PLANETAS · SIMULACIÓN POR FASES</h2><label>Planeta <select id="custom-planet-select"><option value="">Combate clásico</option></select></label><div id="planet-custom-hostiles" class="custom-list"></div>';
+    anchor.before(section);
+    const select = section.querySelector('#custom-planet-select');
+    for (const planet of PLANET_CATALOG) {
+        const option = document.createElement('option'); option.value = planet.id; option.textContent = `${planet.name} · ${planet.gimmick}`; select.appendChild(option);
+    }
+    const list = section.querySelector('#planet-custom-hostiles');
+    const render = () => {
+        list.replaceChildren();
+        const planet = PLANET_CATALOG.find(item => item.id === select.value);
+        anchor.hidden = Boolean(planet);
+        if (!planet) { list.hidden = true; return; }
+        list.hidden = false;
+        const theme = getPlanetHostiles(planet.style);
+        const items = [ ...theme.mobs.map(mob => ({ key:mob.id, label:`Móvil · ${mob.name} (${mob.role})`, kind:'mob', color:mob.color })),
+            { key:'mini', label:`Mini jefe · ${theme.mini.name}`, kind:'mini', color:theme.mini.color },
+            { key:'boss', label:`Jefe · ${theme.boss.name}`, kind:'boss', color:theme.boss.color },
+            { key:'final', label:`Jefe final · ${theme.final.name}`, kind:'final', color:theme.final.color } ];
+        for (const item of items) {
+            const label = document.createElement('label'); label.style.color = item.color;
+            const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.value = item.key; checkbox.dataset.kind = item.kind; checkbox.checked = true;
+            label.append(checkbox, document.createTextNode(` ${item.label}`)); list.appendChild(label);
+        }
+    };
+    select.addEventListener('change', render); render();
+}
+buildPlanetCustomMenu();
 
 function startExploration({ fresh = false, hard = false } = {}){
     if (gameState === 'MENU') { beginLaunch('explore', { fresh, hard }); return; }
@@ -1110,6 +1178,7 @@ function startExploration({ fresh = false, hard = false } = {}){
     if (fresh) exploreCheckpoint = null;
     trainingRun = false;
     trainingSetup = false;
+    planetSimulationTraining = false;
     closeSystemMap();
     gameState = 'EXPLORING';
     pausedFrom = 'EXPLORING';
@@ -1131,7 +1200,7 @@ function startExploration({ fresh = false, hard = false } = {}){
     initHub();
     setHudVisible(true);
     const mu = document.getElementById('mobile-ui');
-    if (mu) mu.style.display = (platform.isMobile && !platform.isTouchUIHidden) ? 'block' : 'none';
+    if (mu) mu.style.display = (platform.isMobile) ? 'block' : 'none';
     if (HudNS.updateExplorationHUD) HudNS.updateExplorationHUD({ active: true, credits: combatState.credits, health: combatState.health, bombs: combatState.bombs, hasRevive: combatState.hasRevive, accel: nave.accel });
     syncHud(true);
     showScreen('none');
@@ -1168,7 +1237,7 @@ function restartCurrentMode() {
         beginMission('free_boss', false, { bossTypes: [...bossTypes] });
         return;
     }
-    if (gameMode === 'planet' && planetShipSnapshot) {
+    if ((gameMode === 'planet' || planetSimulationTraining) && planetShipSnapshot) {
         nave.accel = planetShipSnapshot.accel;
         nave.fric = planetShipSnapshot.fric;
         planetShipSnapshot = null;
@@ -1248,11 +1317,14 @@ function beginMission(mode, fromExploration = false, { fresh = false, hard = fal
     if (bossTypes) pendingFreeBossTypes = [...bossTypes];
     activateModeProfile(targetProfile, { fresh, hard });
     const marketLoadout = baseProfileKey(targetProfile) === 'explore' && enteringFromExploration ? { ...hubState.marketLoadout } : { homing:false, spread:false };
+    const planetSimulation = mode === 'custom' && Boolean(customPlanetConfig);
+    planetSimulationTraining = planetSimulation;
     initAudio(); gameMode=mode; gameState='PLAYING';
-    if (mode === 'planet') {
+    if (isPlanetCombat()) {
         planetShipSnapshot = { accel: nave.accel, fric: nave.fric };
-        if (exploration.enteringZone?.style === 'glacia') nave.fric = 0.985;
-        if (exploration.enteringZone?.style === 'caelum') nave.fric = 0.999;
+        const selectedPlanet = planetSimulation ? PLANET_CATALOG.find(p => p.id === customPlanetConfig.planetId) : exploration.enteringZone;
+        if (selectedPlanet?.style === 'glacia') nave.fric = 0.985;
+        if (selectedPlanet?.style === 'caelum') nave.fric = 0.999;
     }
     closeStationPanel();
     if (HudNS.updateExplorationHUD) HudNS.updateExplorationHUD({ active: false });
@@ -1279,7 +1351,7 @@ function beginMission(mode, fromExploration = false, { fresh = false, hard = fal
     if (marketLoadout.homing) { homingState.active = true; homingState.timer = 1800; }
     if (marketLoadout.spread) { weaponState.current = 'spread'; weaponState.timer = 1800; }
     if (targetProfile === 'explore' && enteringFromExploration) hubState.marketLoadout = { homing:false, spread:false };
-    bullets.length=0; enemyBullets.length=0; enemies.length=0; cleanupAllBossTimers(); bosses.length=0; renderBossUI(); pickUps.length=0; clearParticles(); clearBlasts(); floatingTexts.length=0;
+    bullets.length=0; enemyBullets.length=0; enemies.length=0; planetBosses.length=0; cleanupAllBossTimers(); bosses.length=0; renderBossUI(); pickUps.length=0; clearParticles(); clearBlasts(); floatingTexts.length=0;
     if (mode === 'progressive' && progression.awaitingBossReward) {
         pickUps.push({ x: canvas.width / 2, y: canvas.height / 2 - 90, type: progression.pendingBossRewardType || (combatState.hasRevive ? 'bomb' : 'revive'), bossReward: true });
         progression.pendingBossRewardType = null;
@@ -1297,8 +1369,8 @@ function beginMission(mode, fromExploration = false, { fresh = false, hard = fal
     nave.x=canvas.width/2; nave.y=canvas.height-100; nave.vx=0; nave.vy=0;
     showScreen('none');
     setHudVisible(true);
-    const mu=document.getElementById('mobile-ui'); if(mu) mu.style.display=(platform.isMobile && !platform.isTouchUIHidden)?'block':'none';
-    if(mode==='custom'){
+    const mu=document.getElementById('mobile-ui'); if(mu) mu.style.display=(platform.isMobile)?'block':'none';
+    if(mode==='custom' && !planetSimulation){
         // b1/b2/b3 comparten jefes: sin deduplicar, elegir "b1" + "b3" creaba
         // dos B1 superpuestos y dos barras #hp-B1 (la segunda nunca se actualizaba).
         const madeBosses = new Set();
@@ -1316,14 +1388,19 @@ function beginMission(mode, fromExploration = false, { fresh = false, hard = fal
             floatingTexts.push({x: canvas.width/2, y: 80, text: 'Portal azul habilitado (usa bomba)', life: 2.5, color: '#6ec8ff'});
         }
     }
-    if (mode === 'procedural' || mode === 'planet') {
-        const event = exploration.enteringZone?.type === 'procedural' ? exploration.enteringZone : exploration.gate;
+    if (mode === 'procedural' || mode === 'planet' || planetSimulation) {
+        let event = exploration.enteringZone?.type === 'procedural' ? exploration.enteringZone : exploration.gate;
+        if (planetSimulation) {
+            const spec = PLANET_CATALOG.find(p => p.id === customPlanetConfig.planetId) || PLANET_CATALOG[0];
+            event = { ...spec, type:'planet', cellX:0, cellY:0, planetPhase:1, cleared:false, purged:false, theme:getPlanetHostiles(spec.style), bossName:getPlanetHostiles(spec.style).boss.name,
+                stages:buildCustomPlanetStages(spec.style, 0, customPlanetConfig) };
+        }
         proceduralRun = event ? { event, stageIndex: 0, groupIndex: 0, groupRemaining: event.stages[0]?.groups[0]?.count || 0, spawnTimer: 0, bossesSpawned: false, superBossSpawned: false } : null;
-        if (mode === 'planet' && event) {
+        if (isPlanetCombat() && event) {
             event.cleared = false;
             // Un planeta purgado se puede reintentar desde la órbita: la purga
             // se revierte y el mundo vuelve a empezar por la fase 1.
-            if (event.purged) {
+            if (event.purged && !planetSimulation) {
                 event.purged = false;
                 event.purgeAt = 0;
                 markPlanetPurged(event.id, false);
@@ -1364,17 +1441,17 @@ function updateProceduralChallenge() {
     const stage = run.event.stages[run.stageIndex];
     if (!stage) {
         run.event.cleared = true;
-        if (gameMode === 'planet') run.event.discovered = true;
-        if (gameMode === 'planet' && activePlanet?.style === 'aurum') { awardCredits(250); floatingTexts.push({ x:canvas.width/2, y:canvas.height/2+40, text:'+250 CR · CAMPO MINERO', life:2.4, color:'#ffcf52' }); }
+        if (isPlanetCombat()) run.event.discovered = true;
+        if (isPlanetCombat() && activePlanet?.style === 'aurum') { awardCredits(250); floatingTexts.push({ x:canvas.width/2, y:canvas.height/2+40, text:'+250 CR · CAMPO MINERO', life:2.4, color:'#ffcf52' }); }
         proceduralRun = null;
-        floatingTexts.push({ x: canvas.width / 2, y: canvas.height / 2, text: gameMode === 'planet' ? `ÓRBITA DE ${run.event.name.toUpperCase()} ASEGURADA` : 'SECTOR PROCEDURAL COMPLETADO', life: 3, color: gameMode === 'planet' ? run.event.color : '#cf8cff' });
+        floatingTexts.push({ x: canvas.width / 2, y: canvas.height / 2, text: isPlanetCombat() ? `ÓRBITA DE ${run.event.name.toUpperCase()} ASEGURADA` : 'SECTOR PROCEDURAL COMPLETADO', life: 3, color: isPlanetCombat() ? run.event.color : '#cf8cff' });
         gameState = 'CHECKPOINT';
         returnToHub();
         return;
     }
 
     run.spawnTimer -= 1 / 60;
-    if (gameMode === 'planet' && activePlanet?.style === 'terra' && !run.formationSpawned) {
+    if (isPlanetCombat() && activePlanet?.style === 'terra' && !run.formationSpawned) {
         run.formationSpawned = true;
         spawnFormation({ canvas, bosses, formType: 'v', waveTransition: { value: false } });
     }
@@ -1390,7 +1467,7 @@ function updateProceduralChallenge() {
             enemy.hp = Math.ceil(enemy.hp * strength);
         }
         // Escalado temático por fase del planeta: cada descenso es más duro.
-        if (gameMode === 'planet' && enemies.length > enemyCountBeforeSpawn) {
+        if (isPlanetCombat() && enemies.length > enemyCountBeforeSpawn) {
             const enemy = enemies[enemies.length - 1];
             const phaseScale = 1 + ((stage.phase || 1) - 1) * 0.3;
             enemy.hp = Math.ceil(enemy.hp * phaseScale);
@@ -1409,8 +1486,15 @@ function updateProceduralChallenge() {
 
     const groupsFinished = run.groupIndex >= stage.groups.length;
     if (!groupsFinished || enemies.length > 0) return;
-    if (!run.bossesSpawned && (stage.bosses.length || stage.superBoss)) {
+    if (!run.bossesSpawned && (stage.bosses.length || stage.bossSpec || stage.superBoss)) {
         run.bossesSpawned = true;
+        if (isPlanetCombat() && stage.bossSpec) {
+            const spec = stage.bossSpec;
+            planetBosses.push({ type:'planet_boss', id:`PLANET_${run.event.id}_${run.stageIndex}`, role:spec.role || 'mini', spec,
+                name:spec.name, motif:spec.motif, color:spec.color, accent:spec.accent, hp:spec.hp, maxHp:spec.hp,
+                x:canvas.width/2, y:-80, targetY:105, vx:2.2, vy:0, lastShot:0, lastBurst:0, lastSpawn:0 });
+            floatingTexts.push({ x:canvas.width/2, y:105, text:`${spec.title || 'JEFE'} · ${spec.name}`, life:2.6, color:spec.color });
+        }
         stage.bosses.forEach((type, index) => {
             const id = `EVENT_${run.event.cellX}_${run.event.cellY}_${run.stageIndex}_${index}`;
             createBoss({ canvas, type, id });
@@ -1420,7 +1504,7 @@ function updateProceduralChallenge() {
                 boss.maxHp = Math.ceil(boss.maxHp * strength);
                 boss.hp = boss.maxHp;
                 updateBossHP(boss);
-            } else if (gameMode === 'planet') {
+            } else if (isPlanetCombat()) {
                 // Los jefes de fase 2 y 3 son más agresivos y resistentes.
                 const phaseScale = 1 + ((stage.phase || 1) - 1) * 0.5;
                 boss.maxHp = Math.ceil(boss.maxHp * phaseScale);
@@ -1433,14 +1517,14 @@ function updateProceduralChallenge() {
             boss.targetY = 120 + index * 24;
         });
         if (stage.superBoss && !run.superBossSpawned) {
-            const finalHp = 16000 + (run.stageIndex || 0) * 2500;
-            spawnSuperBoss(canvas, gameMode === 'planet' ? {
+            const finalHp = stage.finalSpec?.hp || 16000 + (run.stageIndex || 0) * 2500;
+            spawnSuperBoss(canvas, isPlanetCombat() ? {
                 color: run.event.color,
-                name: run.event.bossName || 'NÚCLEO PLANETARIO',
+                name: stage.finalSpec?.name || run.event.bossName || 'NÚCLEO PLANETARIO',
                 hp: finalHp,
                 planetFinal: true,
                 planetId: run.event.id,
-                theme: run.event.theme
+                theme: stage.finalSpec || run.event.theme
             } : {});
             run.superBossSpawned = true;
         }
@@ -1448,14 +1532,14 @@ function updateProceduralChallenge() {
         return;
     }
     if (stage.superBoss && run.superBossSpawned && superBossState.active) return;
-    if (stage.bosses.length && (!run.bossesSpawned || bosses.length > 0)) return;
+    if ((stage.bosses.length && bosses.length > 0) || (isPlanetCombat() && planetBosses.length > 0)) return;
     run.stageIndex++;
     run.groupIndex = 0;
     run.groupRemaining = run.event.stages[run.stageIndex]?.groups[0]?.count || 0;
     run.bossesSpawned = false;
     run.superBossSpawned = false;
     run.spawnTimer = 1.2;
-    if (gameMode === 'planet') {
+    if (isPlanetCombat()) {
         const nextStage = run.event.stages[run.stageIndex];
         if (nextStage) {
             run.event.planetPhase = nextStage.phase || Math.min(3, run.stageIndex + 1);
@@ -1555,7 +1639,8 @@ function handleExplorationCombatInput(dt) {
         setTimeout(() => { parryActive = false; const label = document.getElementById('val-parry'); if (label) { label.textContent = 'RECHARGING'; label.style.color = 'var(--danger)'; } }, parryWindowMs());
         setTimeout(() => { parryCooldown = false; parryTimer = 0; const label = document.getElementById('val-parry'); if (label) { label.textContent = 'READY'; label.style.color = 'var(--success)'; } }, parryCooldownMs());
     }
-    if (!insideStationShield && input.shoot && fxState.frameCount % 6 === 0) spawnBullets(false);
+    const fireCadence = weaponState.current === 'planet_ignis' || weaponState.current === 'planet_caelum' ? 3 : 6;
+    if (!insideStationShield && input.shoot && fxState.frameCount % fireCadence === 0) spawnBullets(false);
     if (!insideStationShield && input.triple && fxState.frameCount % 12 === 0) spawnBullets(true);
     if (!insideStationShield && input.bomb) triggerExplorationBomb();
     if (weaponState.current !== 'normal') {
@@ -1734,7 +1819,7 @@ function beginDeathSequence(state) {
     input.moveX = input.moveY = 0; input.shoot = input.triple = input.bomb = input.dash = input.parry = false;
     enemies.length = 0; bullets.length = 0; enemyBullets.length = 0;
     // En un planeta no se borran los jefes: la pelea se retoma al revivir.
-    if (gameMode !== 'planet') { bosses.length = 0; renderBossUI(); pickUps.length = 0; }
+    if (!isPlanetCombat()) { bosses.length = 0; renderBossUI(); pickUps.length = 0; }
     fxState.screenShake = 24;
     updateDeathOverlay(DEATH_REVIVE_SECONDS);
     setDeathOverlayVisible(true);
@@ -1761,7 +1846,7 @@ function reviveAfterDeath() {
         gameMode = 'planet'; gameState = 'PLAYING'; pausedFrom = 'PLAYING';
         setHudVisible(true); showScreen('none');
         const mobile = document.getElementById('mobile-ui');
-        if (mobile) mobile.style.display = (platform.isMobile && !platform.isTouchUIHidden) ? 'block' : 'none';
+        if (mobile) mobile.style.display = (platform.isMobile) ? 'block' : 'none';
         grantImmunity(3000);
         syncHud(true);
         return;
@@ -1796,6 +1881,62 @@ function updateFreeBossDeath() {
     if (remaining <= 0 && !transitionBusy) reviveAfterDeath();
 }
 
+function startPlanetTeleport(planetId) {
+    if (gameState !== 'EXPLORING') return;
+    const returning = planetId === 'aegis-prime';
+    const planet = returning ? { id:'aegis-prime', name:'Aegis Prime', color:'#52f4ff' } : exploration.planets.find(item => item.id === planetId && item.purged);
+    if (!planet) return;
+    const from = { x:nave.x, y:nave.y };
+    const to = returning ? { x:exploration.spawnX, y:exploration.spawnY } : { x:planet.x, y:planet.y - planet.radius - 170 };
+    closeStationPanel();
+    teleportAnimation = { planet, from, to, returning, elapsed:0, duration:4 };
+    gameState = 'TELEPORT';
+    setHudVisible(false); showScreen('none');
+    const mobile = document.getElementById('mobile-ui'); if (mobile) mobile.style.display = 'none';
+}
+
+function updatePlanetTeleport(dt) {
+    if (!teleportAnimation) { gameState = 'EXPLORING'; return; }
+    teleportAnimation.elapsed = Math.min(teleportAnimation.duration, teleportAnimation.elapsed + dt);
+    if (teleportAnimation.elapsed < teleportAnimation.duration) return;
+    const { to } = teleportAnimation;
+    nave.x = to.x; nave.y = to.y; nave.vx = nave.vy = 0;
+    centerCamera(nave.x, nave.y);
+    exploration.inSafeZone = Boolean(teleportAnimation.returning); exploration.mapReveal = 1;
+    exploration.statusMessage = teleportAnimation.returning ? 'AEGIS PRIME · TRANSPORTE COMPLETADO' : `BALIZA DE ${teleportAnimation.planet.name.toUpperCase()} · TRANSPORTE COMPLETADO`;
+    exploration.statusMessageTimer = 3;
+    teleportAnimation = null; gameMode = 'explore'; gameState = 'EXPLORING'; pausedFrom = 'EXPLORING';
+    setHudVisible(true);
+    if (HudNS.updateExplorationHUD) HudNS.updateExplorationHUD({ active:true, credits:combatState.credits, health:combatState.health, bombs:combatState.bombs, hasRevive:combatState.hasRevive, accel:nave.accel });
+    const mobile = document.getElementById('mobile-ui'); if (mobile) mobile.style.display = platform.isMobile ? 'block' : 'none';
+}
+
+function drawPlanetTeleport(ctx) {
+    const a = teleportAnimation;
+    const t = Math.min(1, (a?.elapsed || 0) / (a?.duration || 4));
+    ctx.fillStyle='#02030b';ctx.fillRect(0,0,canvas.width,canvas.height);
+    const cx=canvas.width/2,cy=canvas.height/2;
+    const pulse=.45+Math.sin(performance.now()*.004)*.1;
+    const tunnel=ctx.createRadialGradient(cx,cy,4,cx,cy,Math.max(canvas.width,canvas.height)*.72);
+    tunnel.addColorStop(0,`rgba(85,90,255,${pulse})`);tunnel.addColorStop(.32,'rgba(24,34,110,.55)');tunnel.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=tunnel;ctx.fillRect(0,0,canvas.width,canvas.height);
+    for(let i=0;i<115;i++){
+        const seed=(i*9301+49297)%233280, angle=(seed/233280)*Math.PI*2;
+        const base=((i*73.17+t*canvas.width*1.8)%(Math.max(canvas.width,canvas.height)*.82))+20;
+        const len=18+((i*31)%70)*(0.25+t*1.5);
+        const x=cx+Math.cos(angle)*base,y=cy+Math.sin(angle)*base;
+        ctx.strokeStyle=i%6===0?'rgba(190,235,255,.9)':'rgba(100,150,255,.52)';ctx.lineWidth=i%7===0?2:1;
+        ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+Math.cos(angle)*len,y+Math.sin(angle)*len);ctx.stroke();
+    }
+    const shipX=canvas.width*(.24+.52*t), shipY=cy+Math.sin(t*Math.PI*2)*canvas.height*.06;
+    drawGlow(ctx,shipX,shipY,38,'#a8e9ff',.9);ctx.save();ctx.translate(shipX,shipY);ctx.rotate(0);
+    ctx.fillStyle=nave.color;ctx.beginPath();ctx.moveTo(27,0);ctx.lineTo(-18,-13);ctx.lineTo(-10,0);ctx.lineTo(-18,13);ctx.closePath();ctx.fill();ctx.restore();
+    ctx.textAlign='center';ctx.fillStyle='#c9f4ff';ctx.font='bold 16px Orbitron';
+    ctx.fillText(a?.returning ? `${a.planet.name.toUpperCase()}  →  AEGIS PRIME` : `AEGIS PRIME  →  ${a?.planet?.name?.toUpperCase() || 'PLANETA'}`,cx,cy+canvas.height*.28);
+    ctx.fillStyle='rgba(180,220,255,.25)';ctx.fillRect(cx-130,cy+canvas.height*.32,260,5);
+    ctx.fillStyle='#63eaff';ctx.fillRect(cx-130,cy+canvas.height*.32,260*t,5);
+}
+
 // --- Purga de un planeta ---
 // Al destruir la estructura final se desata una explosión global, se muestra
 // "Has limpiado al planeta" y la nave vuelve al espacio con el mundo cuarteado.
@@ -1809,7 +1950,7 @@ function beginPurgeSequence() {
     planet.purged = true;
     planet.purgeAt = Date.now();
     planet.cleared = true;
-    markPlanetPurged(planet.id, true);
+    if (!planetSimulationTraining) markPlanetPurged(planet.id, true);
     enemies.length = 0; bullets.length = 0; enemyBullets.length = 0;
     bosses.length = 0; renderBossUI(); pickUps.length = 0; floatingTexts.length = 0;
     clearPortals();
@@ -1876,6 +2017,24 @@ function spawnBullets(isTriple){
     const shotSpeedScale = activePlanet?.style === 'aquamar' ? 0.7 : 1;
     if(weaponState.current==='laser'){ sfx.laser(); return; }
     sfx.shoot();
+    const planetWeapons = {
+        terra:{color:'#8cff70',pattern:'triple'}, ignis:{color:'#ff6b2e',pattern:'rapid'}, glacia:{color:'#9af4ff',pattern:'wide'},
+        aurum:{color:'#ffd45a',pattern:'wide'}, umbra:{color:'#c16aff',pattern:'single'}, caelum:{color:'#79b4ff',pattern:'rapid'},
+        mecanis:{color:'#ff536a',pattern:'single'}, aquamar:{color:'#48f0d6',pattern:'wide'}, toxina:{color:'#b4e34a',pattern:'triple'},
+        cristalia:{color:'#ff80eb',pattern:'wide'}, krono:{color:'#ffe18a',pattern:'single'}, echelon:{color:'#ff4c55',pattern:'triple'}
+    };
+    if (weaponState.current.startsWith('planet_')) {
+        const style = weaponState.current.slice(7), themed = planetWeapons[style] || planetWeapons.glacia;
+        const count = themed.pattern === 'wide' ? 5 : themed.pattern === 'triple' ? 3 : 1;
+        const spread = themed.pattern === 'wide' ? 0.25 : 0.18, speed = themed.pattern === 'rapid' ? 17 : 14;
+        for (let i=0; i<count; i++) {
+            const offset = count === 1 ? 0 : (i - (count - 1) / 2) * spread;
+            bullets.push({ x:nave.x, y:nave.y, vx:Math.cos(baseAngle+offset)*speed*shotSpeedScale, vy:Math.sin(baseAngle+offset)*speed*shotSpeedScale,
+                color:themed.color, dmg:(themed.pattern === 'rapid' ? 12 : 24)*damageScale, planetWeapon:style,
+                slow:style === 'glacia' || style === 'krono' });
+        }
+        return;
+    }
     // Modifier verde permanente: disparo individual se vuelve triple verde
     if ((hasGreen || nave.tripleLevel > 0) && !isTriple && weaponState.current==='normal') isTriple = true;
     if(weaponState.current==='spread'){
@@ -1893,13 +2052,22 @@ function spawnBullets(isTriple){
     if (hasGreen && !isTriple) { /* ya convertido arriba */ }
 }
 
+function dropPlanetMobReward(enemy) {
+    if (!enemy?.hostileSpec || !activePlanet || Math.random() > 0.62) return;
+    if (Math.random() < 0.42) {
+        pickUps.push({ x:enemy.x, y:enemy.y, type:'bomb' });
+        return;
+    }
+    weaponPowerUps.push({ x:enemy.x, y:enemy.y, letter:'P', weapon:`planet_${activePlanet.style}`, color:activePlanet.color || enemy.hostileSpec.color, vy:1.1, life:720 });
+}
+
 function triggerBomb(isPlayer, origin){
     if(isPlayer){ if(combatState.bombs<=0) return; combatState.bombs--; input.bomb=false; sfx.bomb(); }
     fxState.screenShake=40; pushParticle({x:origin.x,y:origin.y,vx:0,vy:0,life:1,type:'bomb_ring',color:isPlayer?'#fff':'#ff0044'});
     if(isPlayer){
         enemyBullets.length=0;
         let bombKills=0;
-        enemies.forEach(e=>{ createExplosion(e.x,e.y,'#fff',10); if(e.type!=='life') bombKills++; });
+        enemies.forEach(e=>{ createExplosion(e.x,e.y,'#fff',10); if(e.type!=='life') bombKills++; dropPlanetMobReward(e); });
         enemies.length=0;
         if(bombKills>0){
             const {pts}=registerComboHits(bombKills);
@@ -1908,6 +2076,7 @@ function triggerBomb(isPlayer, origin){
             if(gameMode==='progressive'){ progression.waveKills += bombKills; updateWaveProgress({gameMode:{value:gameMode},progression,bosses}); }
         }
         bosses.forEach(b=>{ b.hp -= b.maxHp*0.1; updateBossHP(b); });
+        planetBosses.forEach(b=>{ const damage=Math.max(220, Math.round(b.maxHp*0.12)); b.hp=Math.max(0,b.hp-damage); createExplosion(b.x,b.y,b.color,20); floatingTexts.push({x:b.x,y:b.y-44,text:`-${damage} BOMBA`,life:1,color:b.accent}); });
         // Bombas dañan al Super Boss (atraviesan escudo)
         if (superBossState.active && !superBossState.destroyed) {
             const sb = superBossState;
@@ -1963,7 +2132,7 @@ function doPlayerHit(heavy=false){
     }
 }
 window.explorationPlayerHit = (heavy = false) => {
-    if (gameState !== 'EXPLORING') return;
+    if (gameState !== 'EXPLORING' && !(gameState === 'PLAYING' && isPlanetCombat())) return;
     doPlayerHit(heavy);
 };
 window.explorationBeltAsteroidDestroyed = (x, y) => {
@@ -2019,6 +2188,7 @@ function update(dtMs){
     if (gameState === 'PLAYING' || gameState === 'EXPLORING') { maybeAutosaveProfile(); updateShield(); }
     if (gameState === 'MENU') { updateMenuIdle(dt); return; }
     if (gameState === 'LAUNCHING') { updateLaunch(dt); return; }
+    if (gameState === 'TELEPORT') { updatePlanetTeleport(dt); return; }
     if (gameState === 'PURGE') { updatePurgeSequence(); return; }
     if (['FREE_BOSS_DEATH', 'EXPLORATION_DEATH', 'TRAINING_DEATH', 'PLANET_DEATH'].includes(gameState)) { updateFreeBossDeath(); return; }
     if (gameState === 'EXPLORING') {
@@ -2026,6 +2196,7 @@ function update(dtMs){
         if (!hubState.panelOpen) {
             const explorationAction = updateExploration(dt, nave, input, canvas, bullets, parryActive);
             if (explorationAction === 'enterPlanet') { enterPlanetOrbit(); return; }
+            if (explorationAction === 'returnAegis') { startPlanetTeleport('aegis-prime'); return; }
             if (explorationAction === 'enterArena') {
                 enterCombatZone();
                 return;
@@ -2077,14 +2248,14 @@ function update(dtMs){
     if (superBossState.active) {
         updateSuperBoss({ canvas, nave, bullets, enemyBullets, enemies, particles, floatingTexts, fxState, createExplosion, spawnDebris, hudState, combatState, frameCount: fxState.frameCount });
         // El jefe final planetario, al destruirse, desata la purga del mundo.
-        if (superBossState.planetFinal && superBossState.destroyed && gameMode === 'planet' && gameState === 'PLAYING') {
+        if (superBossState.planetFinal && superBossState.destroyed && isPlanetCombat() && gameState === 'PLAYING') {
             beginPurgeSequence();
             return;
         }
         // Si está activo, no procesar oleadas normales
-        if (superBossState.arena) { /* saltar checkProgression */ } else if (gameMode === 'procedural' || gameMode === 'planet') updateProceduralChallenge(); else { checkProgression({ gameMode:{value:gameMode}, currentWaveRef:{canvas}, customSelection, frameCount: fxState.frameCount, winGame, onBossDefeated }); if(gameMode==='progressive') updateWaveProgress({gameMode:{value:gameMode}, progression, bosses}); }
+        if (superBossState.arena) { /* saltar checkProgression */ } else if (gameMode === 'procedural' || isPlanetCombat()) updateProceduralChallenge(); else { checkProgression({ gameMode:{value:gameMode}, currentWaveRef:{canvas}, customSelection, frameCount: fxState.frameCount, winGame, onBossDefeated }); if(gameMode==='progressive') updateWaveProgress({gameMode:{value:gameMode}, progression, bosses}); }
     } else {
-        if (gameMode === 'procedural' || gameMode === 'planet') updateProceduralChallenge(); else { checkProgression({ gameMode:{value:gameMode}, currentWaveRef:{canvas}, customSelection, frameCount: fxState.frameCount, winGame, onBossDefeated }); if(gameMode==='progressive') updateWaveProgress({gameMode:{value:gameMode}, progression, bosses}); }
+        if (gameMode === 'procedural' || isPlanetCombat()) updateProceduralChallenge(); else { checkProgression({ gameMode:{value:gameMode}, currentWaveRef:{canvas}, customSelection, frameCount: fxState.frameCount, winGame, onBossDefeated }); if(gameMode==='progressive') updateWaveProgress({gameMode:{value:gameMode}, progression, bosses}); }
     }
     if (gameState !== 'PLAYING') return;
     updatePlanetGimmick(dt);
@@ -2113,6 +2284,7 @@ function update(dtMs){
         if(dist2(wp.x,wp.y,nave.x,nave.y)<25){
             if(wp.letter==='R'){ homingState.active=true; homingState.timer=900; sfx.powerup(); floatingTexts.push({x:wp.x,y:wp.y,text:'🎯 MISILES TELEDIRIGIDOS!',life:1.2,color:'#00ffaa'}); }
             else if(wp.letter==='D'){ if(droneState.drones.length<2) droneState.drones.push({angleOffset:droneState.drones.length*Math.PI,x:nave.x,y:nave.y}); droneState.timer=900; sfx.powerup(); floatingTexts.push({x:wp.x,y:wp.y,text:'🛰️ DRONES ACTIVADOS!',life:1.2,color:'#ffffff'}); }
+            else if (wp.weapon) { weaponState.current=wp.weapon; weaponState.timer=720; sfx.powerup(); floatingTexts.push({x:wp.x,y:wp.y,text:`★ ARMA ${wp.label || 'PLANETARIA'}!`,life:1.5,color:wp.color || '#ff9900'}); }
             else { weaponState.current=wp.letter==='S'?'spread':'laser'; weaponState.timer=600; sfx.powerup(); floatingTexts.push({x:wp.x,y:wp.y,text:wp.letter==='S'?'★ SPREAD!':'★ LASER!',life:1.2,color:'#ff9900'}); }
             weaponPowerUps.splice(wi,1);
         } else if(wp.life<=0|| wp.y>canvas.height) weaponPowerUps.splice(wi,1);
@@ -2191,6 +2363,22 @@ function update(dtMs){
         // doPlayerHit() puede llamar a triggerRevive(), que vacía `enemies`:
         // sin esta guarda el frame aborta con "Cannot read properties of undefined".
         if(!e) continue;
+        if (e.hostileSpec) {
+            updateThemedEnemy(e, dt, { nave, canvas, enemyBullets, fxState });
+            const themedScale = activePlanet?.style === 'krono' ? 1.45 : 1;
+            e.x += e.vx * themedScale; e.y += e.vy * themedScale;
+            if (dashActive && !dashHitSet.has(e) && dist2(e.x,e.y,nave.x,nave.y) < 62) {
+                dashHitSet.add(e);
+                const ramDamage = Math.max(90, Math.round((e.hp || 100) * 0.72));
+                e.hp -= ramDamage;
+                createExplosion(e.x,e.y,e.hostileSpec.color,18);
+                floatingTexts.push({x:e.x,y:e.y-24,text:`¡EMBESTIDA! -${ramDamage}`,life:1,color:e.hostileSpec.color});
+                if (e.hp <= 0) { dropPlanetMobReward(e); awardCredits(5); hudState.score += 100; enemies.splice(i,1); continue; }
+            }
+            if (dist2(e.x,e.y,nave.x,nave.y) < 28) doPlayerHit(e.hostileSpec.role === 'charger');
+            if (e.y > canvas.height + 100 || e.x < -100 || e.x > canvas.width + 100) enemies.splice(i,1);
+            continue;
+        }
         if(e.zigzag){ e.zigzagPhase=(e.zigzagPhase||0)+0.05; e.vx=Math.sin(e.zigzagPhase)*3; }
         const enemyPlanetSpeed = activePlanet?.style === 'krono' ? 1.45 : 1;
         e.x+=e.vx*enemyPlanetSpeed; e.y+=e.vy*enemyPlanetSpeed;
@@ -2219,7 +2407,21 @@ function update(dtMs){
 
     // --- Bosses (resumen idéntico al original, compactado) ---
     let bossDied = false;
+    for (let pi = planetBosses.length - 1; pi >= 0; pi--) {
+        const planetBoss = planetBosses[pi];
+        updatePlanetBoss(planetBoss, { canvas, nave, enemyBullets, enemies, floatingTexts, fxState, createExplosion, frameCount: fxState.frameCount });
+        if (dist2(planetBoss.x, planetBoss.y, nave.x, nave.y) < 58 && dashActive && !dashHitSet.has(planetBoss)) {
+            dashHitSet.add(planetBoss); const ramDamage=Math.max(260,Math.round(planetBoss.maxHp*0.12)); planetBoss.hp -= ramDamage; createExplosion(planetBoss.x, planetBoss.y, planetBoss.color, 20);
+            floatingTexts.push({x:planetBoss.x,y:planetBoss.y-48,text:`¡EMBESTIDA! -${ramDamage}`,life:1.2,color:planetBoss.accent});
+        }
+        if (planetBoss.hp <= 0) {
+            createExplosion(planetBoss.x, planetBoss.y, planetBoss.color, 46); spawnDebris(planetBoss.x, planetBoss.y, planetBoss.color, 7);
+            floatingTexts.push({ x:planetBoss.x, y:planetBoss.y-56, text:`${planetBoss.name} DESTRUIDO`, life:2, color:planetBoss.color });
+            awardCredits(80); hudState.score += planetBoss.maxHp; planetBosses.splice(pi, 1);
+        }
+    }
     bosses.forEach((b,i)=>{
+        if (b.type === 'planet_boss') return;
         if(b.y<b.targetY) b.y+=2;
         if(dashActive && !b.immune && !dashHitSet.has(b)){
             const ramRadius=(b.type==='doppel_y'||b.type==='doppel_o')?42:55;
@@ -2292,7 +2494,7 @@ function update(dtMs){
             if (bul.bounces < 4 && (bul.y < 12 || bul.y > canvas.height - 12)) { bul.vy *= -1; bul.y = Math.max(12, Math.min(canvas.height - 12, bul.y)); bul.bounces++; }
         }
         let hit=bul.isHoming && bul.life<=0;
-        for(let ei=enemies.length-1; ei>=0; ei--){ const e=enemies[ei]; if(!hit && dist2(bul.x,bul.y,e.x,e.y)<25){ hit=true; if(e.shield){e.shield=false; e.vy*=1.5;} else { e.hp-=bul.dmg; if(e.hp<=0){ createExplosion(e.x,e.y); if(e.type==='elite') fxState.hitStopFrames=5; if(e.type==='elite'||e.type==='special') spawnDebris(e.x,e.y,e.type==='elite'?'#00ffcc':'#ffcc00'); enemies.splice(ei,1); if(e.type!=='life') awardCredits(5); if(e.type!=='life' && gameMode==='progressive'){progression.waveKills++; updateWaveProgress({gameMode:{value:gameMode},progression,bosses});} const combo=registerComboHit(); const pts=combo.pts; floatingTexts.push({x:e.x,y:e.y,text:combo.multiplier>1?`+${pts} x${combo.multiplier}!`:`+${pts}`,life:1.0,color:combo.multiplier>=3?'#ff3366':combo.multiplier===2?'#ffcc00':'#fff'}); if(e.type==='life'){ combatState.health=Math.min(100, combatState.health+combatState.damagePerHit); syncHud(); floatingTexts.push({x:e.x,y:e.y-20,text:`+${combatState.damagePerHit}% VIDA`,life:1.0,color:'#ff66cc'}); } if(e.type==='elite'&&Math.random()>0.4){ const letters=['S','L','R','D']; const wt=letters[Math.floor(Math.random()*4)]; weaponPowerUps.push({x:e.x,y:e.y,letter:wt,vy:1.5,life:600}); } if(Math.random()>0.95 && e.type!=='life') pickUps.push({x:e.x,y:e.y,type:'bomb'}); } } } }
+        for(let ei=enemies.length-1; ei>=0; ei--){ const e=enemies[ei]; if(!hit && dist2(bul.x,bul.y,e.x,e.y)<25){ hit=true; if(e.shield){e.shield=false; e.vy*=1.5;} else { if (bul.slow) { e.vx *= 0.72; e.vy *= 0.72; e.slowedUntil = fxState.frameCount + 90; } e.hp-=bul.dmg; if(e.hp<=0){ dropPlanetMobReward(e); createExplosion(e.x,e.y); if(e.type==='elite') fxState.hitStopFrames=5; if(e.type==='elite'||e.type==='special') spawnDebris(e.x,e.y,e.type==='elite'?'#00ffcc':'#ffcc00'); enemies.splice(ei,1); if(e.type!=='life') awardCredits(5); if(e.type!=='life' && gameMode==='progressive'){progression.waveKills++; updateWaveProgress({gameMode:{value:gameMode},progression,bosses});} const combo=registerComboHit(); const pts=combo.pts; floatingTexts.push({x:e.x,y:e.y,text:combo.multiplier>1?`+${pts} x${combo.multiplier}!`:`+${pts}`,life:1.0,color:combo.multiplier>=3?'#ff3366':combo.multiplier===2?'#ffcc00':'#fff'}); if(e.type==='life'){ combatState.health=Math.min(100, combatState.health+combatState.damagePerHit); syncHud(); floatingTexts.push({x:e.x,y:e.y-20,text:`+${combatState.damagePerHit}% VIDA`,life:1.0,color:'#ff66cc'}); } if(e.type==='elite'&&Math.random()>0.4){ const letters=['S','L','R','D']; const wt=letters[Math.floor(Math.random()*4)]; weaponPowerUps.push({x:e.x,y:e.y,letter:wt,vy:1.5,life:600}); } if(Math.random()>0.95 && e.type!=='life') pickUps.push({x:e.x,y:e.y,type:'bomb'}); } } } }
         // --- Super Boss colisiones ---
         if(!hit && superBossState.active && !superBossState.destroyed) {
             if(superBossState.phase===1) {
@@ -2328,6 +2530,7 @@ function update(dtMs){
             }
         }
         if(!hit){ for(let mi=enemyBullets.length-1; mi>=0; mi--){ const mb=enemyBullets[mi]; if(mb.isMissile && dist2(bul.x,bul.y,mb.x,mb.y)<18){ createExplosion(mb.x,mb.y,'#ffff00',8); floatingTexts.push({x:mb.x,y:mb.y,text:'MISIL ✓',life:0.8,color:'#ffff00'}); enemyBullets.splice(mi,1); hit=true; break; } } }
+        for (let pi=planetBosses.length-1; pi>=0; pi--) { const pb=planetBosses[pi]; if(!hit && dist2(bul.x,bul.y,pb.x,pb.y)<62) { hit=true; pb.hp-=bul.dmg; createExplosion(bul.x,bul.y,pb.color,3); floatingTexts.push({x:pb.x,y:pb.y-26,text:`-${bul.dmg}`,life:.7,color:pb.accent}); } }
         for(let bIdx=bosses.length-1; bIdx>=0; bIdx--){ const b=bosses[bIdx]; const bRadius=b.type==='doppel'?30:(b.type==='berserker'?44:(b.type==='doppel_y'||b.type==='doppel_o'?28:45)); if(!hit && dist2(bul.x,bul.y,b.x,b.y)<bRadius){ if(b.immune){ createExplosion(bul.x,bul.y,b.type==='berserker'?'#ff4400':'#ffff00',3); hit=true; } else if(b.type==='doppel'&&b.parryActive){ createExplosion(bul.x,bul.y,'#00ffcc',5); hit=true; } else { hit=true; b.hp-=bul.dmg; updateBossHP(b); floatingTexts.push({x:b.x+(Math.random()-0.5)*40,y:b.y-20+(Math.random()-0.5)*20,text:`-${bul.dmg}`,life:1.0,color:'#ff3366'}); if(b.hp<=0 && (b.type==='doppel_y'||b.type==='doppel_o')){ const col=b.type==='doppel_y'?'#ffff00':'#ff6600'; createExplosion(b.x,b.y,col,50); spawnDebris(b.x,b.y,col,6); fxState.hitStopFrames=8; fxState.screenShake=20; hudState.score+=8000; floatingTexts.push({x:b.x,y:b.y-50,text:b.type==='doppel_y'?'★ DOPPEL AMARILLO DESTRUIDO ★':'★ DOPPEL NARANJA DESTRUIDO ★',life:2.0,color:col}); cleanupBossTimers(b); bosses.splice(bIdx,1); renderBossUI(); dropRevivePickup(b.x,b.y); } } } }
         if(hit || bul.y<0 || bul.y>canvas.height || bul.x<0 || bul.x>canvas.width) bullets.splice(bi,1);
     }
@@ -2436,25 +2639,49 @@ function draw(currentTime){
     const workStart=performance.now();
     ctx.save();
     // Exploración libre: el mundo se dibuja con la cámara; el HUD va aparte.
+    if (gameState === 'TELEPORT') {
+        drawPlanetTeleport(ctx);
+        ctx.restore();
+        update(deltaTime);
+        adaptParticleBudget(deltaTime, performance.now()-workStart);
+        return;
+    }
     if (gameState === 'EXPLORING' || (gameState === 'PAUSED' && pausedFrom === 'EXPLORING')) {
+        const exploreZoom = Math.max(.55, Math.min(1, world.zoom || 1));
+        ctx.save(); ctx.translate(canvas.width/2, canvas.height/2); ctx.scale(exploreZoom, exploreZoom); ctx.translate(-canvas.width/2, -canvas.height/2);
         drawExploration(ctx, canvas, nave, input, { enemies, bullets, enemyBullets, parryActive });
+        if (platform.isMobile) {
+            ctx.save();ctx.fillStyle='rgba(175,225,255,.7)';ctx.font='9px Orbitron';ctx.textAlign='left';
+            ctx.fillText(`PELLIZCA PARA ALEJAR · ${Math.round(exploreZoom*100)}%`,16,canvas.height-54);ctx.restore();
+        }
+        ctx.restore();
         drawSystemMapFrame();
         ctx.restore();
         update(deltaTime);
         adaptParticleBudget(deltaTime, performance.now()-workStart);
         return;
     }
+    const combatZoomable = gameState === 'PLAYING' || gameState === 'PAUSED' || gameState === 'CONTINUE' || gameState === 'WIN';
+    const combatZoomed = platform.isMobile && combatZoomable && world.zoom < 0.999;
+    if (combatZoomed) {
+        ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height);
+        if (superBossState.arena) drawSuperArena(ctx, canvas, gameState);
+        else if (activePlanet) { const backgroundTime=performance.now()/1000; drawPlanetAtmosphere(ctx,canvas,activePlanet,backgroundTime); drawPlanetForeground(ctx,canvas,activePlanet,backgroundTime); }
+        else drawParallax(ctx,canvas,gameState);
+        ctx.translate(canvas.width/2, canvas.height/2); ctx.scale(world.zoom, world.zoom); ctx.translate(-canvas.width/2, -canvas.height/2);
+    }
     if(fxState.screenShake>0){ ctx.translate((Math.random()-0.5)*fxState.screenShake,(Math.random()-0.5)*fxState.screenShake); fxState.screenShake*=0.9; if(fxState.screenShake<0.5) fxState.screenShake=0; }
     if (superBossState.arena) {
-        drawSuperArena(ctx, canvas, gameState);
+        if (!combatZoomed) drawSuperArena(ctx, canvas, gameState);
     } else if (activePlanet) {
         // Cada mundo combate dentro de su propia atmósfera (color y clima).
         const atmosphereTime = performance.now() / 1000;
-        drawPlanetAtmosphere(ctx, canvas, activePlanet, atmosphereTime);
-        drawPlanetForeground(ctx, canvas, activePlanet, atmosphereTime);
+        if (!combatZoomed) {
+            drawPlanetAtmosphere(ctx, canvas, activePlanet, atmosphereTime);
+            drawPlanetForeground(ctx, canvas, activePlanet, atmosphereTime);
+        }
     } else {
-        ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
-        drawParallax(ctx, canvas, gameState);
+        if (!combatZoomed) { ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height); drawParallax(ctx, canvas, gameState); }
     }
     // Portal azul siempre visible si existe
     drawPortals(ctx);
@@ -2475,6 +2702,7 @@ function draw(currentTime){
             else { ctx.fillStyle='#ffcc00'; ctx.beginPath(); ctx.arc(p.x,p.y,10,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#000'; ctx.fillText('B',p.x-4,p.y+4); }
         });
         enemies.forEach(e=>{
+            if (drawPlanetEnemy(ctx, e, fxState.frameCount)) return;
             if(e.type==='kamikaze_bomb'){ ctx.fillStyle='#ff4400'; } else ctx.fillStyle=e.type==='elite'?'#00ffcc':(e.shield?'#ffcc00':(e.type==='life'?'#ff66cc':(e.type==='kamikaze'?'#ff6600':'#ff3366')));
             if(e.type==='elite'){ ctx.beginPath(); ctx.moveTo(e.x,e.y+15); ctx.lineTo(e.x-15,e.y-10); ctx.lineTo(e.x+15,e.y-10); ctx.fill(); }
             else if(e.type==='kamikaze'){ const ang=Math.atan2(e.vy,e.vx); drawGlow(ctx,e.x,e.y,24,'#ff6600',0.8); ctx.save(); ctx.translate(e.x,e.y); ctx.rotate(ang); ctx.beginPath(); ctx.moveTo(16,0); ctx.lineTo(-10,-10); ctx.lineTo(-5,0); ctx.lineTo(-10,10); ctx.fill(); ctx.restore(); }
@@ -2484,6 +2712,7 @@ function draw(currentTime){
         // Super Boss nodriza
         drawSuperBoss(ctx, fxState.frameCount);
         bosses.forEach(b=>{
+            if (b.type === 'planet_boss') { drawPlanetBoss(ctx, b, fxState.frameCount, nave); return; }
             const enraged=b.type==='doppel_y'||b.type==='doppel_o'?b.enraged:(b.enraged||b.hp<b.maxHp*0.3);
             const bossColor=enraged?'#ff6600':'#ff3366'; const bossGlow=enraged?'#ff6600':'#ff3366'; const enragePulse=enraged?(0.8+Math.sin(fxState.frameCount*0.25)*0.2):1;
             if(b.telegraphActive && b.type!=='doppel_y' && b.type!=='doppel_o'){ ctx.globalAlpha=0.25+Math.sin(Date.now()/60)*0.15; ctx.fillStyle='#ff0000'; ctx.beginPath(); ctx.arc(b.x,b.y,b.type==='doppel'?50:70,0,Math.PI*2); ctx.fill(); if(b.type==='static'||b.id==='B1'){ ctx.strokeStyle='rgba(255,0,0,0.4)'; ctx.lineWidth=1; const total=8+(config.diff*2); for(let j=0;j<total;j++){const a=(fxState.frameCount/15)+(j*(Math.PI*2/total)); ctx.beginPath(); ctx.moveTo(b.x,b.y); ctx.lineTo(b.x+Math.cos(a)*canvas.width,b.y+Math.sin(a)*canvas.width); ctx.stroke();}} ctx.globalAlpha=1; }
@@ -2500,6 +2729,12 @@ function draw(currentTime){
             } else if(b.type==='hunter'){ const ang=Math.atan2(nave.y-b.y,nave.x-b.x); drawGlow(ctx,b.x,b.y,enraged?52:42,enraged?'#ff00ff':'#cc00ff',enragePulse*0.85); ctx.save(); ctx.translate(b.x,b.y); ctx.rotate(ang); ctx.fillStyle=enraged?'#ff00ff':'#cc00ff'; ctx.globalAlpha=enragePulse; ctx.beginPath(); ctx.moveTo(28,0); ctx.lineTo(-10,-18); ctx.lineTo(-20,0); ctx.lineTo(-10,18); ctx.fill(); ctx.fillStyle=enraged?'#ffff00':'#aa66ff'; ctx.globalAlpha=0.7; ctx.beginPath(); ctx.arc(-22,0,6+Math.sin(fxState.frameCount*0.3)*2,0,Math.PI*2); ctx.fill(); if(enraged){ctx.fillStyle='#ff6600'; ctx.globalAlpha=0.8; ctx.beginPath(); ctx.arc(-12,-12,4+Math.sin(fxState.frameCount*0.4)*2,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(-12,12,4+Math.sin(fxState.frameCount*0.4+1)*2,0,Math.PI*2); ctx.fill();} ctx.globalAlpha=1; ctx.restore(); }
             else { drawGlow(ctx,b.x,b.y,enraged?78:64,bossGlow,enragePulse*0.85); ctx.fillStyle=bossColor; ctx.globalAlpha=enragePulse; ctx.beginPath(); ctx.arc(b.x,b.y,45,0,Math.PI*2); ctx.fill(); if(enraged){ctx.fillStyle='#ffff00'; ctx.globalAlpha=0.7; for(let j=0;j<3;j++){const ja=(fxState.frameCount*0.15)+j*(Math.PI*2/3); ctx.beginPath(); ctx.arc(b.x+Math.cos(ja)*30,b.y+Math.sin(ja)*30,6+Math.sin(fxState.frameCount*0.3+j)*3,0,Math.PI*2); ctx.fill();}} ctx.globalAlpha=1; }
         });
+        planetBosses.forEach(b => {
+            drawPlanetBoss(ctx, b, fxState.frameCount, nave);
+            const w=170, y=b.y-82;
+            ctx.fillStyle='rgba(0,0,0,.75)';ctx.fillRect(b.x-w/2,y,w,7);
+            ctx.fillStyle=b.color;ctx.fillRect(b.x-w/2,y,w*Math.max(0,b.hp/b.maxHp),7);
+        });
         if (gameMode === 'free_boss') bosses.forEach(b => {
             const width = b.type === 'doppel' ? 84 : 110;
             const y = b.y - (b.type === 'berserker' ? 72 : 58);
@@ -2507,7 +2742,8 @@ function draw(currentTime){
             ctx.fillStyle = '#ff3344'; ctx.fillRect(b.x - width / 2 + 1, y + 1, (width - 2) * Math.max(0, b.hp / b.maxHp), 6);
         });
         enemyBullets.forEach(eb=>{
-            if(eb.isMissile){ const mAng=Math.atan2(eb.vy,eb.vx); drawGlow(ctx,eb.x,eb.y,18,'#ffff00',0.8); ctx.save(); ctx.translate(eb.x,eb.y); ctx.rotate(mAng); ctx.fillStyle='#ff2200'; ctx.beginPath(); ctx.moveTo(12,0); ctx.lineTo(-8,-7); ctx.lineTo(-8,7); ctx.closePath(); ctx.fill(); ctx.fillStyle='#ffee00'; ctx.beginPath(); ctx.moveTo(7,0); ctx.lineTo(-4,-4); ctx.lineTo(-4,4); ctx.closePath(); ctx.fill(); ctx.globalAlpha=0.4; ctx.fillStyle='#ff6600'; ctx.beginPath(); ctx.arc(-10,0,5,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1; ctx.restore(); }
+            if(drawHostileShot(ctx, eb)) return;
+            if(eb.isMissile){ const mAng=Math.atan2(eb.vy,eb.vx); drawGlow(ctx,eb.x,eb.y,18,'#ffff00',0.8); ctx.save(); ctx.translate(eb.x,eb.y); ctx.rotate(mAng); ctx.fillStyle='#ff2200'; ctx.beginPath(); ctx.moveTo(12,0); ctx.lineTo(-8,-7); ctx.lineTo(-8,7); ctx.closePath(); ctx.fill(); ctx.fillStyle='#ffee00'; ctx.beginPath(); ctx.moveTo(7,0); ctx.lineTo(-4,-4); ctx.lineTo(-4,4); ctx.closePath(); ctx.fill(); ctx.fillStyle='#ff6600'; ctx.beginPath(); ctx.arc(-10,0,5,0,Math.PI*2); ctx.fill(); ctx.restore(); }
             else if(eb.isLaser){ const ang=Math.atan2(eb.vy,eb.vx); drawGlow(ctx,eb.x,eb.y,14,'#ff00ff',0.7); ctx.save(); ctx.translate(eb.x,eb.y); ctx.rotate(ang); ctx.fillStyle='#ff00ff'; ctx.globalAlpha=0.9; ctx.fillRect(-10,-3,20,6); ctx.fillStyle='#fff'; ctx.fillRect(-6,-1,12,2); ctx.globalAlpha=1; ctx.restore(); }
             else if(eb.isBerserkerSpike){ const ang=Math.atan2(eb.vy,eb.vx); drawGlow(ctx,eb.x,eb.y,14,'#ff4400',0.75); ctx.save(); ctx.translate(eb.x,eb.y); ctx.rotate(ang); ctx.fillStyle='#ff4400'; ctx.beginPath(); ctx.moveTo(10,0); ctx.lineTo(0,-5); ctx.lineTo(-10,0); ctx.lineTo(0,5); ctx.closePath(); ctx.fill(); ctx.fillStyle='#ffaa00'; ctx.beginPath(); ctx.moveTo(6,0); ctx.lineTo(0,-3); ctx.lineTo(-6,0); ctx.lineTo(0,3); ctx.closePath(); ctx.fill(); ctx.restore(); }
             else { ctx.fillStyle=eb.color; ctx.beginPath(); ctx.arc(eb.x,eb.y,5,0,Math.PI*2); ctx.fill(); }
@@ -2515,7 +2751,7 @@ function draw(currentTime){
         bullets.forEach(b=>{ if(b.isHoming){ drawGlow(ctx,b.x,b.y,20,b.color,0.8); ctx.fillStyle=b.color; ctx.fillRect(b.x-4,b.y-16,8,32); } else { ctx.fillStyle=b.color; if(b.isDrone){ctx.fillRect(b.x-1.5,b.y-7,3,14);} else {ctx.fillRect(b.x-2,b.y-10,4,20);} } });
         droneState.drones.forEach(d=>{ drawGlow(ctx,d.x,d.y,14,'#ffffff',0.8); ctx.save(); ctx.fillStyle='#ffffff'; ctx.beginPath(); ctx.arc(d.x,d.y,5,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(d.x,d.y); ctx.lineTo(nave.x,nave.y); ctx.stroke(); ctx.restore(); });
         if(weaponState.current==='laser' && input.shoot){ const ang=Math.atan2(input.aimY-nave.y,input.aimX-nave.x); const endX=nave.x+Math.cos(ang)*canvas.width*2; const endY=nave.y+Math.sin(ang)*canvas.width*2; drawGlow(ctx,nave.x,nave.y,46,'#00ccff',0.55); ctx.save(); ctx.globalAlpha=0.18+Math.sin(fxState.frameCount*0.4)*0.07; ctx.strokeStyle='#00ccff'; ctx.lineWidth=18; ctx.beginPath(); ctx.moveTo(nave.x,nave.y); ctx.lineTo(endX,endY); ctx.stroke(); ctx.globalAlpha=0.85; ctx.strokeStyle='#ffffff'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(nave.x,nave.y); ctx.lineTo(endX,endY); ctx.stroke(); ctx.globalAlpha=1; ctx.restore(); }
-        weaponPowerUps.forEach(wp=>{ const pulse=0.7+Math.sin(fxState.frameCount*0.12)*0.3; ctx.globalAlpha=pulse; const boxColor=wp.letter==='R'?'#00ffaa':wp.letter==='D'?'#66ccff':'#ff9900'; ctx.fillStyle=boxColor; ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.fillRect(wp.x-14,wp.y-14,28,28); ctx.strokeRect(wp.x-14,wp.y-14,28,28); ctx.fillStyle='#fff'; ctx.font='bold 16px Orbitron'; ctx.fillText(wp.letter,wp.x-6,wp.y+6); ctx.globalAlpha=1; });
+        weaponPowerUps.forEach(wp=>{ const pulse=0.7+Math.sin(fxState.frameCount*0.12)*0.3; ctx.globalAlpha=pulse; const boxColor=wp.color || (wp.letter==='R'?'#00ffaa':wp.letter==='D'?'#66ccff':'#ff9900'); ctx.fillStyle=boxColor; ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.fillRect(wp.x-14,wp.y-14,28,28); ctx.strokeRect(wp.x-14,wp.y-14,28,28); ctx.fillStyle='#fff'; ctx.font='bold 16px Orbitron'; ctx.fillText(wp.letter,wp.x-6,wp.y+6); ctx.globalAlpha=1; });
         debrisChunks.forEach(d=>{ ctx.save(); ctx.globalAlpha=d.life; ctx.translate(d.x,d.y); ctx.rotate(d.rot); ctx.fillStyle=d.color; ctx.strokeStyle='rgba(255,255,255,0.3)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(d.pts[0][0],d.pts[0][1]); d.pts.forEach(p=>ctx.lineTo(p[0],p[1])); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore(); });
         shipTrail.forEach(g=>{ ctx.save(); ctx.globalAlpha=g.life*0.3; ctx.translate(g.x,g.y); ctx.rotate(g.angle); ctx.fillStyle=g.color; ctx.beginPath(); ctx.moveTo(20,0); ctx.lineTo(-15,-15); ctx.lineTo(-15,15); ctx.fill(); ctx.restore(); }); ctx.globalAlpha=1;
         if(!nave.inmune || fxState.frameCount%10<5){
@@ -2546,6 +2782,9 @@ function draw(currentTime){
     if (gameState === 'PURGE') {
         ctx.fillStyle = 'rgba(2,10,6,0.28)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
         drawBlasts(ctx); drawParticles(ctx); ctx.globalAlpha = 1;
+    }
+    if (platform.isMobile && combatZoomable && world.zoom < .999) {
+        ctx.save();ctx.fillStyle='rgba(175,225,255,.72)';ctx.font='9px Orbitron';ctx.textAlign='left';ctx.fillText(`PELLIZCA PARA ALEJAR · ${Math.round(world.zoom*100)}%`,16,canvas.height-54);ctx.restore();
     }
     ctx.restore(); update(deltaTime);
     adaptParticleBudget(deltaTime, performance.now()-workStart);

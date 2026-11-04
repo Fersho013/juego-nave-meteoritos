@@ -570,9 +570,9 @@ export function updateExploration(dt, nave, input, canvas, combatProjectiles = [
     world.cameraY += (desiredCameraY - world.cameraY) * cameraBlend;
     const shipScreenX = nave.x - world.cameraX, shipScreenY = nave.y - world.cameraY;
     if (shipScreenX < 52) world.cameraX = nave.x - 52;
-    else if (shipScreenX > canvas.width - 52) world.cameraX = nave.x - (canvas.width - 52);
+    else if (shipScreenX > camera.viewW - 52) world.cameraX = nave.x - (camera.viewW - 52);
     if (shipScreenY < 52) world.cameraY = nave.y - 52;
-    else if (shipScreenY > canvas.height - 52) world.cameraY = nave.y - (canvas.height - 52);
+    else if (shipScreenY > camera.viewH - 52) world.cameraY = nave.y - (camera.viewH - 52);
     updateVisibleChunks();
     updateSpaceTraffic(dt, nave, combatProjectiles, parryActive);
     updateProceduralEvents(nave);
@@ -628,6 +628,7 @@ export function updateExploration(dt, nave, input, canvas, combatProjectiles = [
     exploration.nearPlanet = nearestPlanet && exploration.planetDist <= nearestPlanet.activationRadius ? nearestPlanet : null;
     if (exploration.nearPlanet && input.interact) {
         input.interact = false;
+        if (exploration.nearPlanet.purged) return 'returnAegis';
         exploration.enteringZone = exploration.nearPlanet;
         exploration.gate = exploration.nearPlanet;
         return 'enterPlanet';

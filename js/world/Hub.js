@@ -9,6 +9,7 @@ import { savePlayerState } from '../system/Save.js?v=20261103a';
 import { progression } from '../system/Progression.js';
 import { hudState } from '../ui/Hud.js?v=20261103a';
 import { drawGlow } from '../system/Sprites.js';
+import { PLANET_CATALOG } from './Planets.js?v=20261103a';
 
 const INTERACTION_RANGE = 175;
 const CREDIT_PER_DEBRIS = 5;
@@ -137,6 +138,7 @@ function ensureProceduralBelts(navePosition) {
 
 export function initHub() {
     hubState.stations = [
+        { id:'hub-teleporter', x:0, y:0, r:84, interactionRange:INTERACTION_RANGE, type:'teleporter', color:'#52f4ff', label:'NEXO DE TELETRANSPORTE' },
         { id: 'shipyard', x: -405, y: -38, r: 78, interactionRange: INTERACTION_RANGE, type: 'shipyard', color: '#6ec8ff', label: 'ASTILLERO' },
         { id: 'medical', x: 405, y: -38, r: 62, interactionRange: INTERACTION_RANGE, type: 'medical', color: '#59ff8a', label: 'MÓDULO MÉDICO' },
         { id: 'black-market', x: 0, y: 405, r: 58, interactionRange: INTERACTION_RANGE, type: 'black_market', color: '#ffd84a', label: 'CONTRABANDO' },
@@ -184,6 +186,13 @@ function stationOptions(station) {
     if (station?.type === 'portal_progressive') return [ { id: 'enter_progressive', label: 'Portal modo progressive', cost: 0, disabled: false } ];
     if (station?.type === 'portal_solo_boss') return [ { id: 'enter_solo_boss', label: 'Portal modo solo boss', cost: 0, disabled: false } ];
     if (station?.type === 'training') return [ { id: 'open_training', label: 'Abrir partida personalizada', cost: 0, disabled: false } ];
+    if (station?.type === 'teleporter') {
+        let purged = [];
+        try { purged = JSON.parse(localStorage.getItem('space-mission-purged-planets') || '[]'); } catch {}
+        const destinations = PLANET_CATALOG.filter(planet => purged.includes(planet.id));
+        return destinations.length ? destinations.map(planet => ({ id:`teleport_${planet.id}`, label:`Viajar a ${planet.name}`, cost:0, disabled:false }))
+            : [{ id:'teleport_none', label:'No hay planetas purgados', cost:0, disabled:true }];
+    }
     return [];
 }
 
@@ -282,6 +291,9 @@ function purchaseUpgrade(action) {
         return;
     } else if (action === 'open_training' && station.type === 'training') {
         window.openTrainingMode?.();
+        return;
+    } else if (action.startsWith('teleport_') && station.type === 'teleporter') {
+        window.startPlanetTeleport?.(action.slice('teleport_'.length));
         return;
     }
     refreshPanel();
@@ -544,6 +556,12 @@ export function drawHub(ctx, canvas) {
             ctx.strokeStyle = station.color; ctx.lineWidth = 6; ctx.beginPath(); ctx.ellipse(0, 0, 28, 40, 0, 0, Math.PI * 2); ctx.stroke();
             ctx.globalAlpha = 0.24; ctx.fillStyle = station.color; ctx.beginPath(); ctx.ellipse(0, 0, 23, 35, 0, 0, Math.PI * 2); ctx.fill();
             ctx.restore();
+        } else if (station.type === 'teleporter') {
+            const pulse=0.7+Math.sin(Date.now()/180)*.22;
+            ctx.save();ctx.globalAlpha=pulse;drawGlow(ctx,0,0,station.r*.9,station.color,.9);
+            ctx.strokeStyle=station.color;ctx.lineWidth=5;ctx.beginPath();ctx.ellipse(0,0,station.r*.42,station.r*.62,Date.now()/2600,0,Math.PI*2);ctx.stroke();
+            ctx.strokeStyle='#d4ffff';ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(0,0,station.r*.25,station.r*.45,-Date.now()/1900,0,Math.PI*2);ctx.stroke();
+            ctx.fillStyle='#d9ffff';ctx.beginPath();ctx.arc(0,0,7,0,Math.PI*2);ctx.fill();ctx.restore();
         } else if (station.type === 'training') {
             ctx.fillStyle = '#211632'; ctx.strokeStyle = station.color; ctx.lineWidth = 3;
             ctx.beginPath(); ctx.moveTo(0, -34); ctx.lineTo(34, 27); ctx.lineTo(-34, 27); ctx.closePath(); ctx.fill(); ctx.stroke();

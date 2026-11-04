@@ -1,5 +1,7 @@
 // js/entities/Enemy.js — Enemigos comunes y formaciones
 
+import { getHostileMob } from './PlanetHostiles.js';
+
 export const enemies = [];
 
 export function spawnEnemy({ canvas, bosses, gameMode, currentWave, waveTransition, customSelection, forcedType = null }) {
@@ -13,6 +15,27 @@ export function spawnEnemy({ canvas, bosses, gameMode, currentWave, waveTransiti
     } else if (gameMode.value === 'custom') {
         const avail = customSelection.filter(v => ['common','special','elite','kamikaze','kamikaze_bomb'].includes(v));
         if (avail.length > 0) type = avail[Math.floor(Math.random()*avail.length)]; else return;
+    }
+
+    // Móviles exclusivos de los planetas: comparten el bucle de colisiones
+    // clásico, pero su aspecto, movimiento y disparos son propios del mundo.
+    const hostile = getHostileMob(type);
+    if (hostile) {
+        enemies.push({
+            x: Math.random() * (canvas.width - 60) + 30,
+            y: -30,
+            type,
+            hp: hostile.hp,
+            vx: (Math.random() - 0.5) * 1.4,
+            vy: hostile.speed,
+            shield: hostile.role === 'shielder',
+            lastShot: 0,
+            shotTimer: 0.7 + Math.random() * 1.2,
+            suicidal: hostile.role === 'charger',
+            hostileSpec: hostile,
+            color: hostile.color
+        });
+        return;
     }
 
     if (type === 'kamikaze_bomb') { /* nuevo enemigo Fase 2 Super Boss */ }
