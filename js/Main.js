@@ -72,7 +72,7 @@ import { initLayoutEditor, enterEditMode, exitEditMode, isEditorActive, setEdito
 import { portals, spawnPortal, clearPortals, updatePortals, drawPortals } from './entities/Portal.js';
 import { superBossState, spawnSuperBoss, clearSuperBoss, updateSuperBoss, drawSuperBoss, canDamageSuperBoss, damageSuperBoss, damageCannon, damageGate, hasSuperModifierActive, grantSuperModifier, clearSuperModifier } from './entities/SuperBoss.js?v=20261104a';
 import { getPlanetHostiles, buildCustomPlanetStages, drawPlanetEnemy, drawPlanetBoss, drawHostileShot, updateThemedEnemy, updatePlanetBoss } from './entities/PlanetHostiles.js?v=20261104b';
-import { PLANET_CATALOG } from './world/Planets.js?v=20261103a';
+import { PLANET_CATALOG, drawPlanet } from './world/Planets.js?v=20261103a';
 
 // El guardado global antiguo solo se usa para migrar la primera vez. Si ya
 // existen perfiles por modo, no debe resucitar datos borrados.
@@ -489,6 +489,10 @@ let planetShipSnapshot = null;
 let purgeStartedAt = 0;
 let purgePlanetId = null;
 let purgeReturning = false;
+// Salida cinematográfica: la nave abandona el planeta, se coloca la baliza de
+// teletransporte sobre el mundo cuarteado y solo después vuelve el control.
+let purgeSpaceExit = false;
+let purgeExitPlanet = null;
 
 // Cada modo conserva su propio casco, recursos, mejoras, score y progresión.
 // El espacio libre es su propio perfil; los eventos que nacen de él (planetas
@@ -952,7 +956,7 @@ function startCheckpointSector(label, nextPhase, wave) {
     });
 }
 
-function returnToHub(fromPause = false) {
+function returnToHub(fromPause = false, options = {}) {
     if (fromPause) {
         if (gameState !== 'PAUSED' || pausedFrom !== 'PLAYING') return;
         if (gameMode === 'progressive') {
@@ -995,7 +999,10 @@ function returnToHub(fromPause = false) {
         if (gameMode === 'free_boss') { freeBossCombat = null; exploration.huntBosses.length = 0; }
         planetBosses.length = 0;
         activateModeProfile(activeSlotKey('explore'));
-        nave.x = exploreCheckpoint.x; nave.y = exploreCheckpoint.y;
+        const exitX = Number.isFinite(options.x) ? options.x : exploreCheckpoint.x;
+        const exitY = Number.isFinite(options.y) ? options.y : exploreCheckpoint.y;
+        if (options.planetExit) exploreCheckpoint = { x: exitX, y: exitY, vx: 0, vy: 0 };
+        nave.x = exitX; nave.y = exitY;
         nave.vx = 0; nave.vy = 0;
         centerCamera(nave.x, nave.y);
         gameMode = 'explore';
@@ -1003,6 +1010,13 @@ function returnToHub(fromPause = false) {
         gameState = 'EXPLORING';
         pausedFrom = 'EXPLORING';
         setHudVisible(true);
+        if (options.planetExit) {
+            const p = options.planetExit;
+            exploration.statusMessage = `${p.name.toUpperCase()} PURGADO · BALIZA DE TELETRANSPORTE INSTALADA · PULSA E PARA REINTENTAR`;
+            exploration.statusMessageTimer = 7;
+            floatingTexts.push({ x: nave.x, y: nave.y - 60, text: `◈ ${p.name.toUpperCase()} PURGADO ◈`, life: 3.2, color: '#59ffb0' });
+            floatingTexts.push({ x: nave.x, y: nave.y - 32, text: 'BALIZA DE TELETRANSPORTE LISTA', life: 3.8, color: '#52f4ff' });
+        }
         if (HudNS.updateExplorationHUD) HudNS.updateExplorationHUD({ active: true, credits: combatState.credits, health: combatState.health, bombs: combatState.bombs, hasRevive: combatState.hasRevive, accel: nave.accel });
         syncHud(true);
         savePlayerState(combatState, nave, progression);
@@ -2016,6 +2030,77 @@ function drawPlanetTeleport(ctx) {
     ctx.fillStyle='#63eaff';ctx.fillRect(cx-130,cy+canvas.height*.32,260*t,5);
 }
 
+// Salida cinematográfica tras purgar un planeta: la nave escapa del mundo,
+// la baliza de teletransporte desciende hasta su órbita y el planeta queda
+// cuarteado con la marca "PURGADO".
+function drawPurgeCinematic(ctx) {
+    const planet = purgeExitPlanet;
+    const ct = Math.max(0, (performance.now() - purgeStartedAt) / 1000 - 3.0);
+    const w = canvas.width, h = canvas.height;
+    const cx = w / 2, cy = h / 2;
+    ctx.fillStyle = '#01030a'; ctx.fillRect(0, 0, w, h);
+    // Estrellas a hipervelocidad alejándose del punto de salida.
+    for (let i = 0; i < 110; i++) {
+        const a = (i * 2.399963) % (Math.PI * 2);
+        const phase = ((i * 37 + ct * 190) % 620) / 620;
+        const dist = 30 + phase * Math.max(w, h) * 0.85;
+        const len = 6 + phase * 46;
+        const x = cx + Math.cos(a) * dist, y = cy + Math.sin(a) * dist;
+        ctx.globalAlpha = 0.18 + phase * 0.7;
+        ctx.strokeStyle = i % 7 === 0 ? '#bfe8ff' : 'rgba(96,140,255,0.8)';
+        ctx.lineWidth = i % 9 === 0 ? 2 : 1;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    if (!planet) return;
+    // El planeta se aleja mientras la nave asciende.
+    const pr = Math.max(40, planet.radius * (1.35 - Math.min(1, ct / 2.6) * 0.72));
+    const py = cy + 30 + Math.min(1, ct / 2.6) * h * 0.22;
+    const placement = Math.max(0, Math.min(1, (ct - 1.15) / 1.15));
+    drawPlanet(ctx, { ...planet, x: cx, y: py, radius: pr, purged: placement >= 0.995 }, performance.now() / 1000);
+    // Nave saliendo del planeta hacia el espacio.
+    const ease = 1 - Math.pow(1 - Math.min(1, ct / 2.2), 3);
+    const shipX = cx + Math.sin(ct * 2.1) * 14 + ease * w * 0.06;
+    const shipY = (py - pr * 0.62) - ease * h * 0.34;
+    ctx.save();
+    drawGlow(ctx, shipX, shipY, 36, '#a8e9ff', 0.9);
+    ctx.translate(shipX, shipY);
+    ctx.rotate(-Math.PI / 2 + Math.sin(ct * 3) * 0.06);
+    ctx.fillStyle = nave.color;
+    ctx.beginPath(); ctx.moveTo(26, 0); ctx.lineTo(-17, -13); ctx.lineTo(-9, 0); ctx.lineTo(-17, 13); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.85)';
+    ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(-4, -4); ctx.lineTo(-4, 4); ctx.closePath(); ctx.fill();
+    // Llama del motor
+    ctx.fillStyle = `rgba(120,225,255,${0.35 + Math.random() * 0.35})`;
+    ctx.beginPath(); ctx.moveTo(-17, 0); ctx.lineTo(-40 - Math.random() * 28, -7); ctx.lineTo(-40 - Math.random() * 28, 7); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    // Máquina de teletransporte descendiendo hasta la órbita del planeta.
+    const beaconX = cx, beaconY = py - pr - 52;
+    if (placement < 1) {
+        const drop = (1 - placement) * h * 0.8;
+        const my = beaconY - drop;
+        ctx.save();
+        ctx.globalAlpha = 0.35 + placement * 0.65;
+        ctx.strokeStyle = '#52f4ff'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(beaconX, my - 70); ctx.lineTo(beaconX, beaconY); ctx.stroke();
+        ctx.fillStyle = '#123a4d'; ctx.strokeStyle = '#8ff7ff';
+        ctx.beginPath(); ctx.roundRect?.(beaconX - 16, my - 14, 32, 28, 6);
+        if (!ctx.roundRect) ctx.rect(beaconX - 16, my - 14, 32, 28);
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#bfffff'; ctx.beginPath(); ctx.arc(beaconX, my - 20, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+    }
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#c9f4ff'; ctx.font = 'bold 16px Orbitron';
+    ctx.fillText(`${planet.name.toUpperCase()} · PURGADO`, cx, h * 0.12);
+    ctx.fillStyle = 'rgba(160,235,255,.85)'; ctx.font = 'bold 11px Orbitron';
+    ctx.fillText(placement < 0.02 ? 'SALIENDO DE LA ATMÓSFERA' : placement < 0.995 ? 'INSTALANDO BALIZA DE TELETRANSPORTE' : 'BALIZA LISTA · RECUPERANDO CONTROL', cx, h * 0.12 + 22);
+    ctx.fillStyle = 'rgba(180,220,255,.22)'; ctx.fillRect(cx - 130, h * 0.86, 260, 5);
+    ctx.fillStyle = '#63eaff'; ctx.fillRect(cx - 130, h * 0.86, 260 * Math.min(1, ct / 2.9), 5);
+    ctx.restore();
+}
+
 // --- Purga de un planeta ---
 // Al destruir la estructura final se desata una explosión global, se muestra
 // "Has limpiado al planeta" y la nave vuelve al espacio con el mundo cuarteado.
@@ -2024,6 +2109,8 @@ function beginPurgeSequence() {
     const planet = activePlanet;
     purgePlanetId = planet.id;
     purgeReturning = false;
+    purgeSpaceExit = false;
+    purgeExitPlanet = planet;
     purgeStartedAt = performance.now();
     gameState = 'PURGE';
     planet.purged = true;
@@ -2032,6 +2119,7 @@ function beginPurgeSequence() {
     if (!planetSimulationTraining) markPlanetPurged(planet.id, true);
     enemies.length = 0; bullets.length = 0; enemyBullets.length = 0;
     bosses.length = 0; renderBossUI(); pickUps.length = 0; floatingTexts.length = 0;
+    planetBosses.length = 0;
     clearPortals();
     setHudVisible(false);
     const mu = document.getElementById('mobile-ui'); if (mu) mu.style.display = 'none';
@@ -2050,17 +2138,46 @@ function updatePurgeSequence() {
     if (!purgePlanetId || purgeReturning) return;
     updateParticles();
     updateBlasts();
-    if (performance.now() - purgeStartedAt < 3600) {
+    const elapsed = (performance.now() - purgeStartedAt) / 1000;
+    // Fase 1: explosión global y mensaje "Has limpiado al planeta".
+    if (elapsed < 3.0) {
         if (Math.random() < 0.2) {
             createExplosion(Math.random() * canvas.width, Math.random() * canvas.height, activePlanet?.color || '#59ce70', 14);
         }
         return;
     }
+    // Fase 2 (solo planetas reales): la nave sale al espacio, se coloca la
+    // máquina de teletransporte sobre el mundo cuarteado y luego vuelve el
+    // control. En la cámara de entrenamiento se mantiene la salida rápida.
+    if (!planetSimulationTraining && purgeExitPlanet) {
+        if (!purgeSpaceExit) {
+            purgeSpaceExit = true;
+            const overlay = document.getElementById('purge-overlay');
+            if (overlay) { overlay.classList.remove('active'); overlay.setAttribute('aria-hidden', 'true'); }
+        }
+        if (elapsed < 6.2) return;
+        const planet = purgeExitPlanet;
+        purgeReturning = true;
+        purgePlanetId = null;
+        purgeSpaceExit = false;
+        purgeExitPlanet = null;
+        clearSuperBoss();
+        proceduralRun = null;
+        gameState = 'CHECKPOINT';
+        // El jugador reaparece en el espacio, justo encima del planeta purgado,
+        // con la baliza ya instalada y el control de la nave.
+        const exitX = planet.x;
+        const exitY = planet.y - planet.radius - 250;
+        returnToHub(false, { x: exitX, y: exitY, planetExit: planet });
+        return;
+    }
+    if (elapsed < 3.6) return;
     purgeReturning = true;
     const planetName = activePlanet?.name || '';
     const overlay = document.getElementById('purge-overlay');
     if (overlay) { overlay.classList.remove('active'); overlay.setAttribute('aria-hidden', 'true'); }
     purgePlanetId = null;
+    purgeExitPlanet = null;
     clearSuperBoss();
     proceduralRun = null;
     gameState = 'CHECKPOINT';
@@ -2804,6 +2921,13 @@ function draw(currentTime){
     // Exploración libre: el mundo se dibuja con la cámara; el HUD va aparte.
     if (gameState === 'TELEPORT') {
         drawPlanetTeleport(ctx);
+        ctx.restore();
+        update(deltaTime);
+        adaptParticleBudget(deltaTime, performance.now()-workStart);
+        return;
+    }
+    if (gameState === 'PURGE' && purgeSpaceExit) {
+        drawPurgeCinematic(ctx);
         ctx.restore();
         update(deltaTime);
         adaptParticleBudget(deltaTime, performance.now()-workStart);
