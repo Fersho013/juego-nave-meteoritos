@@ -9,7 +9,7 @@ export const floatingTexts = [];
 export const shipTrail = [];
 export const blasts = [];
 
-export const fxState = { screenShake: 0, hitStopFrames: 0, frameCount: 0 };
+export const fxState = { screenShake: 0, hitStopFrames: 0, frameCount: 0, damageFlash: 0 };
 
 // Presupuesto de partículas: se ajusta en caliente desde Main según el frame time.
 const MOBILE = typeof navigator !== 'undefined' && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);

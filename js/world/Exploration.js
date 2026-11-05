@@ -494,15 +494,12 @@ function updateSpaceTraffic(dt, nave, combatProjectiles = [], parryActive = fals
     // Los disparos de salvamento también permiten defenderse durante la exploración.
     for (let i = combatProjectiles.length - 1; i >= 0; i--) {
         const shot = combatProjectiles[i];
-        if (Math.hypot(shot.x - enemy.x, shot.y - enemy.y) > 23) continue;
+        if (Math.hypot(shot.x - enemy.x, shot.y - enemy.y) > Math.max(30, shot.hitRadius || 0)) continue;
         combatProjectiles.splice(i, 1);
-        if (enemy.shield) enemy.shield = false;
-        else enemy.hp--;
-        if (enemy.hp <= 0) {
-            exploration.encounter = null;
-            exploration.encounterShots.length = 0;
-            break;
-        }
+        // Cualquier impacto del jugador destruye la nave hostil de un golpe.
+        exploration.encounter = null;
+        exploration.encounterShots.length = 0;
+        break;
     }
 }
 

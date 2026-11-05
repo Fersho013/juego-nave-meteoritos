@@ -64,7 +64,7 @@ const refreshPreview = MenuNS.refreshPreview || (() => {});
 import { stars, nebulas, planets, superAsteroids, initParallax, drawParallax, drawSuperArena } from './world/Parallax.js';
 import { drawPlanetAtmosphere, drawPlanetForeground } from './world/PlanetAtmosphere.js?v=20261103a';
 import { world, resetCamera, centerCamera } from './world/Camera.js';
-import { enterExploration, updateExploration, drawExploration, exploration, resetExplorationProgress, isPointExplored, markPlanetPurged } from './world/Exploration.js?v=20261104c';
+import { enterExploration, updateExploration, drawExploration, exploration, resetExplorationProgress, isPointExplored, markPlanetPurged } from './world/Exploration.js?v=20261105a';
 import { hubState, initHub, updateHub, closeStationPanel } from './world/Hub.js?v=20261103a';
 import { initSystemMap, isSystemMapOpen, toggleSystemMap, closeSystemMap, drawSystemMapFrame } from './ui/StarMap.js?v=20261103a';
 import { DASH } from './Data/Constants.js';
@@ -1757,16 +1757,16 @@ function updateExplorationCombat(dt) {
         for (let i = enemies.length - 1; i >= 0; i--) {
             const enemy = enemies[i], dx = enemy.x - nave.x, dy = enemy.y - nave.y;
             const proj = dx * cs + dy * sn, perp = Math.abs(dx * sn - dy * cs);
-            if (proj <= 0 || perp > 22) continue;
-            if (enemy.shield) enemy.shield = false;
-            else enemy.hp -= 36;
-            if (enemy.hp <= 0) { createExplosion(enemy.x, enemy.y); enemies.splice(i, 1); awardCredits(5); }
+            if (proj <= 0 || perp > 26) continue;
+            // Un solo impacto de láser destruye cualquier nave común.
+            createExplosion(enemy.x, enemy.y, enemy.color || enemy.hostileSpec?.color);
+            enemies.splice(i, 1); awardCredits(5);
         }
         if (exploration.encounter) {
             const enemy = exploration.encounter, dx = enemy.x - nave.x, dy = enemy.y - nave.y;
-            if (dx * cs + dy * sn > 0 && Math.abs(dx * sn - dy * cs) < 22) {
-                if (enemy.shield) enemy.shield = false; else enemy.hp -= 36;
-                if (enemy.hp <= 0) exploration.encounter = null;
+            if (dx * cs + dy * sn > 0 && Math.abs(dx * sn - dy * cs) < 26) {
+                createExplosion(enemy.x, enemy.y, '#ff6688');
+                exploration.encounter = null; exploration.encounterShots.length = 0;
             }
         }
     }
@@ -1778,16 +1778,21 @@ function updateExplorationCombat(dt) {
         let remove = shot.life <= 0;
         for (let j = enemies.length - 1; j >= 0 && !remove; j--) {
             const enemy = enemies[j];
-            if (dist2(shot.x, shot.y, enemy.x, enemy.y) > 25) continue;
+            const hitR = Math.max(26, shot.hitRadius || 0);
+            if (dist2(shot.x, shot.y, enemy.x, enemy.y) > hitR) continue;
             remove = true;
-            if (enemy.shield) enemy.shield = false;
-            else enemy.hp -= shot.dmg || 20;
-            if (enemy.hp <= 0) { createExplosion(enemy.x, enemy.y); enemies.splice(j, 1); awardCredits(5); }
+            // Impacto letal garantizado para naves comunes, con cualquier arma.
+            createExplosion(enemy.x, enemy.y, enemy.color || enemy.hostileSpec?.color);
+            enemies.splice(j, 1); awardCredits(5);
         }
-        if (!remove && exploration.encounter && dist2(shot.x, shot.y, exploration.encounter.x, exploration.encounter.y) < 25) {
-            const enemy = exploration.encounter; remove = true;
-            if (enemy.shield) enemy.shield = false; else enemy.hp -= shot.dmg || 20;
-            if (enemy.hp <= 0) { createExplosion(enemy.x, enemy.y); exploration.encounter = null; }
+        if (!remove && exploration.encounter) {
+            const enemy = exploration.encounter;
+            const hitR = Math.max(26, shot.hitRadius || 0);
+            if (dist2(shot.x, shot.y, enemy.x, enemy.y) < hitR) {
+                remove = true;
+                createExplosion(enemy.x, enemy.y, '#ff6688');
+                exploration.encounter = null; exploration.encounterShots.length = 0;
+            }
         }
         if (remove) bullets.splice(i, 1);
     }
@@ -2265,6 +2270,11 @@ function updatePlanetPlayerWeapon() {
         if (!target || target.hp <= 0) continue;
         if (target.burnUntil > now && now >= (target.burnNextAt || 0)) { target.burnNextAt = now + 250; target.hp -= (target.burnDps || 0) * 0.25; }
         if (target.poisonUntil > now && now >= (target.poisonNextAt || 0)) { target.poisonNextAt = now + 250; target.hp -= (target.poisonDps || 0) * 0.25; }
+        // Cualquier daño (quemadura o veneno) basta para destruir una nave común.
+        if (target.hp <= 0 && enemies.includes(target)) {
+            dropPlanetMobReward(target); createExplosion(target.x, target.y, target.color || target.hostileSpec?.color, 16);
+            awardCredits(5); hudState.score += 100; enemies.splice(enemies.indexOf(target), 1);
+        }
     }
     if (!style) { if (planetWeaponState.orbiting.length) planetWeaponState.orbiting.length = 0; return; }
     const aimX = gameState === 'EXPLORING' ? input.aimX + world.cameraX : input.aimX;
@@ -2282,6 +2292,12 @@ function updatePlanetPlayerWeapon() {
                 const dx = target.x - nave.x, dy = target.y - nave.y;
                 const along = dx * cs + dy * sn, across = Math.abs(dx * sn - dy * cs);
                 if (along <= 0 || along > canvas.width * 1.7 || across > width + (target.role ? 24 : 0)) continue;
+                // Naves comunes: cualquier impacto del rayo las destruye al instante.
+                if (enemies.includes(target)) {
+                    dropPlanetMobReward(target); createExplosion(target.x, target.y, target.color || target.hostileSpec?.color, 16);
+                    awardCredits(5); hudState.score += 100; enemies.splice(enemies.indexOf(target), 1);
+                    continue;
+                }
                 if (target.shield) { target.shield = false; continue; }
                 const direct = (style === 'ignis' ? 9 : 20) * damageScale;
                 target.hp -= direct;
@@ -2389,7 +2405,10 @@ function doPlayerHit(heavy=false){
         combatState.health=Math.max(0,combatState.health);
         createExplosion(nave.x,nave.y,'#ff0000', heavy?40:25);
     }
-    fxState.screenShake=heavy?30:15; grantImmunity(2000); syncHud();
+    fxState.screenShake=heavy?30:15;
+    // Destello rojo de daño: también se usa en la exploración del universo.
+    fxState.damageFlash = heavy ? 1 : 0.75;
+    grantImmunity(2000); syncHud();
     // Si el golpe mata, triggerRevive/acceptContinue dan 3 s: el token invalida
     // el timer de 2 s que se acaba de programar. El grant extra cubre también
     // el caso de caché mixta (Main nuevo + Combat.js antiguo en Pages).
@@ -2622,7 +2641,7 @@ function update(dtMs){
                 }
             }
         }
-        for(let ei=enemies.length-1; ei>=0; ei--){ const e=enemies[ei]; const dx=e.x-nave.x,dy=e.y-nave.y; const proj=dx*cos+dy*sin; const perpDist=Math.abs(dx*sin-dy*cos); if(proj>0 && perpDist<18){ if(e.shield){e.shield=false;} else { createExplosion(e.x,e.y); if(e.type==='elite'||e.type==='special') spawnDebris(e.x,e.y,'#00ccff'); enemies.splice(ei,1); if(e.type!=='life'){ awardCredits(5); const combo=registerComboHit(); const pts=combo.pts; floatingTexts.push({x:e.x,y:e.y,text:combo.multiplier>1?`+${pts} x${combo.multiplier}!`:`+${pts}`,life:1.0,color:combo.multiplier>=3?'#ff3366':combo.multiplier===2?'#ffcc00':'#00ccff'}); if(gameMode==='progressive'){progression.waveKills++; updateWaveProgress({gameMode:{value:gameMode},progression,bosses});} if(e.type==='elite'&&Math.random()>0.4){ const letters=['S','L','R','D']; const wt=letters[Math.floor(Math.random()*4)]; weaponPowerUps.push({x:e.x,y:e.y,letter:wt,vy:1.5,life:600}); } } else { combatState.health=Math.min(100, combatState.health+combatState.damagePerHit); syncHud(); floatingTexts.push({x:e.x,y:e.y,text:`+${combatState.damagePerHit}% VIDA`,life:1.0,color:'#ff66cc'}); } } } }
+        for(let ei=enemies.length-1; ei>=0; ei--){ const e=enemies[ei]; const dx=e.x-nave.x,dy=e.y-nave.y; const proj=dx*cos+dy*sin; const perpDist=Math.abs(dx*sin-dy*cos); if(proj>0 && perpDist<18){ /* Los enemigos comunes mueren con un solo impacto de cualquier arma. */ { createExplosion(e.x,e.y,e.color || e.hostileSpec?.color); if(e.type==='elite'||e.type==='special') spawnDebris(e.x,e.y,'#00ccff'); enemies.splice(ei,1); if(e.type!=='life'){ awardCredits(5); const combo=registerComboHit(); const pts=combo.pts; floatingTexts.push({x:e.x,y:e.y,text:combo.multiplier>1?`+${pts} x${combo.multiplier}!`:`+${pts}`,life:1.0,color:combo.multiplier>=3?'#ff3366':combo.multiplier===2?'#ffcc00':'#00ccff'}); if(gameMode==='progressive'){progression.waveKills++; updateWaveProgress({gameMode:{value:gameMode},progression,bosses});} if(e.type==='elite'&&Math.random()>0.4){ const letters=['S','L','R','D']; const wt=letters[Math.floor(Math.random()*4)]; weaponPowerUps.push({x:e.x,y:e.y,letter:wt,vy:1.5,life:600}); } } else { combatState.health=Math.min(100, combatState.health+combatState.damagePerHit); syncHud(); floatingTexts.push({x:e.x,y:e.y,text:`+${combatState.damagePerHit}% VIDA`,life:1.0,color:'#ff66cc'}); } } } }
         for(let bLIdx=bosses.length-1; bLIdx>=0; bLIdx--){ const b=bosses[bLIdx]; if(b.type==='doppel'&&b.parryActive) continue; if(b.immune) continue; const dx=b.x-nave.x,dy=b.y-nave.y; const proj=dx*cos+dy*sin,perp=Math.abs(dx*sin-dy*cos); const lRadius=(b.type==='doppel_y'||b.type==='doppel_o')?30:50; if(proj>0 && perp<lRadius){ b.hp-=100; updateBossHP(b); if(b.hp<=0 && (b.type==='doppel_y'||b.type==='doppel_o')){ const col=b.type==='doppel_y'?'#ffff00':'#ff6600'; createExplosion(b.x,b.y,col,50); spawnDebris(b.x,b.y,col,6); fxState.hitStopFrames=8; fxState.screenShake=20; hudState.score+=8000; floatingTexts.push({x:b.x,y:b.y-50,text:b.type==='doppel_y'?'★ DOPPEL AMARILLO DESTRUIDO ★':'★ DOPPEL NARANJA DESTRUIDO ★',life:2.0,color:col}); cleanupBossTimers(b); bosses.splice(bLIdx,1); renderBossUI(); dropRevivePickup(b.x,b.y); } } }
     }
     if(input.parry && !parryCooldown){ sfx.parry(); parryActive=true; parryCooldown=true; input.parry=false; parryTimer=parryCooldownMs(); const el=document.getElementById('val-parry'); if(el){el.innerText="ACTIVE"; el.style.color="var(--success)";} setTimeout(()=>{parryActive=false; const e2=document.getElementById('val-parry'); if(e2){e2.innerText="RECHARGING"; e2.style.color="var(--danger)";}},parryWindowMs()); setTimeout(()=>{parryCooldown=false; const e3=document.getElementById('val-parry'); if(e3){e3.innerText="READY"; e3.style.color="var(--success)";}},parryCooldownMs()); }
@@ -2774,7 +2793,7 @@ function update(dtMs){
             if (bul.bounces < 4 && (bul.y < 12 || bul.y > canvas.height - 12)) { bul.vy *= -1; bul.y = Math.max(12, Math.min(canvas.height - 12, bul.y)); bul.bounces++; }
         }
         let hit=bul.isHoming && bul.life<=0;
-        for(let ei=enemies.length-1; ei>=0; ei--){ const e=enemies[ei]; const radius=bul.hitRadius||5; bul.hitTargets=bul.hitTargets||[]; if(!hit && !bul.hitTargets.includes(e) && dist2(bul.x,bul.y,e.x,e.y)<radius+(e.hostileSpec?12:0)){ if((bul.pierce||0)>0){ bul.hitTargets.push(e); bul.pierce--; } else hit=true; if(e.shield){e.shield=false; e.vy*=1.5;} else { if (bul.slow) { e.vx *= 0.72; e.vy *= 0.72; e.slowedUntil = fxState.frameCount + 90; } e.hp-=bul.dmg; if(e.hp<=0){ dropPlanetMobReward(e); createExplosion(e.x,e.y,e.color || e.hostileSpec?.color); if(e.type==='elite') fxState.hitStopFrames=5; if(e.type==='elite'||e.type==='special') spawnDebris(e.x,e.y,e.type==='elite'?'#00ffcc':'#ffcc00'); enemies.splice(ei,1); if(e.type!=='life') awardCredits(5); if(e.type!=='life' && gameMode==='progressive'){progression.waveKills++; updateWaveProgress({gameMode:{value:gameMode},progression,bosses});} const combo=registerComboHit(); const pts=combo.pts; floatingTexts.push({x:e.x,y:e.y,text:combo.multiplier>1?`+${pts} x${combo.multiplier}!`:`+${pts}`,life:1.0,color:combo.multiplier>=3?'#ff3366':combo.multiplier===2?'#ffcc00':'#fff'}); if(e.type==='life'){ combatState.health=Math.min(100, combatState.health+combatState.damagePerHit); syncHud(); floatingTexts.push({x:e.x,y:e.y-20,text:`+${combatState.damagePerHit}% VIDA`,life:1.0,color:'#ff66cc'}); } if(e.type==='elite'&&Math.random()>0.4){ const letters=['S','L','R','D']; const wt=letters[Math.floor(Math.random()*4)]; weaponPowerUps.push({x:e.x,y:e.y,letter:wt,vy:1.5,life:600}); } if(Math.random()>0.95 && e.type!=='life') pickUps.push({x:e.x,y:e.y,type:'bomb'}); } } } }
+        for(let ei=enemies.length-1; ei>=0; ei--){ const e=enemies[ei]; const radius=Math.max(24,bul.hitRadius||5); bul.hitTargets=bul.hitTargets||[]; if(!hit && !bul.hitTargets.includes(e) && dist2(bul.x,bul.y,e.x,e.y)<radius+(e.hostileSpec?12:0)){ if((bul.pierce||0)>0){ bul.hitTargets.push(e); bul.pierce--; } else hit=true; /* Cualquier impacto del jugador destruye a un enemigo común, sin escudo que lo absorba. */ { if (bul.slow) { e.vx *= 0.72; e.vy *= 0.72; e.slowedUntil = fxState.frameCount + 90; } e.hp = 0; { dropPlanetMobReward(e); createExplosion(e.x,e.y,e.color || e.hostileSpec?.color); if(e.type==='elite') fxState.hitStopFrames=5; if(e.type==='elite'||e.type==='special') spawnDebris(e.x,e.y,e.type==='elite'?'#00ffcc':'#ffcc00'); enemies.splice(ei,1); if(e.type!=='life') awardCredits(5); if(e.type!=='life' && gameMode==='progressive'){progression.waveKills++; updateWaveProgress({gameMode:{value:gameMode},progression,bosses});} const combo=registerComboHit(); const pts=combo.pts; floatingTexts.push({x:e.x,y:e.y,text:combo.multiplier>1?`+${pts} x${combo.multiplier}!`:`+${pts}`,life:1.0,color:combo.multiplier>=3?'#ff3366':combo.multiplier===2?'#ffcc00':'#fff'}); if(e.type==='life'){ combatState.health=Math.min(100, combatState.health+combatState.damagePerHit); syncHud(); floatingTexts.push({x:e.x,y:e.y-20,text:`+${combatState.damagePerHit}% VIDA`,life:1.0,color:'#ff66cc'}); } if(e.type==='elite'&&Math.random()>0.4){ const letters=['S','L','R','D']; const wt=letters[Math.floor(Math.random()*4)]; weaponPowerUps.push({x:e.x,y:e.y,letter:wt,vy:1.5,life:600}); } if(Math.random()>0.95 && e.type!=='life') pickUps.push({x:e.x,y:e.y,type:'bomb'}); } } } }
         // --- Super Boss colisiones ---
         if(!hit && superBossState.active && !superBossState.destroyed) {
             if(superBossState.phase===1) {
@@ -2939,6 +2958,12 @@ function draw(currentTime){
         // mundo. Escalar también el fondo deja restos de cuadros anteriores.
         ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
         drawParallax(ctx, canvas, 'PLAYING');
+        // El daño en el espacio abierto también sacude la vista.
+        if (fxState.screenShake > 0) {
+            ctx.translate((Math.random() - 0.5) * fxState.screenShake, (Math.random() - 0.5) * fxState.screenShake);
+            fxState.screenShake *= 0.9;
+            if (fxState.screenShake < 0.5) fxState.screenShake = 0;
+        }
         ctx.save(); ctx.translate(canvas.width/2, canvas.height/2); ctx.scale(exploreZoom, exploreZoom); ctx.translate(-canvas.width/2, -canvas.height/2);
         drawExploration(ctx, canvas, nave, input, { enemies, bullets, enemyBullets, parryActive, background:false });
         if (platform.isMobile) {
@@ -2946,6 +2971,22 @@ function draw(currentTime){
             ctx.fillText(`PELLIZCA PARA ALEJAR · ${Math.round(exploreZoom*100)}%`,16,canvas.height-54);ctx.restore();
         }
         ctx.restore();
+        // Destello rojo + viñeta de daño al recibir un impacto en la exploración.
+        ensureVignettes();
+        if (fxState.damageFlash > 0) {
+            ctx.save();
+            ctx.globalAlpha = Math.min(0.72, fxState.damageFlash * 0.6);
+            ctx.drawImage(dangerVignette, 0, 0);
+            ctx.globalAlpha = Math.min(0.3, fxState.damageFlash * 0.22);
+            ctx.fillStyle = '#ff0020';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.restore();
+            fxState.damageFlash = Math.max(0, fxState.damageFlash - 0.045);
+        }
+        if (nave.inmune && !dashActive) {
+            const pulse = Math.abs(Math.sin(fxState.frameCount * 0.18));
+            ctx.save(); ctx.globalAlpha = 0.3 * pulse; ctx.drawImage(immuneVignette, 0, 0); ctx.restore();
+        }
         drawSystemMapFrame();
         ctx.restore();
         update(deltaTime);
@@ -3072,6 +3113,16 @@ function draw(currentTime){
         drawBlasts(ctx);
         drawParticles(ctx); ctx.globalAlpha=1;
         floatingTexts.forEach(ft=>{ ctx.globalAlpha=Math.max(0,ft.life); ctx.fillStyle=ft.color; ctx.font="bold 16px Orbitron"; ctx.fillText(ft.text,ft.x-25,ft.y-15); }); ctx.globalAlpha=1;
+        if (fxState.damageFlash > 0) {
+            ensureVignettes();
+            ctx.save();
+            ctx.globalAlpha = Math.min(0.72, fxState.damageFlash * 0.6);
+            ctx.drawImage(dangerVignette, 0, 0);
+            ctx.globalAlpha = Math.min(0.3, fxState.damageFlash * 0.22);
+            ctx.fillStyle = '#ff0020'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.restore();
+            fxState.damageFlash = Math.max(0, fxState.damageFlash - 0.045);
+        }
         if(combatState.health>0 && combatState.health<=combatState.damagePerHit && gameState==='PLAYING'){ ensureVignettes(); const pulse=0.32+Math.sin(fxState.frameCount*0.12)*0.18; ctx.globalAlpha=pulse; ctx.drawImage(dangerVignette,0,0); ctx.globalAlpha=1; for(let s=0;s<22;s++){const sx=Math.random()*canvas.width,sy=Math.random()*canvas.height; ctx.globalAlpha=Math.random()*0.35; ctx.fillStyle=Math.random()>0.5?'#ffffff':'#ff2222'; ctx.fillRect(sx,sy,Math.random()*2+1,Math.random()*2+1);} ctx.globalAlpha=1; }
         if(progression.waveTransition && progression.waveTransitionMsg){ const progress=1-(progression.waveTransitionTimer/150); const alpha=progress<0.2?progress/0.2:progress>0.8?(1-progress)/0.2:1; ctx.globalAlpha=alpha*0.85; ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.globalAlpha=alpha; ctx.textAlign='center'; ctx.font='bold 14px Orbitron'; ctx.fillStyle='#666'; ctx.fillText('— PREPARATE —',canvas.width/2,canvas.height/2-50); ctx.font='bold 40px Orbitron'; ctx.fillStyle=waveGradient(); ctx.shadowBlur=20; ctx.shadowColor='#fff'; ctx.fillText(progression.waveTransitionMsg,canvas.width/2,canvas.height/2+10); ctx.shadowBlur=0; ctx.font='13px Orbitron'; ctx.fillStyle='#aaa'; const waveLabel=['SECTOR 1','BOSS 1','SECTOR 2','BOSS 2','SECTOR 3','BOSS 3','SECTOR 4','JEFE FINAL','FIN'][progression.wavePhase-1]||''; ctx.fillText(`SIGUIENTE: ${waveLabel}`,canvas.width/2,canvas.height/2+55); ctx.globalAlpha=1; ctx.textAlign='left'; if(progression.waveTransitionTimer>0) progression.waveTransitionTimer--; }
         if(nave.inmune && !dashActive){ ensureVignettes(); const pulse=Math.abs(Math.sin(fxState.frameCount*0.18)); ctx.globalAlpha=0.35*pulse; ctx.drawImage(immuneVignette,0,0); ctx.globalAlpha=1; }
